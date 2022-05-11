@@ -1,0 +1,14 @@
+<launch>
+    <!-- Start up camera driver. TODO change from D435 to webcam usb_cam. -->
+    <!-- <include file="$(find realsense2_camera)/launch/rs_camera.launch" /> -->
+    <!-- Start up apriltag detection. Can change camera topic in continuous_detection.launch. -->
+    <include file="$(find landmark_detection_pkg)/launch/_apriltag_detection.launch" />
+
+    <!-- Setup static TF transforms. -->
+    <!-- <node pkg="tf" type="static_transform_publisher" name="base_camera_link" args="0.0 0.0 0.0 0 0 0 map camera_link 100" /> -->
+    <!-- TFs between static tags. Args = X Y Z Yaw Pitch Roll -->
+    <!-- <node pkg="tf" type="static_transform_publisher" name="tag0_tag1_link" args="0.4 0.0 0.0 0 0 0 tag0 tag1 100" /> -->
+
+    <!-- Start up our tag landmark detection node. -->
+    <node pkg="landmark_detection_pkg" type="tag_detection_node.py" name="tag_detection_node" output="screen" />
+</launch>
