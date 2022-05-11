@@ -8,10 +8,11 @@ We assume landmarks are orientation invariant.
 
 import rospy
 from apriltag_ros.msg import AprilTagDetectionArray
+from std_msgs.msg import Float32MultiArray
 import numpy as np
 import tf2_ros
 from scipy.spatial.transform import Rotation as R
-from std_msgs.msg import Float32MultiArray
+from math import tan
 
 ############ GLOBAL VARIABLES ###################
 DT = 1 # timer period.
@@ -52,9 +53,13 @@ def get_tag_detection(tag_msg):
                         [r[1][0],r[1][1],r[1][2],t[1]],
                         [r[2][0],r[2][1],r[2][2],t[2]],
                         [0,0,0,1]])
+
+        # convert this into 2D relative range, bearing to camera.
+        tag_range = (t[0]**2 + t[1]**2)**(1/2)
+        tag_bearing = tan(t[1] / t[2])
     
-        # concatenate lists [id, x ,y ,z] for each.
-        msg.data += [tag_id, t[0], t[1], t[2]]
+        # concatenate lists [id, range, bearing] for each.
+        msg.data += [tag_id, tag_range, tag_bearing]
     # publish all the info for this detection.
     tag_pub.publish(msg)
 
@@ -97,7 +102,7 @@ def main():
     # subscribe to apriltag detections.
     rospy.Subscriber("/tag_detections", AprilTagDetectionArray, get_tag_detection, queue_size=1)
 
-    # create publisher for simplified landmark details [id1,x1,y1,z1,...idN,xN,yN,zN]
+    # create publisher for simplified landmark details [id1,r1,b1,...idN,rN,bN]
     tag_pub = rospy.Publisher("/landmark/apriltag", Float32MultiArray, queue_size=100)
 
     # rospy.Timer(rospy.Duration(DT), timer_callback)
