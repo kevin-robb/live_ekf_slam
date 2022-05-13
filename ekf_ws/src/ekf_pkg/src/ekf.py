@@ -10,8 +10,8 @@ and the rest are the positions of M landmarks.
 import rospy
 import numpy as np
 from math import sin, cos, remainder, tau, atan2
-from scipy.spatial.transform import Rotation as R
 from std_msgs.msg import Float32MultiArray
+from geometry_msgs.msg import Vector3
 
 ############ GLOBAL VARIABLES ###################
 DT = 1 # timer period.
@@ -123,23 +123,25 @@ def ekf_iteration(event):
     odom = None; lm_meas = None
 
 
-
+# get measurement of odometry info.
 def get_odom(msg):
-    # TODO get measurement of odometry info.
-    pass
+    global odom
+    odom = [msg.x, msg.y]
 
+# get measurement of landmarks.
 def get_landmarks(msg):
-    # get measurement of landmarks.
     # format: [id1,r1,b1,...idN,rN,bN]
-    pass
+    global lm_meas
+    lm_meas = msg.data
 
 def main():
     global state_pub
-    rospy.init_node('tag_tracking_node')
+    rospy.init_node('ekf_node')
 
     # subscribe to landmark detections: [id1,r1,b1,...idN,rN,bN]
     rospy.Subscriber("/landmark/apriltag", Float32MultiArray, get_landmarks, queue_size=1)
-    # TODO subscribe to odom commands/measurements.
+    # subscribe to odom commands/measurements.
+    rospy.Subscriber("/odom", Vector3, get_odom, queue_size=1)
 
     # create publisher for the current state.
     state_pub = rospy.Publisher("/ekf/state", Float32MultiArray, queue_size=1)
