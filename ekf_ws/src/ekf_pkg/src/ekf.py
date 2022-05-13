@@ -9,7 +9,7 @@ and the rest are the positions of M landmarks.
 
 import rospy
 import numpy as np
-from math import sin, cos
+from math import sin, cos, remainder, tau, atan2
 from scipy.spatial.transform import Rotation as R
 from std_msgs.msg import Float32MultiArray
 
@@ -67,11 +67,51 @@ def ekf_iteration(event):
     # Update step. we use landmark measurements.
     if lm_meas is not None:
         # at least one landmark was detected since the last EKF iteration.
+        # we can run the update step once for each landmark.
         num_landmarks = len(lm_meas) // 3
-        for i in range(num_landmarks):
-            r = lm_meas[i*3 + 1]; b = lm_meas[i*3 + 2]
-            # TODO stopped here
-
+        for l in range(num_landmarks):
+            # extract single landmark observation.
+            id = lm_meas[l*3]; r = lm_meas[l*3 + 1]; b = lm_meas[l*3 + 2]
+            # check if this is the first detection of this landmark ID.
+            if id in lm_IDs:
+                # this landmark is already in our state, so update it.
+                i = lm_IDs.index(id)*2 + 3 # index of lm x in state.
+                # Compute Jacobian matrices.
+                dist = ((x_t[0,i]-x_pred[0,0])**2 + (x_t[0,i+1]-x_pred[0,1])**2)**(1/2)
+                H_xv = np.array([[-(x_t[0,i]-x_pred[0,0])/dist, -(x_t[0,i+1]-x_pred[0,1])/dist, 0], [(x_t[0,i+1]-x_pred[0,1])/(dist**2), -(x_t[0,i]-x_pred[0,0])/(dist**2), -1]])
+                H_xp = np.array([[(x_t[0,i]-x_pred[0,0])/dist, (x_t[0,i+1]-x_pred[0,1])/dist], [-(x_t[0,i+1]-x_pred[0,1])/(dist**2), (x_t[0,i]-x_pred[0,0])/(dist**2)]])
+                H_x = np.zeros((2,x_t.shape[1]))
+                H_x[0:2,0:3] = H_xv
+                H_x[0:2,i:i+2] = H_xp
+                H_w = np.eye(2)
+                # Update the state and covariance.
+                # compute innovation.
+                ang = remainder(atan2(x_t[0,i+1]-x_pred[0,1], x_t[0,i]-x_pred[0,0])-x_pred[0,2],tau)
+                z_est = np.array([[dist], [ang]])
+                nu = np.array([[r],[b]]) - z_est - np.array([[w_r],[w_b]])
+                # compute kalman gain.
+                S = H_x @ P_pred @ H_x.T + H_w @ W @ H_w.T
+                K = P_pred @ H_x.T @ np.linalg.inv(S)
+                # perform update.
+                x_pred = x_pred + K @ nu
+                P_pred = P_pred - K @ H_x @ P_pred
+            else :
+                # this is our first time detecting this landmark ID.
+                n = x_t.shape[1]
+                # add the new landmark to our state.
+                g = np.array([[x_pred[0,0] + r*cos(x_pred[0,2]+b)],
+                              [x_pred[0,1] + r*sin(x_pred[0,2]+b)]])
+                x_pred = np.vstack([x_pred, g])
+                # add landmark ID to our list.
+                lm_IDs.append(id)
+                # Compute Jacobian matrices.
+                G_z = np.array([[cos(x_pred[0,2]+b), -r*sin(x_pred[0,2]+b)],
+                                [sin(x_pred[0,2]+b), r*cos(x_pred[0,2]+b)]])
+                Y_z = np.eye(n+2)
+                Y_z[n:n+2,n:n+2] = G_z
+                # update covariance.
+                P_pred = Y_z @ np.vstack([np.hstack([P_pred, np.zeros((n,2))]), np.hstack([np.zeros((2,n)), W])]) @ Y_z.T
+                
     # officially update the state. this works even if no landmarks were detected.
     x_t = x_pred; P_t = P_pred
     # publish the current state.
