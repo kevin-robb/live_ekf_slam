@@ -40,7 +40,7 @@ def ekf_iteration(event):
     global odom, lm_meas, x_t, P_t, lm_IDs
     # skip if there's no prediction.
     if odom is None:
-        rospy.loginfo("No odom, skipping EKF loop.")
+        # rospy.loginfo("No odom, skipping EKF loop.")
         return
     else:
         rospy.loginfo("Got odom, proceeding.")
@@ -60,6 +60,11 @@ def ekf_iteration(event):
     F_v = np.zeros((x_t.shape[0],2))
     F_v[0:3,0:2] = F_vv
 
+    print("x_t: ", x_t)
+    print("odom: ", [d_d, d_th])
+    print("F_x: ", F_x)
+    print("F_v: ", F_v)
+
     # Make predictions.
     # landmarks are assumed constant, so we predict only vehicle position will change.
     x_pred = x_t
@@ -71,6 +76,7 @@ def ekf_iteration(event):
 
     # Update step. we use landmark measurements.
     if lm_meas is not None:
+        print("lm_meas: ", lm_meas)
         # at least one landmark was detected since the last EKF iteration.
         # we can run the update step once for each landmark.
         num_landmarks = len(lm_meas) // 3
@@ -102,7 +108,7 @@ def ekf_iteration(event):
                 P_pred = P_pred - K @ H_x @ P_pred
             else :
                 # this is our first time detecting this landmark ID.
-                n = x_t.shape[0]
+                n = x_pred.shape[0]
                 # add the new landmark to our state.
                 g = np.array([[x_pred[0,0] + r*cos(x_pred[2,0]+b)],
                               [x_pred[1,0] + r*sin(x_pred[2,0]+b)]])
@@ -115,6 +121,10 @@ def ekf_iteration(event):
                 Y_z = np.eye(n+2)
                 Y_z[n:n+2,n:n+2] = G_z
                 # update covariance.
+                print("P_pred: ", P_pred)
+                print("zeros1: ", np.zeros((n,2)))
+                print("zeros2: ", np.zeros((2,n)))
+                print("W: ", W)
                 P_pred = Y_z @ np.vstack([np.hstack([P_pred, np.zeros((n,2))]), np.hstack([np.zeros((2,n)), W])]) @ Y_z.T
                 
     # officially update the state. this works even if no landmarks were detected.

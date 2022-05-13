@@ -27,6 +27,7 @@ def main_loop(event):
     odom_pub.publish(odom_msg)
     lm_msg = Float32MultiArray()
     lm_msg.data = [1, 0.5, 0.7, 4, 1.2, -0.9]
+    lm_pub.publish(lm_msg)
 
 # get the state published by the EKF.
 def get_state(msg):
