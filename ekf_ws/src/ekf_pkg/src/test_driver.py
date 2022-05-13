@@ -14,7 +14,7 @@ from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 
 ############ GLOBAL VARIABLES ###################
-DT = 1 # timer period.
+DT = 5 # timer period.
 odom_pub = None
 lm_pub = None
 #################################################

@@ -39,28 +39,33 @@ lm_IDs = []
 def ekf_iteration(event):
     global odom, lm_meas, x_t, P_t, lm_IDs
     # skip if there's no prediction.
-    if odom is None: return
+    if odom is None:
+        rospy.loginfo("No odom, skipping EKF loop.")
+        return
+    else:
+        rospy.loginfo("Got odom, proceeding.")
+
     # odom gives us a (dist, heading) "command".
     d_d = odom[0]; d_th = odom[1]
 
     # Compute jacobian matrices.
-    F_xv = np.array([[1,0,-d_d*sin(x_t[0,2])],
-                     [0,1,d_d*cos(x_t[0,2])],
+    F_xv = np.array([[1,0,-d_d*sin(x_t[2,0])],
+                     [0,1,d_d*cos(x_t[2,0])],
                      [0,0,1]])
-    F_x = np.eye(x_t.shape[1])
+    F_x = np.eye(x_t.shape[0])
     F_x[0:3,0:3] = F_xv
-    F_vv = np.array([[cos(x_t[0,2]), 0],
-                     [sin(x_t[0,2]),0],
+    F_vv = np.array([[cos(x_t[2,0]), 0],
+                     [sin(x_t[2,0]),0],
                      [0,1]])
-    F_v = np.zeros((x_t.shape[1],2))
+    F_v = np.zeros((x_t.shape[0],2))
     F_v[0:3,0:2] = F_vv
 
     # Make predictions.
     # landmarks are assumed constant, so we predict only vehicle position will change.
     x_pred = x_t
-    x_pred[0,0] = x_t[0,0] + (d_d + v_d)*cos(x_t[0,2])
-    x_pred[0,1] = x_t[0,1] + (d_d + v_d)*sin(x_t[0,2])
-    x_pred[0,2] = x_t[0,2] + d_th + v_th
+    x_pred[0,0] = x_t[0,0] + (d_d + v_d)*cos(x_t[2,0])
+    x_pred[1,0] = x_t[1,0] + (d_d + v_d)*sin(x_t[2,0])
+    x_pred[2,0] = x_t[2,0] + d_th + v_th
     # predict covariance.
     P_pred = F_x @ P_t @ F_x.T + F_v @ V @ F_v.T
 
@@ -77,16 +82,16 @@ def ekf_iteration(event):
                 # this landmark is already in our state, so update it.
                 i = lm_IDs.index(id)*2 + 3 # index of lm x in state.
                 # Compute Jacobian matrices.
-                dist = ((x_t[0,i]-x_pred[0,0])**2 + (x_t[0,i+1]-x_pred[0,1])**2)**(1/2)
-                H_xv = np.array([[-(x_t[0,i]-x_pred[0,0])/dist, -(x_t[0,i+1]-x_pred[0,1])/dist, 0], [(x_t[0,i+1]-x_pred[0,1])/(dist**2), -(x_t[0,i]-x_pred[0,0])/(dist**2), -1]])
-                H_xp = np.array([[(x_t[0,i]-x_pred[0,0])/dist, (x_t[0,i+1]-x_pred[0,1])/dist], [-(x_t[0,i+1]-x_pred[0,1])/(dist**2), (x_t[0,i]-x_pred[0,0])/(dist**2)]])
-                H_x = np.zeros((2,x_t.shape[1]))
+                dist = ((x_t[i,0]-x_pred[0,0])**2 + (x_t[i+1,0]-x_pred[1,0])**2)**(1/2)
+                H_xv = np.array([[-(x_t[i,0]-x_pred[0,0])/dist, -(x_t[i+1,0]-x_pred[1,0])/dist, 0], [(x_t[i+1,0]-x_pred[1,0])/(dist**2), -(x_t[i,0]-x_pred[0,0])/(dist**2), -1]])
+                H_xp = np.array([[(x_t[i,0]-x_pred[0,0])/dist, (x_t[i+1,0]-x_pred[1,0])/dist], [-(x_t[i+1,0]-x_pred[1,0])/(dist**2), (x_t[i,0]-x_pred[0,0])/(dist**2)]])
+                H_x = np.zeros((2,x_t.shape[0]))
                 H_x[0:2,0:3] = H_xv
                 H_x[0:2,i:i+2] = H_xp
                 H_w = np.eye(2)
                 # Update the state and covariance.
                 # compute innovation.
-                ang = remainder(atan2(x_t[0,i+1]-x_pred[0,1], x_t[0,i]-x_pred[0,0])-x_pred[0,2],tau)
+                ang = remainder(atan2(x_t[i+1,0]-x_pred[1,0], x_t[i,0]-x_pred[0,0])-x_pred[2,0],tau)
                 z_est = np.array([[dist], [ang]])
                 nu = np.array([[r],[b]]) - z_est - np.array([[w_r],[w_b]])
                 # compute kalman gain.
@@ -97,16 +102,16 @@ def ekf_iteration(event):
                 P_pred = P_pred - K @ H_x @ P_pred
             else :
                 # this is our first time detecting this landmark ID.
-                n = x_t.shape[1]
+                n = x_t.shape[0]
                 # add the new landmark to our state.
-                g = np.array([[x_pred[0,0] + r*cos(x_pred[0,2]+b)],
-                              [x_pred[0,1] + r*sin(x_pred[0,2]+b)]])
+                g = np.array([[x_pred[0,0] + r*cos(x_pred[2,0]+b)],
+                              [x_pred[1,0] + r*sin(x_pred[2,0]+b)]])
                 x_pred = np.vstack([x_pred, g])
                 # add landmark ID to our list.
                 lm_IDs.append(id)
                 # Compute Jacobian matrices.
-                G_z = np.array([[cos(x_pred[0,2]+b), -r*sin(x_pred[0,2]+b)],
-                                [sin(x_pred[0,2]+b), r*cos(x_pred[0,2]+b)]])
+                G_z = np.array([[cos(x_pred[2,0]+b), -r*sin(x_pred[2,0]+b)],
+                                [sin(x_pred[2,0]+b), r*cos(x_pred[2,0]+b)]])
                 Y_z = np.eye(n+2)
                 Y_z[n:n+2,n:n+2] = G_z
                 # update covariance.
@@ -115,7 +120,7 @@ def ekf_iteration(event):
     # officially update the state. this works even if no landmarks were detected.
     x_t = x_pred; P_t = P_pred
     # publish the current state.
-    msg = Float32MultiArray(); msg.data = x_t
+    msg = Float32MultiArray(); msg.data = (x_t.T).tolist()[0]
     state_pub.publish(msg)
 
     # at the end of each iteration, we mark used measurements
