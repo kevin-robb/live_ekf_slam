@@ -9,7 +9,7 @@ and the rest are the positions of M landmarks.
 
 import rospy
 import numpy as np
-from math import sin, cos, remainder, tau, atan2
+from math import sin, cos, remainder, tau, atan2, pi
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 import sys
@@ -20,13 +20,16 @@ state_pub = None
 ############## NEEDED BY EKF ####################
 # Process noise in (forward, angular). Assume zero mean.
 v_d = 0; v_th = 0
-V = np.array([[1.0,0.0],[0.0,1.0]])
+# V = np.array([[1.0,0.0],[0.0,1.0]])
+V = np.array([[0.02**2,0.0],[0.0,0.5*pi/180**2]])
 # Sensing noise in (range, bearing). Assume zero mean.
 w_r = 0; w_b = 0
-W = np.array([[1.0,0.0],[0.0,1.0]])
+# W = np.array([[1.0,0.0],[0.0,1.0]])
+W = np.array([[0.1**2,0.0],[0.0,1*pi/180**2]])
 # Initial vehicle state mean and covariance.
 x0 = np.array([[0.0],[0.0],[0.0]])
-P0 = np.array([[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]])
+# P0 = np.array([[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]])
+P0 = np.array([[0.01**2,0.0,0.0],[0.0,0.01**2,0.0],[0.0,0.0,0.005**2]])
 # Most recent odom reading.
 odom = None # [dist, heading]
 lm_meas = None # [id, range, bearing, ...]
@@ -162,12 +165,14 @@ def main():
 
     # read DT from command line arg.
     try:
-        if len(sys.argv) > 1:
-            DT = float(sys.argv[1])
-        else:
+        if len(sys.argv) < 2 or sys.argv[1] == "-1":
             rospy.logwarn("DT not provided to ekf_node. Using DT="+str(DT))
+        else:
+            DT = float(sys.argv[1])
+            if DT <= 0:
+                raise Exception("Negative DT issued.")
     except:
-        print("DT param must be a float.")
+        rospy.logerr("DT param must be a positive float.")
         exit()
 
     # subscribe to landmark detections: [id1,r1,b1,...idN,rN,bN]

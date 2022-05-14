@@ -46,7 +46,8 @@ def get_state(msg):
     cov = P_t[0:2,0:2]
     vals, vecs = eigsorted(cov)
     theta = np.degrees(np.arctan2(*vecs[:,0][::-1]))
-    w, h = 0.025 * 2 * np.sqrt(vals)
+    num_std_dev = 2
+    w, h = num_std_dev * 2 * np.sqrt(vals)
     # draw parametric ellipse (instead of using patches).
     t = np.linspace(0, 2*pi, 100)
     Ell = np.array([w*np.cos(t) , h*np.sin(t)])
