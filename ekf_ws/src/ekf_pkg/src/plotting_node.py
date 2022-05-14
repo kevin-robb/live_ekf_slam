@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 import rospy
+import rospkg
 from std_msgs.msg import Float32MultiArray
 from matplotlib import pyplot as plt
+import atexit
 
 ############ GLOBAL VARIABLES ###################
-counter = 0
 # state data from the EKF to use for plotting.
 # position/hdg for all times.
 veh_x = []; veh_y = []; veh_th = []
@@ -39,8 +40,31 @@ def get_state(msg):
     plt.pause(0.00000000001)
 
 
+def save_plot():
+    # save plot to file upon exit.
+    plt.figure(figsize=(8,7))
+    plt.grid(True)
+    plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black")
+    plt.scatter(veh_x, veh_y, s=12, color="green")
+
+    # other plot formatting.
+    plt.xlabel("x (m)")
+    plt.ylabel("y (m)")
+    plt.title("EKF-Estimated Trajectory and Landmarks")
+    plt.tight_layout()
+    # save to a file in pkg/plots directory.
+    plt.savefig(pkg_path+"/plots/rss_test.png", format='png')
+
 def main():
+    global pkg_path
     rospy.init_node('plotting_node')
+
+    # find the filepath to this package.
+    rospack = rospkg.RosPack()
+    pkg_path = rospack.get_path('ekf_pkg')
+
+    # when the node exits, make the plot.
+    atexit.register(save_plot)
 
     # subscribe to the current state.
     rospy.Subscriber("/ekf/state", Float32MultiArray, get_state, queue_size=1)

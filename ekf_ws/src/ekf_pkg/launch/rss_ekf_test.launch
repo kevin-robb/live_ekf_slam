@@ -1,0 +1,11 @@
+<launch>
+    <!-- Usage: roslaunch rss_ekf_test.launch dt:=0.5 -->
+    <arg name="dt" default="1.0"/>
+
+    <!-- EKF node -->
+    <node pkg="ekf_pkg" type="ekf_node.py" name="ekf_node"  args="$(arg dt)" output="screen" />
+    <!-- node to read data from file and publish to ekf -->
+    <node pkg="ekf_pkg" type="data_fwd_node.py" name="data_fwd_node"  args="$(arg dt)" output="screen" />
+    <!-- plotting node -->
+    <node pkg="ekf_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
+</launch>

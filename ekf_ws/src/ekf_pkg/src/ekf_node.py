@@ -12,9 +12,10 @@ import numpy as np
 from math import sin, cos, remainder, tau, atan2
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
+import sys
 
 ############ GLOBAL VARIABLES ###################
-DT = 1 # timer period.
+DT = 0.5 # timer period used if cmd line param not provided.
 state_pub = None
 ############## NEEDED BY EKF ####################
 # Process noise in (forward, angular). Assume zero mean.
@@ -40,10 +41,11 @@ def ekf_iteration(event):
     global odom, lm_meas, x_t, P_t, lm_IDs
     # skip if there's no prediction.
     if odom is None:
-        rospy.loginfo("No odom, skipping EKF loop.")
+        # rospy.loginfo("No odom, skipping EKF loop.")
         return
     else:
-        rospy.loginfo("Got odom, proceeding.")
+        # rospy.loginfo("Got odom, proceeding.")
+        pass
 
     # odom gives us a (dist, heading) "command".
     d_d = odom[0]; d_th = odom[1]
@@ -151,8 +153,18 @@ def get_landmarks(msg):
     lm_meas = msg.data
 
 def main():
-    global state_pub
+    global state_pub, DT
     rospy.init_node('ekf_node')
+
+    # read DT from command line arg.
+    try:
+        if len(sys.argv) > 1:
+            DT = float(sys.argv[1])
+        else:
+            rospy.logwarn("DT not provided to ekf_node. Using DT="+str(DT))
+    except:
+        print("DT param must be a float.")
+        exit()
 
     # subscribe to landmark detections: [id1,r1,b1,...idN,rN,bN]
     rospy.Subscriber("/landmark/apriltag", Float32MultiArray, get_landmarks, queue_size=1)
