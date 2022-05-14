@@ -132,8 +132,12 @@ def ekf_iteration(event):
                 
     # officially update the state. this works even if no landmarks were detected.
     x_t = x_pred; P_t = P_pred
-    # publish the current state.
-    msg = Float32MultiArray(); msg.data = (x_t.T).tolist()[0]
+    # publish the current cov + state.
+    msg = Float32MultiArray()
+    msg.data = []
+    for subl in P_t[0:3,0:3].tolist():
+        msg.data += subl
+    msg.data += (x_t.T).tolist()[0]
     state_pub.publish(msg)
 
     # at the end of each iteration, we mark used measurements

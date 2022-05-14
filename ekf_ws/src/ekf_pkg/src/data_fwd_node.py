@@ -18,11 +18,6 @@ DT = 0.5 # timer period used if cmd line param not provided.
 odom_pub = None
 lm_pub = None
 pkg_path = None # filepath to this package.
-# state data from the EKF to use for plotting.
-# position/hdg for all times.
-veh_x = []; veh_y = []; veh_th = []
-# current estimate for all landmark positions.
-lm_x = []; lm_y = []
 #################################################
 
 def main_loop(event):
@@ -37,15 +32,7 @@ def main_loop(event):
 
 # get the state published by the EKF.
 def get_state(msg):
-    global veh_x, veh_y, veh_th, lm_x, lm_y
-    rospy.loginfo("State: " + str(msg.data))
-    # save what we want to plot at the end.
-    veh_x.append(msg.data[0])
-    veh_y.append(msg.data[1])
-    veh_th.append(msg.data[2])
-    if len(msg.data) > 3:
-        lm_x = [msg.data[i] for i in range(3,len(msg.data),2)]
-        lm_y = [msg.data[i] for i in range(4,len(msg.data),2)]
+    rospy.loginfo("State: " + str(msg.data[9:12]))
 
 def read_rss_data():
     # read odometry commands.
@@ -81,22 +68,6 @@ def read_rss_data():
         i += 1
         # sleep to publish at desired freq.
         r.sleep()
-
-# def make_plot():
-#     plt.figure(figsize=(8,7))
-#     plt.grid(True)
-#     plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black")
-#     plt.scatter(veh_x, veh_y, s=12, color="green")
-
-#     # other plot formatting.
-#     plt.xlabel("x (m)")
-#     plt.ylabel("y (m)")
-#     plt.title("Estimated Trajectory and Landmarks")
-#     plt.tight_layout()
-#     # save to a file in plots/ directory.
-#     plt.savefig(pkg_path+"/plots/rss_test.png", format='png')
-#     # show the plot.
-#     # plt.show()
 
 def main():
     global lm_pub, odom_pub, pkg_path, DT
