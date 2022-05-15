@@ -6,7 +6,7 @@ to the EKF node for verification and debugging.
 """
 
 import rospy
-import rospkg, rosgraph
+import rospkg
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 import sys
@@ -19,7 +19,7 @@ USE_RSS_DATA = False # T = use demo set. F = randomize map and create new traj.
 DT = 0.5 # timer period used if cmd line param not provided.
 odom_pub = None; lm_pub = None; true_map_pub = None; true_pose_pub = None
 pkg_path = None # filepath to this package.
-# Default map:
+# Default map from RSS demo:
 demo_map = { 0 : (6.2945, 8.1158), 1 : (-7.4603, 8.2675), 2 : (2.6472, -8.0492), 
         3 : (-4.4300, 0.9376), 4 : (9.1501, 9.2978), 5 : (-6.8477, 9.4119), 6 : (9.1433, -0.2925),
         7 : (6.0056, -7.1623), 8 : (-1.5648, 8.3147), 9 : (5.8441, 9.1898), 10: (3.1148, -9.2858),
@@ -124,7 +124,7 @@ def generate_data():
                 id += 1
     
     ############# GENERATE TRAJECTORY ###################
-    NUM_TIMESTEPS = 2000
+    NUM_TIMESTEPS = 1000
     # constraints:
     ODOM_D_MAX = 0.1; ODOM_TH_MAX = 0.0546
     # process noise in EKF. will be used to add noise to odom.
@@ -134,7 +134,6 @@ def generate_data():
     # param to keep track of true current pos.
     x0 = [0.0,0.0,0.0]
     x_v = x0
-    # pos_true = [x_v] # need this for next step.
     # init the odom lists.
     odom_dist = []; odom_hdg = []
     """
@@ -197,27 +196,27 @@ def generate_data():
         d = min(d, ODOM_D_MAX) # always pos.
         if abs(hdg) > ODOM_TH_MAX:
             # cap magnitude but keep sign.
-            hdg = ODOM_TH_MAX * np.sign(hdg) #hdg / abs(hdg)
+            hdg = ODOM_TH_MAX * np.sign(hdg)
         # update veh position given this odom cmd.
         x_v = [x_v[0] + d*cos(x_v[2]), x_v[1] + d*sin(x_v[2]), x_v[2] + hdg]
-        # pos_true.append(x_v)
         # add noise to odom and add to trajectory.
         odom_dist.append(d + 2*V[0,0]*random()-V[0,0])
         odom_hdg.append(hdg + 2*V[1,1]*random()-V[1,1])
-        # rospy.logwarn(str(t)+" odom: "+str(d)+", "+str(hdg))
 
     #####################################################
-    ####### DEBUG READ DEMO ODOM FROM FILE ##############
-    # odom_file = open(pkg_path+"/data/ekf_odo_m.csv", "r")
-    # odom_raw = odom_file.readlines()
-    # odom_dist = [float(d) for d in odom_raw[0].split(",")]
-    # odom_hdg = [float(h) for h in odom_raw[1].split(",")]
-    # propagate odom to get veh pos at all times.
+    # Optionally replace odom with the demo for debugging.
+    USE_DEMO_ODOM = False
+    if USE_DEMO_ODOM:
+        odom_file = open(pkg_path+"/data/ekf_odo_m.csv", "r")
+        odom_raw = odom_file.readlines()
+        odom_dist = [float(d) for d in odom_raw[0].split(",")]
+        odom_hdg = [float(h) for h in odom_raw[1].split(",")]
+    #####################################################
+    # Propagate odom to get veh pos at all times.
     pos_true = [x0]; x_v = x0
     for t in range(NUM_TIMESTEPS):
         x_v = [x_v[0] + odom_dist[t]*cos(x_v[2]), x_v[1] + odom_dist[t]*sin(x_v[2]), x_v[2] + odom_hdg[t]]
         pos_true.append(x_v)
-    #####################################################
     ############# GENERATE MEASUREMENTS #################
     # vision constraints:
     RANGE_MAX = 4; FOV = [-pi, pi]
@@ -258,18 +257,16 @@ def generate_data():
         z.append(sum([[visible_landmarks[i][0], visible_landmarks[i][1]+2*W[0,0]*random()-W[0,0], visible_landmarks[i][2]+2*W[1,1]*random()-W[1,1]] for i in range(len(visible_landmarks))], []))
 
     ############### SEND DATA ################
-    # publish ground truth of map and veh pose for plotter.
-    rospy.logwarn("About to publish true stuff.")
+    # Publish ground truth of map and veh pose for plotter.
+    rospy.logwarn("Waiting to publish ground truth for plotter.")
     rospy.sleep(1)
     true_pose_msg = Float32MultiArray()
     true_pose_msg.data = sum(pos_true, [])
     true_pose_pub.publish(true_pose_msg)
-    # rospy.logwarn("Sent true pose: "+str(true_pose_msg))
     true_map_msg = Float32MultiArray()
     true_map_msg.data = sum([[id, landmarks[id][0], landmarks[id][1]] for id in landmarks.keys()], [])
     true_map_pub.publish(true_map_msg)
-    # rospy.logwarn("Sent true map: "+str(true_map_msg))
-    # send noisy data one timestep at a time to the ekf.
+    # Send noisy data one timestep at a time to the ekf.
     t = 0
     r = rospy.Rate(1/DT) # freq in Hz
     while not rospy.is_shutdown():
@@ -278,40 +275,16 @@ def generate_data():
         odom_msg = Vector3()
         odom_msg.x = odom_dist[t]
         odom_msg.y = odom_hdg[t]
-        # rospy.logwarn("Sending odom: "+str(odom_msg))
         odom_pub.publish(odom_msg)
         # always send a measurement. empty list if no detection.
         lm_msg = Float32MultiArray()
         lm_msg.data = z[t]
-        # rospy.logwarn("Sending lm: "+str(lm_msg))
         lm_pub.publish(lm_msg)
         # increment time.
         t += 1
         # sleep to publish at desired freq.
         r.sleep()
-
-# Functions to ensure messages aren't published before the
-# subscriber(s) for them have been initialized.
-# referenced https://github.com/ros/ros_comm/issues/286#issuecomment-747844224
-# def get_publisher(topic_path, msg_type, **kwargs):
-#     pub = rospy.Publisher(topic_path, msg_type, **kwargs)
-#     num_subs = len(_get_subscribers(topic_path))
-#     for i in range(10):
-#         num_cons = pub.get_num_connections()
-#         if num_cons == num_subs:
-#             return pub
-#         rospy.sleep(0.1)
-#     raise RuntimeError("failed to get publisher")
-# def _get_subscribers(topic_path):
-#     ros_master = rosgraph.Master('/rostopic')
-#     topic_path = rosgraph.names.script_resolve_name('rostopic', topic_path)
-#     state = ros_master.getSystemState()
-#     subs = []
-#     for sub in state[1]:
-#         if sub[0] == topic_path:
-#             subs.extend(sub[1])
-#     return subs
-
+    
 
 def main():
     global lm_pub, odom_pub, pkg_path, DT, true_map_pub, true_pose_pub

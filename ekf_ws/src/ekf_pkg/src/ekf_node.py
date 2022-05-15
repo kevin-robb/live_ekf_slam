@@ -20,15 +20,12 @@ state_pub = None
 ############## NEEDED BY EKF ####################
 # Process noise in (forward, angular). Assume zero mean.
 v_d = 0; v_th = 0
-# V = np.array([[1.0,0.0],[0.0,1.0]])
 V = np.array([[0.02**2,0.0],[0.0,0.5*pi/180**2]])
 # Sensing noise in (range, bearing). Assume zero mean.
 w_r = 0; w_b = 0
-# W = np.array([[1.0,0.0],[0.0,1.0]])
 W = np.array([[0.1**2,0.0],[0.0,1*pi/180**2]])
 # Initial vehicle state mean and covariance.
 x0 = np.array([[0.0],[0.0],[0.0]])
-# P0 = np.array([[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]])
 P0 = np.array([[0.01**2,0.0,0.0],[0.0,0.01**2,0.0],[0.0,0.0,0.005**2]])
 # Most recent odom reading and landmark measurements.
 odom_queue = []; lm_meas_queue = []
@@ -39,12 +36,11 @@ x_t = x0; P_t = P0
 lm_IDs = []
 #################################################
 
-# main EKF loop that happens every timestep
+# main EKF loop that happens every timestep.
 def ekf_iteration(event):
     global x_t, P_t, lm_IDs, lm_meas_queue, odom_queue
     # skip if there's no prediction or measurement yet.
     if len(odom_queue) < 1 or len(lm_meas_queue) < 1:
-        # rospy.loginfo("No data, skipping EKF loop.")
         return
     # pop the next data off the queue.
     odom = odom_queue[0]
@@ -52,6 +48,7 @@ def ekf_iteration(event):
     lm_meas = lm_meas_queue[0]
     lm_meas_queue = lm_meas_queue[1:]
 
+    ############# PREDICTION STEP ##################
     # odom gives us a (dist, heading) "command".
     d_d = odom[0]; d_th = odom[1]
 
@@ -67,24 +64,18 @@ def ekf_iteration(event):
     F_v = np.zeros((x_t.shape[0],2))
     F_v[0:3,0:2] = F_vv
 
-    # print("x_t: ", x_t)
-    # print("odom: ", [d_d, d_th])
-    # print("F_x: ", F_x)
-    # print("F_v: ", F_v)
-
     # Make predictions.
     # landmarks are assumed constant, so we predict only vehicle position will change.
     x_pred = x_t
     x_pred[0,0] = x_t[0,0].item() + (d_d + v_d)*cos(x_t[2,0].item())
     x_pred[1,0] = x_t[1,0].item() + (d_d + v_d)*sin(x_t[2,0].item())
     x_pred[2,0] = x_t[2,0].item() + d_th + v_th
-    # print("x_pred: ", x_pred)
-    # predict covariance.
+    # propagate covariance.
     P_pred = F_x @ P_t @ F_x.T + F_v @ V @ F_v.T
 
-    # Update step. we use landmark measurements.
+    ################## UPDATE STEP #######################
+    # we only use landmark measurements, so skip if there aren't any.
     if len(lm_meas) > 0:
-        # print("lm_meas: ", lm_meas)
         # at least one landmark was detected since the last EKF iteration.
         # we can run the update step once for each landmark.
         num_landmarks = len(lm_meas) // 3
@@ -93,17 +84,19 @@ def ekf_iteration(event):
             id = lm_meas[l*3]; r = lm_meas[l*3 + 1]; b = lm_meas[l*3 + 2]
             # check if this is the first detection of this landmark ID.
             if id in lm_IDs:
+                ################ LANDMARK UPDATE ###################
                 # this landmark is already in our state, so update it.
                 i = lm_IDs.index(id)*2 + 3 # index of lm x in state.
+
                 # Compute Jacobian matrices.
                 dist = ((x_t[i,0]-x_pred[0,0])**2 + (x_t[i+1,0]-x_pred[1,0])**2)**(1/2)
                 H_xv = np.array([[-(x_t[i,0]-x_pred[0,0])/dist, -(x_t[i+1,0]-x_pred[1,0])/dist, 0], [(x_t[i+1,0]-x_pred[1,0])/(dist**2), -(x_t[i,0]-x_pred[0,0])/(dist**2), -1]])
                 H_xp = np.array([[(x_t[i,0]-x_pred[0,0])/dist, (x_t[i+1,0]-x_pred[1,0])/dist], [-(x_t[i+1,0]-x_pred[1,0])/(dist**2), (x_t[i,0]-x_pred[0,0])/(dist**2)]])
-                # H_x = np.zeros((2,x_t.shape[0]))
                 H_x = np.zeros((2,x_pred.shape[0]))
                 H_x[0:2,0:3] = H_xv
                 H_x[0:2,i:i+2] = H_xp
                 H_w = np.eye(2)
+
                 # Update the state and covariance.
                 # compute innovation.
                 ang = remainder(atan2(x_t[i+1,0]-x_pred[1,0], x_t[i,0]-x_pred[0,0])-x_pred[2,0],tau)
@@ -116,6 +109,7 @@ def ekf_iteration(event):
                 x_pred = x_pred + K @ nu
                 P_pred = P_pred - K @ H_x @ P_pred
             else :
+                ############# LANDMARK INSERTION #######################
                 # this is our first time detecting this landmark ID.
                 n = x_pred.shape[0]
                 # add the new landmark to our state.
@@ -127,33 +121,29 @@ def ekf_iteration(event):
                 # Compute Jacobian matrices.
                 G_z = np.array([[cos(x_pred[2,0]+b), -r*sin(x_pred[2,0]+b)],
                                 [sin(x_pred[2,0]+b), r*cos(x_pred[2,0]+b)]])
-                # Y_z = np.eye(n+2)
-                # Y_z[n:n+2,n:n+2] = G_z
                 G_x = np.array([[1, 0, -r*sin(x_pred[2,0]+b)],[0, 1, r*cos(x_pred[2,0]+b)]])
+                # form insertion jacobian.
                 Y = np.eye(n+2)
                 Y[n:n+2,n:n+2] = G_z
-                Y[n:n+2,0:3] = G_x
+                # Y[n:n+2,0:3] = G_x
 
                 # update covariance.
-                # print("P_pred: ", P_pred)
-                # print("zeros1: ", np.zeros((n,2)))
-                # print("zeros2: ", np.zeros((2,n)))
-                # print("W: ", W)
                 P_pred = Y @ np.vstack([np.hstack([P_pred, np.zeros((n,2))]), np.hstack([np.zeros((2,n)), W])]) @ Y.T
                 
-    # officially update the state. this works even if no landmarks were detected.
+    # finalize the state update. this works even if no landmarks were detected.
     x_t = x_pred; P_t = P_pred
     # publish the current cov + state.
+    """
+    NOTE this uses a format that gives us only what we need for plotting.
+    This needs to be modified, and probably the full covariance published
+    to a separate topic, if the EKF output is to be actually used for anything.
+    """
     msg = Float32MultiArray()
     msg.data = []
     for subl in P_t[0:3,0:3].tolist():
         msg.data += subl
     msg.data += (x_t.T).tolist()[0]
     state_pub.publish(msg)
-
-    # at the end of each iteration, we mark used measurements
-    # to None so they won't be used again as if they were unique.
-    odom = None; lm_meas = None
 
 
 # get measurement of odometry info.
