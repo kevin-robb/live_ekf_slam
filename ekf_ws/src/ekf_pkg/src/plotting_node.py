@@ -19,14 +19,19 @@ def eigsorted(cov):
 veh_x = []; veh_y = []; veh_th = []
 # current estimate for all landmark positions.
 lm_x = []; lm_y = []
-# plotted stuff.
+# ground truth veh pose.
+true_pose = None; true_map = None
+# plotting stuff.
 SHOW_ENTIRE_TRAJ = False
-lm_pts = None; veh_pts = None; ell_pts = None
+SHOW_TRUE_TRAJ = False
+ARROW_LEN = 0.1
+# timestep = 0
+lm_pts = None; veh_pts = None; ell_pts = None; veh_true = None
 #################################################
 
 # get the state published by the EKF.
 def get_state(msg):
-    global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts
+    global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts, veh_true, timestep, true_map, true_pose
     # rospy.loginfo("State: " + str(msg.data))
     # save what we want to plot.
     # first 9 represent the 3x3 covariance matrix.
@@ -40,6 +45,24 @@ def get_state(msg):
     if len(msg.data) > 3:
         lm_x = [msg.data[i] for i in range(12,len(msg.data),2)]
         lm_y = [msg.data[i] for i in range(13,len(msg.data),2)]
+
+    # plot ground truth map.
+    if true_map is not None:
+        plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black")
+        true_map = None
+
+    # plot ground truth pose.
+    # if not SHOW_ENTIRE_TRAJ and true_pose is not None and veh_true is not None:
+    #     veh_true.remove()
+    # draw a single pt with arrow to represent current true pose.
+    if SHOW_TRUE_TRAJ and true_pose is not None:
+        # veh_true = plt.arrow(true_pose[t][0], true_pose[t][1], ARROW_LEN*cos(true_pose[t][2]), ARROW_LEN*sin(true_pose[t][2]), color="blue", width=0.1)
+        # veh_true = plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], ARROW_LEN*cos(true_pose[timestep*3+2]), ARROW_LEN*sin(true_pose[timestep*3+2]), color="blue", width=0.1)
+        for timestep in range(0,len(true_pose)//3):
+            plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], ARROW_LEN*cos(true_pose[timestep*3+2]), ARROW_LEN*sin(true_pose[timestep*3+2]), color="blue", width=0.02)
+        true_pose = None
+    # increment timestep we're on.
+    # timestep += 1
 
     # plot covariance for new pos.
     # referenced https://stackoverflow.com/questions/20126061/creating-a-confidence-ellipses-in-a-sccatterplot-using-matplotlib
@@ -74,7 +97,6 @@ def get_state(msg):
     if not SHOW_ENTIRE_TRAJ and veh_pts is not None:
         veh_pts.remove()
     # draw a single pt with arrow to represent current veh pose.
-    ARROW_LEN = 0.1
     veh_pts = plt.arrow(msg.data[9], msg.data[10], ARROW_LEN*cos(msg.data[11]), ARROW_LEN*sin(msg.data[11]), color="green", width=0.1)
 
     plt.axis("equal")
@@ -91,6 +113,25 @@ def save_plot():
     # plt.savefig(pkg_path+"/plots/rss_test.png", format='png')
     pass
 
+
+def get_true_pose(msg):
+    rospy.logwarn("Got true pose in plotter.")
+    # save the true traj to plot it along w cur state.
+    global true_pose
+    # true_pose = [[msg.data[t], msg.data[t+1], msg.data[t+2]] for t in range(0,len(msg.data),3)]
+    # rospy.logwarn("True pose: "+str(true_pose))
+    true_pose = msg.data
+
+
+def get_true_map(msg):
+    rospy.logwarn("Got true map in plotter.")
+    # plot the true map to compare to estimates.
+    global true_map
+    lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
+    lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
+    true_map = [lm_x, lm_y]
+    
+
 def main():
     global pkg_path
     rospy.init_node('plotting_node')
@@ -104,6 +145,10 @@ def main():
 
     # subscribe to the current state.
     rospy.Subscriber("/ekf/state", Float32MultiArray, get_state, queue_size=1)
+
+    # subscribe to ground truth.
+    rospy.Subscriber("/truth/veh_pose",Float32MultiArray, get_true_pose, queue_size=1)
+    rospy.Subscriber("/truth/landmarks",Float32MultiArray, get_true_map, queue_size=1)
 
     # startup the plot.
     plt.ion()

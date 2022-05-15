@@ -32,6 +32,7 @@ x0 = np.array([[0.0],[0.0],[0.0]])
 P0 = np.array([[0.01**2,0.0,0.0],[0.0,0.01**2,0.0],[0.0,0.0,0.005**2]])
 # Most recent odom reading.
 odom = None # [dist, heading]
+lm_meas_buffer = None
 lm_meas = None # [id, range, bearing, ...]
 # Current state mean and covariance.
 x_t = x0; P_t = P0
@@ -41,7 +42,7 @@ lm_IDs = []
 
 # main EKF loop that happens every timestep
 def ekf_iteration(event):
-    global odom, lm_meas, x_t, P_t, lm_IDs
+    global odom, lm_meas, x_t, P_t, lm_IDs, lm_meas_buffer
     # skip if there's no prediction.
     if odom is None:
         # rospy.loginfo("No odom, skipping EKF loop.")
@@ -81,12 +82,15 @@ def ekf_iteration(event):
     P_pred = F_x @ P_t @ F_x.T + F_v @ V @ F_v.T
 
     # Update step. we use landmark measurements.
-    if lm_meas is not None:
+    if lm_meas_buffer is not None and len(lm_meas_buffer) > 0:
+        lm_meas = lm_meas_buffer; lm_meas_buffer = None
         # print("lm_meas: ", lm_meas)
         # at least one landmark was detected since the last EKF iteration.
         # we can run the update step once for each landmark.
         num_landmarks = len(lm_meas) // 3
+        rospy.logwarn("lm_meas="+str(lm_meas))
         for l in range(num_landmarks):
+            rospy.logwarn("l="+str(l))
             # extract single landmark observation.
             id = lm_meas[l*3]; r = lm_meas[l*3 + 1]; b = lm_meas[l*3 + 2]
             # check if this is the first detection of this landmark ID.
@@ -162,8 +166,8 @@ def get_odom(msg):
 # get measurement of landmarks.
 def get_landmarks(msg):
     # format: [id1,r1,b1,...idN,rN,bN]
-    global lm_meas
-    lm_meas = msg.data
+    global lm_meas_buffer
+    lm_meas_buffer = msg.data
 
 def main():
     global state_pub, DT
@@ -182,7 +186,7 @@ def main():
         exit()
 
     # subscribe to landmark detections: [id1,r1,b1,...idN,rN,bN]
-    rospy.Subscriber("/landmark/apriltag", Float32MultiArray, get_landmarks, queue_size=1)
+    rospy.Subscriber("/landmark", Float32MultiArray, get_landmarks, queue_size=1)
     # subscribe to odom commands/measurements.
     rospy.Subscriber("/odom", Vector3, get_odom, queue_size=1)
 

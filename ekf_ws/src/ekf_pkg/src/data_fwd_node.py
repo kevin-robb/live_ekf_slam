@@ -6,7 +6,7 @@ to the EKF node for verification and debugging.
 """
 
 import rospy
-import rospkg
+import rospkg, rosgraph
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 import sys
@@ -17,8 +17,7 @@ import numpy as np
 ############ GLOBAL VARIABLES ###################
 USE_RSS_DATA = False # T = use demo set. F = randomize map and create new traj.
 DT = 0.5 # timer period used if cmd line param not provided.
-odom_pub = None
-lm_pub = None
+odom_pub = None; lm_pub = None; true_map_pub = None; true_pose_pub = None
 pkg_path = None # filepath to this package.
 # Default map:
 demo_map = { 0 : (6.2945, 8.1158), 1 : (-7.4603, 8.2675), 2 : (2.6472, -8.0492), 
@@ -259,7 +258,18 @@ def generate_data():
         z.append(sum([[visible_landmarks[i][0], visible_landmarks[i][1]+2*W[0,0]*random()-W[0,0], visible_landmarks[i][2]+2*W[1,1]*random()-W[1,1]] for i in range(len(visible_landmarks))], []))
 
     ############### SEND DATA ################
-    # send data one timestep at a time to the ekf.
+    # publish ground truth of map and veh pose for plotter.
+    rospy.logwarn("About to publish true stuff.")
+    rospy.sleep(1)
+    true_pose_msg = Float32MultiArray()
+    true_pose_msg.data = sum(pos_true, [])
+    true_pose_pub.publish(true_pose_msg)
+    # rospy.logwarn("Sent true pose: "+str(true_pose_msg))
+    true_map_msg = Float32MultiArray()
+    true_map_msg.data = sum([[id, landmarks[id][0], landmarks[id][1]] for id in landmarks.keys()], [])
+    true_map_pub.publish(true_map_msg)
+    # rospy.logwarn("Sent true map: "+str(true_map_msg))
+    # send noisy data one timestep at a time to the ekf.
     t = 0
     r = rospy.Rate(1/DT) # freq in Hz
     while not rospy.is_shutdown():
@@ -280,9 +290,31 @@ def generate_data():
         # sleep to publish at desired freq.
         r.sleep()
 
+# Functions to ensure messages aren't published before the
+# subscriber(s) for them have been initialized.
+# referenced https://github.com/ros/ros_comm/issues/286#issuecomment-747844224
+# def get_publisher(topic_path, msg_type, **kwargs):
+#     pub = rospy.Publisher(topic_path, msg_type, **kwargs)
+#     num_subs = len(_get_subscribers(topic_path))
+#     for i in range(10):
+#         num_cons = pub.get_num_connections()
+#         if num_cons == num_subs:
+#             return pub
+#         rospy.sleep(0.1)
+#     raise RuntimeError("failed to get publisher")
+# def _get_subscribers(topic_path):
+#     ros_master = rosgraph.Master('/rostopic')
+#     topic_path = rosgraph.names.script_resolve_name('rostopic', topic_path)
+#     state = ros_master.getSystemState()
+#     subs = []
+#     for sub in state[1]:
+#         if sub[0] == topic_path:
+#             subs.extend(sub[1])
+#     return subs
+
 
 def main():
-    global lm_pub, odom_pub, pkg_path, DT
+    global lm_pub, odom_pub, pkg_path, DT, true_map_pub, true_pose_pub
     rospy.init_node('data_fwd_node')
 
     # read DT from command line arg.
@@ -302,9 +334,13 @@ def main():
     pkg_path = rospack.get_path('ekf_pkg')
 
     # publish landmark detections: [id1,r1,b1,...idN,rN,bN]
-    lm_pub = rospy.Publisher("/landmark/apriltag", Float32MultiArray, queue_size=1)
+    lm_pub = rospy.Publisher("/landmark", Float32MultiArray, queue_size=1)
     # publish odom commands/measurements.
     odom_pub = rospy.Publisher("/odom", Vector3, queue_size=1)
+
+    # publish ground truth for the plotter.
+    true_pose_pub = rospy.Publisher("/truth/veh_pose",Float32MultiArray, queue_size=1)
+    true_map_pub = rospy.Publisher("/truth/landmarks",Float32MultiArray, queue_size=1)
 
     # subscribe to the current state.
     rospy.Subscriber("/ekf/state", Float32MultiArray, get_state, queue_size=1)
