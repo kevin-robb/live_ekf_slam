@@ -20,6 +20,12 @@ DT = 0.5 # timer period used if cmd line param not provided.
 odom_pub = None
 lm_pub = None
 pkg_path = None # filepath to this package.
+# Default map:
+demo_map = { 0 : (6.2945, 8.1158), 1 : (-7.4603, 8.2675), 2 : (2.6472, -8.0492), 
+        3 : (-4.4300, 0.9376), 4 : (9.1501, 9.2978), 5 : (-6.8477, 9.4119), 6 : (9.1433, -0.2925),
+        7 : (6.0056, -7.1623), 8 : (-1.5648, 8.3147), 9 : (5.8441, 9.1898), 10: (3.1148, -9.2858),
+        11: (6.9826, 8.6799), 12: (3.5747, 5.1548), 13: (4.8626, -2.1555), 14: (3.1096, -6.5763),
+        15: (4.1209, -9.3633), 16: (-4.4615, -9.0766), 17: (-8.0574, 6.4692), 18: (3.8966, -3.6580), 19: (9.0044, -9.3111) }
 #################################################
 
 def main_loop(event):
@@ -99,24 +105,35 @@ def generate_data():
     NUM_LANDMARKS = 20
     MIN_SEP = 0.05 # min dist between landmarks.
     # key = integer ID. value = (x,y) position.
-    landmarks = {}; id = 0
-    while len(landmarks.keys()) < NUM_LANDMARKS:
-        pos = (2*BOUND*random() - BOUND, 2*BOUND*random() - BOUND)
-        dists = [ norm(lm_pos, pos) < MIN_SEP for lm_pos in landmarks.values()]
-        if True not in dists:
-            landmarks[id] = pos
-            id += 1
+    landmarks = {}
 
+    USE_DEMO_MAP = True
+    if USE_DEMO_MAP:
+        if len(demo_map.keys()) == NUM_LANDMARKS:
+            landmarks = demo_map
+        else:
+            rospy.logwarn("NUM_LANDMARKS must match length of demo_map to use it.")
+    # make new map if the demo hasn't been set.
+    if len(landmarks.keys()) < 1:
+        id = 0
+        while len(landmarks.keys()) < NUM_LANDMARKS:
+            pos = (2*BOUND*random() - BOUND, 2*BOUND*random() - BOUND)
+            dists = [ norm(lm_pos, pos) < MIN_SEP for lm_pos in landmarks.values()]
+            if True not in dists:
+                landmarks[id] = pos
+                id += 1
+    
     ############# GENERATE TRAJECTORY ###################
     NUM_TIMESTEPS = 1000
     # constraints:
     ODOM_D_MAX = 0.1; ODOM_TH_MAX = 0.0546
     # process noise in EKF. will be used to add noise to odom.
-    V = np.array([[0.02**2,0.0],[0.0,0.5*pi/180**2]])
+    # V = np.array([[0.02**2,0.0],[0.0,0.5*pi/180**2]])
+    V = np.array([[0.0,0.0],[0.0,0.0]])
     # param to keep track of true current pos.
     x0 = [0.0,0.0,0.0]
     x_v = x0
-    pos_true = [] # need this for next step.
+    pos_true = [x_v] # need this for next step.
     # init the odom lists.
     odom_dist = []; odom_hdg = []
     """
@@ -129,7 +146,7 @@ def generate_data():
     the trajectory planner is a knowing helper.
     """
     # make noisy version of rough map to use.
-    LM_NOISE = 0.3
+    LM_NOISE = 0.1
     noisy_lm = {}
     for id in range(NUM_LANDMARKS):
         noisy_lm[id] = (landmarks[id][0] + 2*LM_NOISE*random()-LM_NOISE, landmarks[id][1] + 2*LM_NOISE*random()-LM_NOISE)
@@ -191,7 +208,8 @@ def generate_data():
     # vision constraints:
     RANGE_MAX = 4; FOV = [-pi, pi]
     # sensing noise in EKF.
-    W = np.array([[0.1**2,0.0],[0.0,1*pi/180**2]])
+    # W = np.array([[0.1**2,0.0],[0.0,1*pi/180**2]])
+    W = np.array([[0.0,0.0],[0.0,0.0]])
     # init the meas lists.
     z_num_det = []; z = []
     """
@@ -212,7 +230,7 @@ def generate_data():
             # extract range and bearing.
             r = norm(landmarks[id], pos_true[t])
             gb = atan2(diff_vec[1], diff_vec[0]) # global bearing.
-            beta = remainder(gb - x_v[2], tau) # bearing rel to robot
+            beta = remainder(gb - pos_true[t][2], tau) # bearing rel to robot
             # check if this is visible to the robot.
             if r > RANGE_MAX:
                 continue
@@ -240,7 +258,7 @@ def generate_data():
         if z_num_det[t] > 0:
             lm_msg = Float32MultiArray()
             lm_msg.data = z[t]
-            # rospy.logwarn("Sending lm: "+str(lm_msg))
+            rospy.logwarn("Sending lm: "+str(lm_msg))
             lm_pub.publish(lm_msg)
         t += 1
         # sleep to publish at desired freq.
