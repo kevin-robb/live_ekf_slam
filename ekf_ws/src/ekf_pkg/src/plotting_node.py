@@ -19,11 +19,14 @@ def eigsorted(cov):
 veh_x = []; veh_y = []; veh_th = []
 # current estimate for all landmark positions.
 lm_x = []; lm_y = []
+# plotted stuff.
+SHOW_ENTIRE_TRAJ = False
+lm_pts = None; veh_pts = None; ell_pts = None
 #################################################
 
 # get the state published by the EKF.
 def get_state(msg):
-    global veh_x, veh_y, veh_th, lm_x, lm_y, counter
+    global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts
     # rospy.loginfo("State: " + str(msg.data))
     # save what we want to plot.
     # first 9 represent the 3x3 covariance matrix.
@@ -55,13 +58,24 @@ def get_state(msg):
     Ell_rot = np.zeros((2,Ell.shape[1]))
     for i in range(Ell.shape[1]):
         Ell_rot[:,i] = np.dot(R_rot,Ell[:,i])
-    plt.plot(msg.data[9]+Ell_rot[0,:] , msg.data[10]+Ell_rot[1,:],'lightgrey' )
+    # remove old ellipses.
+    if not SHOW_ENTIRE_TRAJ and ell_pts is not None:
+        ell_pts.remove()
+    ell_pts, = plt.plot(msg.data[9]+Ell_rot[0,:] , msg.data[10]+Ell_rot[1,:],'lightgrey' )
 
-    # plot landmarks.
-    plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black")
+    # remove old landmark estimates
+    if lm_pts is not None:
+        lm_pts.remove()
+    # plot new landmark estimates.
+    lm_pts = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black")
     # plot veh pos.
     # plt.scatter(veh_x, veh_y, s=12, color="green")
-    plt.scatter(msg.data[9], msg.data[10], s=12, color="green")
+    # veh_points = plt.scatter(msg.data[9], msg.data[10], s=12, color="green")
+    if not SHOW_ENTIRE_TRAJ and veh_pts is not None:
+        veh_pts.remove()
+    # draw a single pt with arrow to represent current veh pose.
+    ARROW_LEN = 0.1
+    veh_pts = plt.arrow(msg.data[9], msg.data[10], ARROW_LEN*cos(msg.data[11]), ARROW_LEN*sin(msg.data[11]), color="green", width=0.1)
 
     plt.axis("equal")
     plt.xlabel("x (m)")

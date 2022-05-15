@@ -129,8 +129,9 @@ def generate_data():
     # constraints:
     ODOM_D_MAX = 0.1; ODOM_TH_MAX = 0.0546
     # process noise in EKF. will be used to add noise to odom.
-    # V = np.array([[0.02**2,0.0],[0.0,0.5*pi/180**2]])
-    V = np.array([[0.0,0.0],[0.0,0.0]])
+    # V = np.array([[0.02**2,0.0],[0.0,(0.5*pi/180)**2]]) # deg
+    # V = np.array([[0.02**2,0.0],[0.0,0.25**2]]) # rad
+    V = np.array([[0.0,0.0],[0.0,0.0]]) # no noise
     # param to keep track of true current pos.
     x0 = [0.0,0.0,0.0]
     x_v = x0
@@ -147,7 +148,7 @@ def generate_data():
     the trajectory planner is a knowing helper.
     """
     # make noisy version of rough map to use.
-    LM_NOISE = 0
+    LM_NOISE = 0.1
     noisy_lm = {}
     for id in range(NUM_LANDMARKS):
         noisy_lm[id] = (landmarks[id][0] + 2*LM_NOISE*random()-LM_NOISE, landmarks[id][1] + 2*LM_NOISE*random()-LM_NOISE)
@@ -204,7 +205,7 @@ def generate_data():
         # add noise to odom and add to trajectory.
         odom_dist.append(d + 2*V[0,0]*random()-V[0,0])
         odom_hdg.append(hdg + 2*V[1,1]*random()-V[1,1])
-        rospy.logwarn(str(t)+" odom: "+str(d)+", "+str(hdg))
+        # rospy.logwarn(str(t)+" odom: "+str(d)+", "+str(hdg))
 
     #####################################################
     ####### DEBUG READ DEMO ODOM FROM FILE ##############
@@ -222,8 +223,9 @@ def generate_data():
     # vision constraints:
     RANGE_MAX = 4; FOV = [-pi, pi]
     # sensing noise in EKF.
-    # W = np.array([[0.1**2,0.0],[0.0,1*pi/180**2]])
-    W = np.array([[0.0,0.0],[0.0,0.0]])
+    # W = np.array([[0.1**2,0.0],[0.0,(1*pi/180)**2]]) # deg
+    # W = np.array([[0.1**2,0.0],[0.0,0.5**2]]) # rad
+    W = np.array([[0.0,0.0],[0.0,0.0]]) # no noise
     # init the meas lists.
     z_num_det = []; z = []
     """
