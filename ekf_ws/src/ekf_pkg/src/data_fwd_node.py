@@ -40,7 +40,8 @@ def main_loop(event):
 
 # get the state published by the EKF.
 def get_state(msg):
-    rospy.loginfo("State: " + str(msg.data[9:12]))
+    # rospy.loginfo("State: " + str(msg.data[9:12]))
+    pass
 
 
 def read_rss_data():
@@ -107,7 +108,7 @@ def generate_data():
     # key = integer ID. value = (x,y) position.
     landmarks = {}
 
-    USE_DEMO_MAP = True
+    USE_DEMO_MAP = False
     if USE_DEMO_MAP:
         if len(demo_map.keys()) == NUM_LANDMARKS:
             landmarks = demo_map
@@ -133,7 +134,7 @@ def generate_data():
     # param to keep track of true current pos.
     x0 = [0.0,0.0,0.0]
     x_v = x0
-    pos_true = [x_v] # need this for next step.
+    # pos_true = [x_v] # need this for next step.
     # init the odom lists.
     odom_dist = []; odom_hdg = []
     """
@@ -146,7 +147,7 @@ def generate_data():
     the trajectory planner is a knowing helper.
     """
     # make noisy version of rough map to use.
-    LM_NOISE = 0.1
+    LM_NOISE = 0
     noisy_lm = {}
     for id in range(NUM_LANDMARKS):
         noisy_lm[id] = (landmarks[id][0] + 2*LM_NOISE*random()-LM_NOISE, landmarks[id][1] + 2*LM_NOISE*random()-LM_NOISE)
@@ -194,16 +195,29 @@ def generate_data():
         hdg = remainder(gb - x_v[2], tau) # bearing rel to robot.
         # choose odom cmd w/in constraints.
         d = min(d, ODOM_D_MAX) # always pos.
-        if abs(hdg) < ODOM_TH_MAX:
+        if abs(hdg) > ODOM_TH_MAX:
             # cap magnitude but keep sign.
-            hdg = ODOM_TH_MAX * hdg / abs(hdg)
+            hdg = ODOM_TH_MAX * np.sign(hdg) #hdg / abs(hdg)
         # update veh position given this odom cmd.
         x_v = [x_v[0] + d*cos(x_v[2]), x_v[1] + d*sin(x_v[2]), x_v[2] + hdg]
-        pos_true.append(x_v)
+        # pos_true.append(x_v)
         # add noise to odom and add to trajectory.
         odom_dist.append(d + 2*V[0,0]*random()-V[0,0])
         odom_hdg.append(hdg + 2*V[1,1]*random()-V[1,1])
+        rospy.logwarn(str(t)+" odom: "+str(d)+", "+str(hdg))
 
+    #####################################################
+    ####### DEBUG READ DEMO ODOM FROM FILE ##############
+    # odom_file = open(pkg_path+"/data/ekf_odo_m.csv", "r")
+    # odom_raw = odom_file.readlines()
+    # odom_dist = [float(d) for d in odom_raw[0].split(",")]
+    # odom_hdg = [float(h) for h in odom_raw[1].split(",")]
+    # propagate odom to get veh pos at all times.
+    pos_true = [x0]; x_v = x0
+    for t in range(NUM_TIMESTEPS):
+        x_v = [x_v[0] + odom_dist[t]*cos(x_v[2]), x_v[1] + odom_dist[t]*sin(x_v[2]), x_v[2] + odom_hdg[t]]
+        pos_true.append(x_v)
+    #####################################################
     ############# GENERATE MEASUREMENTS #################
     # vision constraints:
     RANGE_MAX = 4; FOV = [-pi, pi]
@@ -258,7 +272,7 @@ def generate_data():
         if z_num_det[t] > 0:
             lm_msg = Float32MultiArray()
             lm_msg.data = z[t]
-            rospy.logwarn("Sending lm: "+str(lm_msg))
+            # rospy.logwarn("Sending lm: "+str(lm_msg))
             lm_pub.publish(lm_msg)
         t += 1
         # sleep to publish at desired freq.
