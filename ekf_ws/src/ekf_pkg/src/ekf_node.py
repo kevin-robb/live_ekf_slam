@@ -30,10 +30,9 @@ W = np.array([[0.1**2,0.0],[0.0,1*pi/180**2]])
 x0 = np.array([[0.0],[0.0],[0.0]])
 # P0 = np.array([[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]])
 P0 = np.array([[0.01**2,0.0,0.0],[0.0,0.01**2,0.0],[0.0,0.0,0.005**2]])
-# Most recent odom reading.
-odom = None # [dist, heading]
-lm_meas_buffer = None
-lm_meas = None # [id, range, bearing, ...]
+# Most recent odom reading and landmark measurements.
+odom_queue = []; lm_meas_queue = []
+# odom = [dist, heading], lm_meas = [id, range, bearing, ...]
 # Current state mean and covariance.
 x_t = x0; P_t = P0
 # IDs of seen landmarks. Order corresponds to ind in state.
@@ -42,14 +41,16 @@ lm_IDs = []
 
 # main EKF loop that happens every timestep
 def ekf_iteration(event):
-    global odom, lm_meas, x_t, P_t, lm_IDs, lm_meas_buffer
-    # skip if there's no prediction.
-    if odom is None:
-        # rospy.loginfo("No odom, skipping EKF loop.")
+    global x_t, P_t, lm_IDs, lm_meas_queue, odom_queue
+    # skip if there's no prediction or measurement yet.
+    if len(odom_queue) < 1 or len(lm_meas_queue) < 1:
+        # rospy.loginfo("No data, skipping EKF loop.")
         return
-    else:
-        # rospy.loginfo("Got odom, proceeding.")
-        pass
+    # pop the next data off the queue.
+    odom = odom_queue[0]
+    odom_queue = odom_queue[1:]
+    lm_meas = lm_meas_queue[0]
+    lm_meas_queue = lm_meas_queue[1:]
 
     # odom gives us a (dist, heading) "command".
     d_d = odom[0]; d_th = odom[1]
@@ -82,15 +83,12 @@ def ekf_iteration(event):
     P_pred = F_x @ P_t @ F_x.T + F_v @ V @ F_v.T
 
     # Update step. we use landmark measurements.
-    if lm_meas_buffer is not None and len(lm_meas_buffer) > 0:
-        lm_meas = lm_meas_buffer; lm_meas_buffer = None
+    if len(lm_meas) > 0:
         # print("lm_meas: ", lm_meas)
         # at least one landmark was detected since the last EKF iteration.
         # we can run the update step once for each landmark.
         num_landmarks = len(lm_meas) // 3
-        rospy.logwarn("lm_meas="+str(lm_meas))
         for l in range(num_landmarks):
-            rospy.logwarn("l="+str(l))
             # extract single landmark observation.
             id = lm_meas[l*3]; r = lm_meas[l*3 + 1]; b = lm_meas[l*3 + 2]
             # check if this is the first detection of this landmark ID.
@@ -160,14 +158,14 @@ def ekf_iteration(event):
 
 # get measurement of odometry info.
 def get_odom(msg):
-    global odom
-    odom = [msg.x, msg.y]
+    global odom_queue
+    odom_queue.append([msg.x, msg.y])
 
 # get measurement of landmarks.
 def get_landmarks(msg):
     # format: [id1,r1,b1,...idN,rN,bN]
-    global lm_meas_buffer
-    lm_meas_buffer = msg.data
+    global lm_meas_queue
+    lm_meas_queue.append(msg.data)
 
 def main():
     global state_pub, DT

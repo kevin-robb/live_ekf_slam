@@ -124,7 +124,7 @@ def generate_data():
                 id += 1
     
     ############# GENERATE TRAJECTORY ###################
-    NUM_TIMESTEPS = 1000
+    NUM_TIMESTEPS = 2000
     # constraints:
     ODOM_D_MAX = 0.1; ODOM_TH_MAX = 0.0546
     # process noise in EKF. will be used to add noise to odom.
@@ -147,7 +147,7 @@ def generate_data():
     the trajectory planner is a knowing helper.
     """
     # make noisy version of rough map to use.
-    LM_NOISE = 0.1
+    LM_NOISE = 0.2
     noisy_lm = {}
     for id in range(NUM_LANDMARKS):
         noisy_lm[id] = (landmarks[id][0] + 2*LM_NOISE*random()-LM_NOISE, landmarks[id][1] + 2*LM_NOISE*random()-LM_NOISE)
@@ -177,7 +177,7 @@ def generate_data():
         # mark it as visited.
         unvisited.remove(cur_node)
     # now traverse our graph to get an actual trajectory.
-    t = 0; THRESHOLD = 1.7
+    t = 0; THRESHOLD = 3
     for t in range(NUM_TIMESTEPS):
         # first entry in lm_path always the current goal.
         # we will move it to the end once approx achieved.
@@ -280,12 +280,12 @@ def generate_data():
         odom_msg.y = odom_hdg[t]
         # rospy.logwarn("Sending odom: "+str(odom_msg))
         odom_pub.publish(odom_msg)
-        # only send landmarks when there is a detection.
-        if z_num_det[t] > 0:
-            lm_msg = Float32MultiArray()
-            lm_msg.data = z[t]
-            # rospy.logwarn("Sending lm: "+str(lm_msg))
-            lm_pub.publish(lm_msg)
+        # always send a measurement. empty list if no detection.
+        lm_msg = Float32MultiArray()
+        lm_msg.data = z[t]
+        # rospy.logwarn("Sending lm: "+str(lm_msg))
+        lm_pub.publish(lm_msg)
+        # increment time.
         t += 1
         # sleep to publish at desired freq.
         r.sleep()

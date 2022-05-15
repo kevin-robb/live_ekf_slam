@@ -23,7 +23,7 @@ lm_x = []; lm_y = []
 true_pose = None; true_map = None
 # plotting stuff.
 SHOW_ENTIRE_TRAJ = False
-SHOW_TRUE_TRAJ = False
+SHOW_TRUE_TRAJ = True
 ARROW_LEN = 0.1
 # timestep = 0
 lm_pts = None; veh_pts = None; ell_pts = None; veh_true = None
@@ -59,7 +59,7 @@ def get_state(msg):
         # veh_true = plt.arrow(true_pose[t][0], true_pose[t][1], ARROW_LEN*cos(true_pose[t][2]), ARROW_LEN*sin(true_pose[t][2]), color="blue", width=0.1)
         # veh_true = plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], ARROW_LEN*cos(true_pose[timestep*3+2]), ARROW_LEN*sin(true_pose[timestep*3+2]), color="blue", width=0.1)
         for timestep in range(0,len(true_pose)//3):
-            plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], ARROW_LEN*cos(true_pose[timestep*3+2]), ARROW_LEN*sin(true_pose[timestep*3+2]), color="blue", width=0.02)
+            plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], ARROW_LEN*cos(true_pose[timestep*3+2]), ARROW_LEN*sin(true_pose[timestep*3+2]), color="blue", width=0.01)
         true_pose = None
     # increment timestep we're on.
     # timestep += 1
