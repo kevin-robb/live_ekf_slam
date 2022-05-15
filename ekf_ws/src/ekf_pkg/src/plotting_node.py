@@ -74,7 +74,8 @@ def get_state(msg):
 def save_plot():
     # save plot we've been building upon exit.
     # save to a file in pkg/plots directory.
-    plt.savefig(pkg_path+"/plots/rss_test.png", format='png')
+    # plt.savefig(pkg_path+"/plots/rss_test.png", format='png')
+    pass
 
 def main():
     global pkg_path

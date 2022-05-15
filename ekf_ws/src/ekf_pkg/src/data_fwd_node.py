@@ -9,14 +9,13 @@ import rospy
 import rospkg
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
-from matplotlib import pyplot as plt
 import sys
 from random import random
-from math import pi
+from math import pi, atan2, remainder, tau, cos, sin
 import numpy as np
 
 ############ GLOBAL VARIABLES ###################
-USE_RSS_DATA = True # T = use demo set. F = randomize map and create new traj.
+USE_RSS_DATA = False # T = use demo set. F = randomize map and create new traj.
 DT = 0.5 # timer period used if cmd line param not provided.
 odom_pub = None
 lm_pub = None
@@ -59,50 +58,6 @@ def read_rss_data():
     z_id_file = open(pkg_path+"/data/ekf_zind_m.csv", "r")
     z_id = [int(num) for num in z_id_file.readlines()[0].split(",")]
 
-    # send data one at a time to the ekf.
-    send_data(odom_dist, odom_hdg, z_id, z_range, z_bearing)
-
-
-def generate_data():
-    """
-    Create a set of 20 landmarks forming the map.
-    Choose a trajectory through the space that will
-    come near a reasonable amount of landmarks.
-    Generate this trajectory's odom commands and
-    measurements for all timesteps.
-    Publish these one at a time for the EKF.
-    """
-    x0 = np.array([[0.0],[0.0],[0.0]])
-    ################ GENERATE MAP #######################
-    BOUND = 10 # all lm will be w/in +- BOUND in both x/y.
-    NUM_LANDMARKS = 20
-    MIN_SEP = 0.05 # min dist between landmarks.
-    # key = integer ID. value = (x,y) position.
-    landmarks = {}; id = 0
-    while len(landmarks.keys() < NUM_LANDMARKS):
-        x_pos = 2*BOUND*random() - BOUND
-        y_pos = 2*BOUND*random() - BOUND
-        dists = [ ((lm_pos[0]-x_pos)**2 + (lm_pos[1]-y_pos)**2)**(1/2) < MIN_SEP for lm_pos in landmarks.values()]
-        if True not in dists:
-            landmarks[id] = (x_pos, y_pos)
-            id += 1
-    ############# GENERATE TRAJECTORY ###################
-    NUM_TIMESTEPS = 1000
-    # constraints:
-    ODOM_D_MAX = 0.1; ODOM_TH_MAX = 0.0546
-
-    odom_dist = None; odom_hdg = None
-    ############# GENERATE MEASUREMENTS #################
-    # vision constraints:
-    RANGE_MAX = 4; FOV = [-pi, pi]
-    
-    
-    z_id = None; z_range = None; z_bearing = None
-    #####################################################
-    send_data(odom_dist, odom_hdg, z_id, z_range, z_bearing)
-
-
-def send_data(odom_dist, odom_hdg, z_id, z_range, z_bearing):
     # send data one timestep at a time to the ekf.
     i_z = 0; i = 0
     r = rospy.Rate(1/DT) # freq in Hz
@@ -120,6 +75,174 @@ def send_data(odom_dist, odom_hdg, z_id, z_range, z_bearing):
             lm_pub.publish(lm_msg)
             i_z += 1
         i += 1
+        # sleep to publish at desired freq.
+        r.sleep()
+
+
+def norm(l1, l2):
+    # compute the norm of the difference of two lists or tuples.
+    # only use the first two elements.
+    return ((l1[0]-l2[0])**2 + (l1[1]-l2[1])**2)**(1/2) 
+
+
+def generate_data():
+    """
+    Create a set of 20 landmarks forming the map.
+    Choose a trajectory through the space that will
+    come near a reasonable amount of landmarks.
+    Generate this trajectory's odom commands and
+    measurements for all timesteps.
+    Publish these one at a time for the EKF.
+    """
+    ################ GENERATE MAP #######################
+    BOUND = 10 # all lm will be w/in +- BOUND in both x/y.
+    NUM_LANDMARKS = 20
+    MIN_SEP = 0.05 # min dist between landmarks.
+    # key = integer ID. value = (x,y) position.
+    landmarks = {}; id = 0
+    while len(landmarks.keys()) < NUM_LANDMARKS:
+        pos = (2*BOUND*random() - BOUND, 2*BOUND*random() - BOUND)
+        dists = [ norm(lm_pos, pos) < MIN_SEP for lm_pos in landmarks.values()]
+        if True not in dists:
+            landmarks[id] = pos
+            id += 1
+
+    ############# GENERATE TRAJECTORY ###################
+    NUM_TIMESTEPS = 1000
+    # constraints:
+    ODOM_D_MAX = 0.1; ODOM_TH_MAX = 0.0546
+    # process noise in EKF. will be used to add noise to odom.
+    V = np.array([[0.02**2,0.0],[0.0,0.5*pi/180**2]])
+    # param to keep track of true current pos.
+    x0 = [0.0,0.0,0.0]
+    x_v = x0
+    pos_true = [] # need this for next step.
+    # init the odom lists.
+    odom_dist = []; odom_hdg = []
+    """
+    We will use travelling salesman problem (TSP) - 
+    nearest neighbors approach to find an efficient path.
+    NOTE: We'll add noise to landmarks, but this method of
+    trajectory generation assumes we have a rough idea of 
+    where all landmarks are. The EKF doesn't get this info,
+    so it is still performing fully blind EKF SLAM, but
+    the trajectory planner is a knowing helper.
+    """
+    # make noisy version of rough map to use.
+    LM_NOISE = 0.3
+    noisy_lm = {}
+    for id in range(NUM_LANDMARKS):
+        noisy_lm[id] = (landmarks[id][0] + 2*LM_NOISE*random()-LM_NOISE, landmarks[id][1] + 2*LM_NOISE*random()-LM_NOISE)
+    # choose nearest landmark to x0 as first node.
+    cur_goal = 0; cur_dist = norm(noisy_lm[cur_goal], x_v)
+    for id in range(NUM_LANDMARKS):
+        if norm(noisy_lm[id], x_v) < cur_dist:
+            cur_goal = id
+            cur_dist = norm(noisy_lm[id], x_v)
+    # build directed graph using NN heuristic.
+    cur_node = cur_goal
+    # store path of lm indices to visit in order.
+    lm_path = [cur_node]
+    unvisited = [id for id in range(NUM_LANDMARKS)]
+    unvisited.remove(cur_node)
+    # find next nearest neighbor until all nodes are visited.
+    while len(unvisited) > 0:
+        cur_dist = -1
+        # find nearest node to current one.
+        for id in unvisited:
+            dist = norm(noisy_lm[id], noisy_lm[cur_node])
+            if cur_dist < 0 or dist < cur_dist:
+                cur_goal = id; cur_dist = dist
+        # add this as next node to visit.
+        lm_path.append(cur_goal)
+        cur_node = cur_goal
+        # mark it as visited.
+        unvisited.remove(cur_node)
+    # now traverse our graph to get an actual trajectory.
+    t = 0; THRESHOLD = 1.7
+    for t in range(NUM_TIMESTEPS):
+        # first entry in lm_path always the current goal.
+        # we will move it to the end once approx achieved.
+        # thus, robot will loop around until time runs out.
+        if norm(x_v, noisy_lm[lm_path[0]]) < THRESHOLD:
+            # mark as ~ arrived.
+            lm_path = lm_path[1:] + [lm_path[0]]
+
+        # move towards current goal.
+        # compute vector from veh pos to lm.
+        diff_vec = [noisy_lm[lm_path[0]][i] - x_v[i] for i in range(2)]
+        # extract range and bearing.
+        d = norm(noisy_lm[lm_path[0]], x_v)
+        gb = atan2(diff_vec[1], diff_vec[0]) # global bearing.
+        hdg = remainder(gb - x_v[2], tau) # bearing rel to robot.
+        # choose odom cmd w/in constraints.
+        d = min(d, ODOM_D_MAX) # always pos.
+        if abs(hdg) < ODOM_TH_MAX:
+            # cap magnitude but keep sign.
+            hdg = ODOM_TH_MAX * hdg / abs(hdg)
+        # update veh position given this odom cmd.
+        x_v = [x_v[0] + d*cos(x_v[2]), x_v[1] + d*sin(x_v[2]), x_v[2] + hdg]
+        pos_true.append(x_v)
+        # add noise to odom and add to trajectory.
+        odom_dist.append(d + 2*V[0,0]*random()-V[0,0])
+        odom_hdg.append(hdg + 2*V[1,1]*random()-V[1,1])
+
+    ############# GENERATE MEASUREMENTS #################
+    # vision constraints:
+    RANGE_MAX = 4; FOV = [-pi, pi]
+    # sensing noise in EKF.
+    W = np.array([[0.1**2,0.0],[0.0,1*pi/180**2]])
+    # init the meas lists.
+    z_num_det = []; z = []
+    """
+    To create measurements, we morph the truth with noise
+    from a known distribution, to emulate what a robot
+    might actually measure.
+    We will track the robot's true position, and use
+    known sensor range and FOV to determine which
+    landmarks are detected, and what the measured
+    range, bearing should be.
+    """
+    for t in range(NUM_TIMESTEPS):
+        # loop and determine which landmarks are visible.
+        visible_landmarks = []
+        for id in range(NUM_LANDMARKS):
+            # compute vector from veh pos to lm.
+            diff_vec = [landmarks[id][i] - pos_true[t][i] for i in range(2)]
+            # extract range and bearing.
+            r = norm(landmarks[id], pos_true[t])
+            gb = atan2(diff_vec[1], diff_vec[0]) # global bearing.
+            beta = remainder(gb - x_v[2], tau) # bearing rel to robot
+            # check if this is visible to the robot.
+            if r > RANGE_MAX:
+                continue
+            elif beta > FOV[0] and beta < FOV[1]:
+                # within range and fov.
+                visible_landmarks.append([id, r, beta])
+        # set number of detections on this timestep.
+        z_num_det.append(len(visible_landmarks))
+        # add noise to all detections and add to list.
+        z.append(sum([[visible_landmarks[i][0], visible_landmarks[i][1]+2*W[0,0]*random()-W[0,0], visible_landmarks[i][2]+2*W[1,1]*random()-W[1,1]] for i in range(len(visible_landmarks))], []))
+
+    ############### SEND DATA ################
+    # send data one timestep at a time to the ekf.
+    t = 0
+    r = rospy.Rate(1/DT) # freq in Hz
+    while not rospy.is_shutdown():
+        if t == NUM_TIMESTEPS: return
+    
+        odom_msg = Vector3()
+        odom_msg.x = odom_dist[t]
+        odom_msg.y = odom_hdg[t]
+        # rospy.logwarn("Sending odom: "+str(odom_msg))
+        odom_pub.publish(odom_msg)
+        # only send landmarks when there is a detection.
+        if z_num_det[t] > 0:
+            lm_msg = Float32MultiArray()
+            lm_msg.data = z[t]
+            # rospy.logwarn("Sending lm: "+str(lm_msg))
+            lm_pub.publish(lm_msg)
+        t += 1
         # sleep to publish at desired freq.
         r.sleep()
 

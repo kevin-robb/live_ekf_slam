@@ -97,7 +97,8 @@ def ekf_iteration(event):
                 dist = ((x_t[i,0]-x_pred[0,0])**2 + (x_t[i+1,0]-x_pred[1,0])**2)**(1/2)
                 H_xv = np.array([[-(x_t[i,0]-x_pred[0,0])/dist, -(x_t[i+1,0]-x_pred[1,0])/dist, 0], [(x_t[i+1,0]-x_pred[1,0])/(dist**2), -(x_t[i,0]-x_pred[0,0])/(dist**2), -1]])
                 H_xp = np.array([[(x_t[i,0]-x_pred[0,0])/dist, (x_t[i+1,0]-x_pred[1,0])/dist], [-(x_t[i+1,0]-x_pred[1,0])/(dist**2), (x_t[i,0]-x_pred[0,0])/(dist**2)]])
-                H_x = np.zeros((2,x_t.shape[0]))
+                # H_x = np.zeros((2,x_t.shape[0]))
+                H_x = np.zeros((2,x_pred.shape[0]))
                 H_x[0:2,0:3] = H_xv
                 H_x[0:2,i:i+2] = H_xp
                 H_w = np.eye(2)
