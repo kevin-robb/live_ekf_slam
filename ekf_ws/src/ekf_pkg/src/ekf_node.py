@@ -125,14 +125,19 @@ def ekf_iteration(event):
                 # Compute Jacobian matrices.
                 G_z = np.array([[cos(x_pred[2,0]+b), -r*sin(x_pred[2,0]+b)],
                                 [sin(x_pred[2,0]+b), r*cos(x_pred[2,0]+b)]])
-                Y_z = np.eye(n+2)
-                Y_z[n:n+2,n:n+2] = G_z
+                # Y_z = np.eye(n+2)
+                # Y_z[n:n+2,n:n+2] = G_z
+                G_x = np.array([[1, 0, -r*sin(x_pred[2,0]+b)],[0, 1, r*cos(x_pred[2,0]+b)]])
+                Y = np.eye(n+2)
+                Y[n:n+2,n:n+2] = G_z
+                Y[n:n+2,0:3] = G_x
+
                 # update covariance.
                 # print("P_pred: ", P_pred)
                 # print("zeros1: ", np.zeros((n,2)))
                 # print("zeros2: ", np.zeros((2,n)))
                 # print("W: ", W)
-                P_pred = Y_z @ np.vstack([np.hstack([P_pred, np.zeros((n,2))]), np.hstack([np.zeros((2,n)), W])]) @ Y_z.T
+                P_pred = Y @ np.vstack([np.hstack([P_pred, np.zeros((n,2))]), np.hstack([np.zeros((2,n)), W])]) @ Y.T
                 
     # officially update the state. this works even if no landmarks were detected.
     x_t = x_pred; P_t = P_pred
