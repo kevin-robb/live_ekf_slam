@@ -12,7 +12,7 @@ import numpy as np
 from random import random
 # import keyboard
 from pynput import keyboard
-import sys
+import sys,tty,os,termios
 
 ########### GLOBAL VARIABLES ############
 DT = 0.5
@@ -92,9 +92,9 @@ def generate_odom(pressed):
     """
     global fwd_speed, ang_speed
     # linear.
-    if pressed["up arrow"]:
+    if pressed["up"]:
         fwd_speed += FWD_INCR
-    elif pressed["down arrow"]:
+    elif pressed["down"]:
         fwd_speed -= FWD_INCR
     else:
         # drift back down to 0.
@@ -102,9 +102,9 @@ def generate_odom(pressed):
     # cap w/in constraints.
     fwd_speed = min(fwd_speed, ODOM_D_MAX) # always pos.
     # angular.
-    if pressed["right arrow"]:
+    if pressed["right"]:
         ang_speed += ANG_INCR
-    elif pressed["left arrow"]:
+    elif pressed["left"]:
         ang_speed -= ANG_INCR
     else:
         # drift back towards 0 from either side.
@@ -120,20 +120,30 @@ def generate_odom(pressed):
 
 def record_keypress():
     """
-    Record presses of the up, down, left, and right arrows.
+    Record presses of the up, down, left, and rights.
     """
-    pressed = {"left arrow" : False, "up arrow" : False, "down arrow" : False, "right arrow" : False}
+    pressed = {"left" : False, "up" : False, "down" : False, "right" : False}
 
-    # collect keyboard events until released
-    with keyboard.Listener(
-            on_press=on_press,
-            on_release=on_release) as listener:
-        listener.join()
-    
     r = rospy.Rate(1/DT) # freq in Hz
     while not rospy.is_shutdown():
-        for key in pressed.keys():
-            pressed[key] = keyboard.is_pressed(key)
+        # read keyboard press
+        try:
+            # while True:
+            k = getkey()
+            if k == 'esc':
+                quit()
+            elif k in pressed.keys():
+                # set key conditions.
+                # set all others to false.
+                for k in pressed.keys():
+                    pressed[k] = False
+                pressed[k] = True
+            else:
+                print("Pressed "+k)
+        except (KeyboardInterrupt, SystemExit):
+            os.system('stty sane')
+            print('stopping.')
+        
         # generate odom for current configuration.
         odom = generate_odom(pressed)
         # generate measurement.
@@ -142,23 +152,34 @@ def record_keypress():
         odom_msg = Vector3(); odom_msg.x = odom[0]; odom_msg.y = odom[1]; odom_pub.publish(odom_msg)
         z_msg = Float32MultiArray(); z_msg.data = z; lm_pub.publish(z_msg)
         # wait to keep on track with desired frequency.
-        r.sleep()
+        # r.sleep()
 
-# functions to listen for keypresses.
-# referenced https://stackoverflow.com/a/54239261/14783583
-def on_press(key):
+# referenced https://stackoverflow.com/a/67939368/14783583
+def getkey():
+    old_settings = termios.tcgetattr(sys.stdin)
+    tty.setcbreak(sys.stdin.fileno())
     try:
-        print('alphanumeric key {0} pressed'.format(
-            key.char))
-    except AttributeError:
-        print('special key {0} pressed'.format(
-            key))
-def on_release(key):
-    print('{0} released'.format(
-        key))
-    if key == keyboard.Key.esc:
-        # Stop listener
-        return False
+        # while True:
+        b = os.read(sys.stdin.fileno(), 3).decode()
+        if len(b) == 3:
+            k = ord(b[2])
+        else:
+            k = ord(b)
+        key_mapping = {
+            127: 'backspace',
+            10: 'return',
+            32: 'space',
+            9: 'tab',
+            27: 'esc',
+            65: 'up',
+            66: 'down',
+            67: 'right',
+            68: 'left'
+        }
+        return key_mapping.get(k, chr(k))
+    finally:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
 
 
 def main():
@@ -193,6 +214,9 @@ def main():
     true_map_msg = Float32MultiArray()
     true_map_msg.data = sum([[id, landmarks[id][0], landmarks[id][1]] for id in landmarks.keys()], [])
     true_map_pub.publish(true_map_msg)
+
+    # start the loop.
+    record_keypress()
 
     rospy.spin()
 

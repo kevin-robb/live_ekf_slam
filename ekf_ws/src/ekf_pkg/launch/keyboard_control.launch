@@ -5,7 +5,7 @@
     <!-- EKF node -->
     <node pkg="ekf_pkg" type="ekf_node.py" name="ekf_node"  args="$(arg DT)" output="screen" />
     <!-- node to read arrow keys and publish odom/meas to ekf -->
-    <!-- <node pkg="ekf_pkg" type="keyboard_control_node.py" name="keyboard_control_node"  args="$(arg DT)" output="screen" /> -->
+    <node pkg="ekf_pkg" type="keyboard_control_node.py" name="keyboard_control_node"  args="$(arg DT)" output="screen" />
     <!-- plotting node -->
     <node pkg="ekf_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
 </launch>
