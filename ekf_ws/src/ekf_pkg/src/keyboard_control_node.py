@@ -10,7 +10,8 @@ from geometry_msgs.msg import Vector3
 from math import cos, sin, pi, tau, remainder, atan2
 import numpy as np
 from random import random
-import keyboard
+# import keyboard
+from pynput import keyboard
 import sys
 
 ########### GLOBAL VARIABLES ############
@@ -122,6 +123,12 @@ def record_keypress():
     Record presses of the up, down, left, and right arrows.
     """
     pressed = {"left arrow" : False, "up arrow" : False, "down arrow" : False, "right arrow" : False}
+
+    # collect keyboard events until released
+    with keyboard.Listener(
+            on_press=on_press,
+            on_release=on_release) as listener:
+        listener.join()
     
     r = rospy.Rate(1/DT) # freq in Hz
     while not rospy.is_shutdown():
@@ -136,6 +143,22 @@ def record_keypress():
         z_msg = Float32MultiArray(); z_msg.data = z; lm_pub.publish(z_msg)
         # wait to keep on track with desired frequency.
         r.sleep()
+
+# functions to listen for keypresses.
+# referenced https://stackoverflow.com/a/54239261/14783583
+def on_press(key):
+    try:
+        print('alphanumeric key {0} pressed'.format(
+            key.char))
+    except AttributeError:
+        print('special key {0} pressed'.format(
+            key))
+def on_release(key):
+    print('{0} released'.format(
+        key))
+    if key == keyboard.Key.esc:
+        # Stop listener
+        return False
 
 
 def main():
