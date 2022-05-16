@@ -25,12 +25,13 @@ true_pose = None; true_map = None
 SHOW_ENTIRE_TRAJ = False
 SHOW_TRUE_TRAJ = True
 ARROW_LEN = 0.1
+timestep_num = 1; time_text = None; time_text_position = None
 lm_pts = None; veh_pts = None; ell_pts = None; veh_true = None
 #################################################
 
 # get the state published by the EKF.
 def get_state(msg):
-    global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts, veh_true, true_map, true_pose
+    global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts, veh_true, true_map, true_pose, timestep_num, time_text, time_text_position
     # save what we want to plot.
     # first 9 represent the 3x3 covariance matrix.
     P_t = np.array([[msg.data[0],msg.data[1],msg.data[2]],
@@ -47,6 +48,9 @@ def get_state(msg):
     # plot ground truth map.
     if true_map is not None:
         plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black")
+        # make sure the time text will be on screen but not blocking a lm.
+        time_text_position = (min(true_map[0]), max(true_map[1])+0.1)
+        # this should only run once to avoid wasting time.
         true_map = None
 
     # plot full ground truth trajectory.
@@ -91,6 +95,13 @@ def get_state(msg):
     # draw a single pt with arrow to represent current veh pose.
     veh_pts = plt.arrow(msg.data[9], msg.data[10], ARROW_LEN*cos(msg.data[11]), ARROW_LEN*sin(msg.data[11]), color="green", width=0.1)
 
+    # show the timestep on the plot.
+    if time_text is not None:
+        time_text.remove()
+    if time_text_position is not None:
+        time_text = plt.text(time_text_position[0], time_text_position[1], 't = '+str(timestep_num), horizontalalignment='center', verticalalignment='bottom')
+    timestep_num += 1
+
     # do the plotting.
     plt.axis("equal")
     plt.xlabel("x (m)")
@@ -103,9 +114,7 @@ def get_state(msg):
 def save_plot():
     # save plot we've been building upon exit.
     # save to a file in pkg/plots directory.
-    # plt.savefig(pkg_path+"/plots/rss_test.png", format='png')
-    pass
-
+    plt.savefig(pkg_path+"/plots/ekf_demo.png", format='png')
 
 def get_true_pose(msg):
     # save the true traj to plot it along w cur state.

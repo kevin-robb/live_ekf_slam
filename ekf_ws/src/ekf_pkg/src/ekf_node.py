@@ -34,19 +34,24 @@ odom_queue = []; lm_meas_queue = []
 x_t = x0; P_t = P0
 # IDs of seen landmarks. Order corresponds to ind in state.
 lm_IDs = []
+# timestep number for debugging.
+timestep = 0
 #################################################
 
 # main EKF loop that happens every timestep.
 def ekf_iteration(event):
-    global x_t, P_t, lm_IDs, lm_meas_queue, odom_queue
+    global x_t, P_t, lm_IDs, lm_meas_queue, odom_queue, timestep
     # skip if there's no prediction or measurement yet.
     if len(odom_queue) < 1 or len(lm_meas_queue) < 1:
         return
+    timestep += 1
     # pop the next data off the queue.
-    odom = odom_queue[0]
-    odom_queue = odom_queue[1:]
-    lm_meas = lm_meas_queue[0]
-    lm_meas_queue = lm_meas_queue[1:]
+    odom = odom_queue.pop(0)
+    lm_meas = lm_meas_queue.pop(0)
+    # odom = odom_queue[0]
+    # odom_queue = odom_queue[1:]
+    # lm_meas = lm_meas_queue[0]
+    # lm_meas_queue = lm_meas_queue[1:]
 
     ############# PREDICTION STEP ##################
     # odom gives us a (dist, heading) "command".
@@ -56,7 +61,7 @@ def ekf_iteration(event):
     F_xv = np.array([[1,0,-d_d*sin(x_t[2,0])],
                      [0,1,d_d*cos(x_t[2,0])],
                      [0,0,1]])
-    F_x = np.eye(x_t.shape[0]) * 0
+    F_x = np.eye(x_t.shape[0]) #* 0
     # F_x = np.zeros((x_t.shape[0],x_t.shape[0]))
     F_x[0:3,0:3] = F_xv
     F_vv = np.array([[cos(x_t[2,0]), 0],
@@ -71,6 +76,8 @@ def ekf_iteration(event):
     x_pred[0,0] = x_t[0,0].item() + (d_d + v_d)*cos(x_t[2,0].item())
     x_pred[1,0] = x_t[1,0].item() + (d_d + v_d)*sin(x_t[2,0].item())
     x_pred[2,0] = x_t[2,0].item() + d_th + v_th
+    # cap heading to (-pi,pi).
+    x_pred[2,0] = remainder(x_pred[2,0], tau)
     # propagate covariance.
     P_pred = F_x @ P_t @ F_x.T + F_v @ V @ F_v.T
 
@@ -82,7 +89,7 @@ def ekf_iteration(event):
         num_landmarks = len(lm_meas) // 3
         for l in range(num_landmarks):
             # extract single landmark observation.
-            id = lm_meas[l*3]; r = lm_meas[l*3 + 1]; b = lm_meas[l*3 + 2]
+            id = int(lm_meas[l*3]); r = lm_meas[l*3 + 1]; b = lm_meas[l*3 + 2]
             # check if this is the first detection of this landmark ID.
             if id in lm_IDs:
                 ################ LANDMARK UPDATE ###################
@@ -108,6 +115,8 @@ def ekf_iteration(event):
                 K = P_pred @ H_x.T @ np.linalg.inv(S)
                 # perform update.
                 x_pred = x_pred + K @ nu
+                # cap heading to (-pi,pi).
+                x_pred[2,0] = remainder(x_pred[2,0], tau)
                 P_pred = P_pred - K @ H_x @ P_pred
             else :
                 ############# LANDMARK INSERTION #######################

@@ -114,14 +114,27 @@ def generate_data():
         else:
             rospy.logwarn("NUM_LANDMARKS must match length of demo_map to use it.")
     # make new map if the demo hasn't been set.
+    USE_GRID_MAP = True
     if len(landmarks.keys()) < 1:
         id = 0
-        while len(landmarks.keys()) < NUM_LANDMARKS:
-            pos = (2*BOUND*random() - BOUND, 2*BOUND*random() - BOUND)
-            dists = [ norm(lm_pos, pos) < MIN_SEP for lm_pos in landmarks.values()]
-            if True not in dists:
-                landmarks[id] = pos
-                id += 1
+        if not USE_GRID_MAP:
+            # randomly spread landmarks across the map.
+            while len(landmarks.keys()) < NUM_LANDMARKS:
+                pos = (2*BOUND*random() - BOUND, 2*BOUND*random() - BOUND)
+                dists = [ norm(lm_pos, pos) < MIN_SEP for lm_pos in landmarks.values()]
+                if True not in dists:
+                    landmarks[id] = pos
+                    id += 1
+        else:
+            # place landmarks on a grid filling the bounds.
+            GRID_STEP = 4
+            id = 0
+            for r in np.arange(-BOUND, BOUND, GRID_STEP):
+                for c in np.arange(-BOUND, BOUND, GRID_STEP):
+                    landmarks[id] = (r, c)
+                    id += 1
+            # update number of landmarks used.
+            NUM_LANDMARKS = id
     
     ############# GENERATE TRAJECTORY ###################
     NUM_TIMESTEPS = 1000
