@@ -7,9 +7,21 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   sensor_msgs
   std_msgs
+  message_generation
+)
+
+add_message_files(
+  FILES
+  EKFState.msg
+)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs
 )
 
 catkin_package(
+  CATKIN_DEPENDS message_runtime
 )
 
 ## Specify additional locations of header files

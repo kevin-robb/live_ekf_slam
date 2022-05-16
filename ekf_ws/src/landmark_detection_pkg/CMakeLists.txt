@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0.2)
 project(landmark_detection_pkg)
 
 find_package(catkin REQUIRED COMPONENTS
-  apriltag_ros
+  # apriltag_ros
   geometry_msgs
   roscpp
   rospy
