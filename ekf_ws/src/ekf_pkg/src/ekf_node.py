@@ -15,15 +15,15 @@ from geometry_msgs.msg import Vector3
 import sys
 
 ############ GLOBAL VARIABLES ###################
-DT = 0.5 # timer period used if cmd line param not provided.
+DT = 0.05 # timer period used if cmd line param not provided.
 state_pub = None
 ############## NEEDED BY EKF ####################
 # Process noise in (forward, angular). Assume zero mean.
 v_d = 0; v_th = 0
-V = np.array([[0.02**2,0.0],[0.0,0.5*pi/180**2]])
+V = np.array([[0.02**2,0.0],[0.0,(0.5*pi/180)**2]])
 # Sensing noise in (range, bearing). Assume zero mean.
 w_r = 0; w_b = 0
-W = np.array([[0.1**2,0.0],[0.0,1*pi/180**2]])
+W = np.array([[0.1**2,0.0],[0.0,(1*pi/180)**2]])
 # Initial vehicle state mean and covariance.
 x0 = np.array([[0.0],[0.0],[0.0]])
 P0 = np.array([[0.01**2,0.0,0.0],[0.0,0.01**2,0.0],[0.0,0.0,0.005**2]])
@@ -56,7 +56,8 @@ def ekf_iteration(event):
     F_xv = np.array([[1,0,-d_d*sin(x_t[2,0])],
                      [0,1,d_d*cos(x_t[2,0])],
                      [0,0,1]])
-    F_x = np.eye(x_t.shape[0])
+    F_x = np.eye(x_t.shape[0]) * 0
+    # F_x = np.zeros((x_t.shape[0],x_t.shape[0]))
     F_x[0:3,0:3] = F_xv
     F_vv = np.array([[cos(x_t[2,0]), 0],
                      [sin(x_t[2,0]),0],
@@ -125,13 +126,15 @@ def ekf_iteration(event):
                 # form insertion jacobian.
                 Y = np.eye(n+2)
                 Y[n:n+2,n:n+2] = G_z
-                # Y[n:n+2,0:3] = G_x
+                Y[n:n+2,0:3] = G_x
 
                 # update covariance.
                 P_pred = Y @ np.vstack([np.hstack([P_pred, np.zeros((n,2))]), np.hstack([np.zeros((2,n)), W])]) @ Y.T
                 
     # finalize the state update. this works even if no landmarks were detected.
     x_t = x_pred; P_t = P_pred
+    # cap heading to (-pi,pi).
+    x_t[2,0] = remainder(x_t[2,0], tau)
     # publish the current cov + state.
     """
     NOTE this uses a format that gives us only what we need for plotting.

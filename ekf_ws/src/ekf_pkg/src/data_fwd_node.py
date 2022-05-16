@@ -16,7 +16,7 @@ import numpy as np
 
 ############ GLOBAL VARIABLES ###################
 USE_RSS_DATA = False # T = use demo set. F = randomize map and create new traj.
-DT = 0.5 # timer period used if cmd line param not provided.
+DT = 0.05 # timer period used if cmd line param not provided.
 odom_pub = None; lm_pub = None; true_map_pub = None; true_pose_pub = None
 pkg_path = None # filepath to this package.
 # Default map from RSS demo:
@@ -197,11 +197,16 @@ def generate_data():
         if abs(hdg) > ODOM_TH_MAX:
             # cap magnitude but keep sign.
             hdg = ODOM_TH_MAX * np.sign(hdg)
+        # add noise.
+        d = d + 2*V[0,0]*random()-V[0,0]
+        hdg = hdg + 2*V[1,1]*random()-V[1,1]
         # update veh position given this odom cmd.
         x_v = [x_v[0] + d*cos(x_v[2]), x_v[1] + d*sin(x_v[2]), x_v[2] + hdg]
         # add noise to odom and add to trajectory.
-        odom_dist.append(d + 2*V[0,0]*random()-V[0,0])
-        odom_hdg.append(hdg + 2*V[1,1]*random()-V[1,1])
+        odom_dist.append(d)
+        odom_hdg.append(hdg)
+        # odom_dist.append(d + 2*V[0,0]*random()-V[0,0])
+        # odom_hdg.append(hdg + 2*V[1,1]*random()-V[1,1])
 
     #####################################################
     # Optionally replace odom with the demo for debugging.
@@ -258,7 +263,7 @@ def generate_data():
 
     ############### SEND DATA ################
     # Publish ground truth of map and veh pose for plotter.
-    rospy.logwarn("Waiting to publish ground truth for plotter.")
+    rospy.loginfo("Waiting to publish ground truth for plotter.")
     rospy.sleep(1)
     true_pose_msg = Float32MultiArray()
     true_pose_msg.data = sum(pos_true, [])

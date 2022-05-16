@@ -114,6 +114,7 @@ def get_true_pose(msg):
 
 
 def get_true_map(msg):
+    rospy.loginfo("Ground truth map received.")
     # plot the true map to compare to estimates.
     global true_map
     lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
