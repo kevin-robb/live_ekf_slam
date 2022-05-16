@@ -12,6 +12,7 @@ import numpy as np
 from math import sin, cos, remainder, tau, atan2, pi
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
+from ekf_pkg.msg import EKFState
 import sys
 
 ############ GLOBAL VARIABLES ###################
@@ -145,16 +146,23 @@ def ekf_iteration(event):
     # cap heading to (-pi,pi).
     x_t[2,0] = remainder(x_t[2,0], tau)
     # publish the current cov + state.
-    """
-    NOTE this uses a format that gives us only what we need for plotting.
-    This needs to be modified, and probably the full covariance published
-    to a separate topic, if the EKF output is to be actually used for anything.
-    """
-    msg = Float32MultiArray()
-    msg.data = []
-    for subl in P_t[0:3,0:3].tolist():
-        msg.data += subl
-    msg.data += (x_t.T).tolist()[0]
+    send_state()
+
+
+# create EKFState message and publish it.
+def send_state():
+    msg = EKFState()
+    msg.x_v = x_t[0,0]
+    msg.y_v = x_t[1,0]
+    msg.yaw_v = x_t[2,0]
+    msg.M = (x_t.shape[0] - 3) // 2
+    msg.landmarks = sum([[x_t[i,0], x_t[i+1,0]] for i in range(3,x_t.shape[0],2)], [])
+    # covariance change to one row.
+    msg.P = []
+    for subl in P_t.tolist():
+        msg.P += subl
+    msg.P += (x_t.T).tolist()[0]
+    # publish it.
     state_pub.publish(msg)
 
 
@@ -191,7 +199,7 @@ def main():
     rospy.Subscriber("/odom", Vector3, get_odom, queue_size=1)
 
     # create publisher for the current state.
-    state_pub = rospy.Publisher("/ekf/state", Float32MultiArray, queue_size=1)
+    state_pub = rospy.Publisher("/ekf/state", EKFState, queue_size=1)
 
     rospy.Timer(rospy.Duration(DT), ekf_iteration)
     rospy.spin()

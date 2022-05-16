@@ -3,6 +3,7 @@
 import rospy
 import rospkg
 from std_msgs.msg import Float32MultiArray
+from ekf_pkg.msg import EKFState
 from matplotlib import pyplot as plt
 import numpy as np
 import atexit
@@ -33,17 +34,18 @@ lm_pts = None; veh_pts = None; ell_pts = None; veh_true = None
 def get_state(msg):
     global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts, veh_true, true_map, true_pose, timestep_num, time_text, time_text_position
     # save what we want to plot.
-    # first 9 represent the 3x3 covariance matrix.
-    P_t = np.array([[msg.data[0],msg.data[1],msg.data[2]],
-                    [msg.data[3],msg.data[4],msg.data[5]],
-                    [msg.data[6],msg.data[7],msg.data[8]]])
+    # extract the covariance matrix for the vehicle.
+    n = int(len(msg.P)**(1/2))
+    P_v = np.array([[msg.P[0],msg.P[1],msg.P[2]],
+                    [msg.P[n],msg.P[n+1],msg.P[n+2]],
+                    [msg.P[2*n],msg.P[2*n+1],msg.P[2*n+2]]])
     # rest is the state.
-    veh_x.append(msg.data[9])
-    veh_y.append(msg.data[10])
-    veh_th.append(msg.data[11])
-    if len(msg.data) > 3:
-        lm_x = [msg.data[i] for i in range(12,len(msg.data),2)]
-        lm_y = [msg.data[i] for i in range(13,len(msg.data),2)]
+    veh_x.append(msg.x_v)
+    veh_y.append(msg.y_v)
+    veh_th.append(msg.yaw_v)
+    if n > 3:
+        lm_x = [msg.landmarks[i] for i in range(0,len(msg.landmarks),2)]
+        lm_y = [msg.landmarks[i] for i in range(1,len(msg.landmarks),2)]
 
     # plot ground truth map.
     if true_map is not None:
@@ -65,7 +67,7 @@ def get_state(msg):
     # and https://stackoverflow.com/questions/10952060/plot-ellipse-with-matplotlib-pyplot-python
 
     # got cov P_t from EKF. need to take only first 2x2 for position.
-    cov = P_t[0:2,0:2]
+    cov = P_v[0:2,0:2]
     vals, vecs = eigsorted(cov)
     theta = np.degrees(np.arctan2(*vecs[:,0][::-1]))
     num_std_dev = 2
@@ -81,7 +83,7 @@ def get_state(msg):
     if not SHOW_ENTIRE_TRAJ and ell_pts is not None:
         ell_pts.remove()
     # plot the ellipse.
-    ell_pts, = plt.plot(msg.data[9]+Ell_rot[0,:] , msg.data[10]+Ell_rot[1,:],'lightgrey')
+    ell_pts, = plt.plot(msg.x_v+Ell_rot[0,:] , msg.y_v+Ell_rot[1,:],'lightgrey')
 
     # remove old landmark estimates
     if lm_pts is not None:
@@ -93,7 +95,7 @@ def get_state(msg):
     if not SHOW_ENTIRE_TRAJ and veh_pts is not None:
         veh_pts.remove()
     # draw a single pt with arrow to represent current veh pose.
-    veh_pts = plt.arrow(msg.data[9], msg.data[10], ARROW_LEN*cos(msg.data[11]), ARROW_LEN*sin(msg.data[11]), color="green", width=0.1)
+    veh_pts = plt.arrow(msg.x_v, msg.y_v, ARROW_LEN*cos(msg.yaw_v), ARROW_LEN*sin(msg.yaw_v), color="green", width=0.1)
 
     # show the timestep on the plot.
     if time_text is not None:
@@ -143,7 +145,7 @@ def main():
     atexit.register(save_plot)
 
     # subscribe to the current state.
-    rospy.Subscriber("/ekf/state", Float32MultiArray, get_state, queue_size=1)
+    rospy.Subscriber("/ekf/state", EKFState, get_state, queue_size=1)
 
     # subscribe to ground truth.
     rospy.Subscriber("/truth/veh_pose",Float32MultiArray, get_true_pose, queue_size=1)

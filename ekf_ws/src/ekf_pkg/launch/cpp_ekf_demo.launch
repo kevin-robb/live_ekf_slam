@@ -5,7 +5,7 @@
     <!-- EKF node -->
     <node pkg="ekf_pkg" type="cpp_ekf_node" name="ekf_node"  args="$(arg DT)" output="screen" />
     <!-- node to read data from file and publish to ekf -->
-    <node pkg="ekf_pkg" type="data_fwd_node.py" name="data_fwd_node"  args="$(arg DT)" output="screen" />
+    <node pkg="data_pkg" type="data_fwd_node.py" name="data_fwd_node"  args="$(arg DT)" output="screen" />
     <!-- plotting node -->
-    <node pkg="ekf_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
+    <node pkg="data_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
 </launch>

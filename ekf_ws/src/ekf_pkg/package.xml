@@ -2,7 +2,7 @@
 <package format="2">
   <name>ekf_pkg</name>
   <version>0.1.0</version>
-  <description>Package to handle the EKF SLAM itself.</description>
+  <description>Package to handle EKF SLAM.</description>
   <maintainer email="kevin.robb@alumni.ou.edu">Kevin Robb</maintainer>
   <license>MIT</license>
 

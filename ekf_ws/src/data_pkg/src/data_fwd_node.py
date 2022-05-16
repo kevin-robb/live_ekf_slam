@@ -37,11 +37,6 @@ def main_loop(event):
     lm_msg.data = [1, 0.5, 0.7, 4, 1.2, -0.9]
     lm_pub.publish(lm_msg)
 
-# get the state published by the EKF.
-def get_state(msg):
-    # rospy.loginfo("State: " + str(msg.data[9:12]))
-    pass
-
 
 def read_rss_data():
     """
@@ -332,9 +327,6 @@ def main():
     # publish ground truth for the plotter.
     true_pose_pub = rospy.Publisher("/truth/veh_pose",Float32MultiArray, queue_size=1)
     true_map_pub = rospy.Publisher("/truth/landmarks",Float32MultiArray, queue_size=1)
-
-    # subscribe to the current state.
-    rospy.Subscriber("/ekf/state", Float32MultiArray, get_state, queue_size=1)
 
     if USE_RSS_DATA:
         # read data from RSS ex4.
