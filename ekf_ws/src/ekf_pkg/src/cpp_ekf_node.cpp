@@ -43,12 +43,15 @@ void lmMeasCallback(const std_msgs::Float32MultiArray::ConstPtr& msg) {
 }
 
 int main(int argc, char **argv) {
-    // std::string param;
+    float param = -2;
     ros::init(argc, argv, "cpp_ekf_node");
-    ros::NodeHandle node;
-    // node.getParam("DT", param);
-    // float DT = std::stof(param);
-    float DT = 0.05;
+    ros::NodeHandle node("~");
+    node.getParam("/DTparam", param);
+    float DT = param; //std::stof(param);
+    if (DT <= 0) {
+        std::cout << "DT must be positive. Using DT=0.05." << std::endl << std::flush;
+        DT = 0.05;
+    }
 
     // subscribe to EKF inputs.
     ros::Subscriber odomSub = node.subscribe("/odom", 100, odomCallback);

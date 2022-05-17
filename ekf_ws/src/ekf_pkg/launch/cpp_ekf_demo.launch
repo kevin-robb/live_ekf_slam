@@ -1,12 +1,16 @@
 <launch>
     <!-- Usage: roslaunch cpp_ekf_demo.launch dt:=0.5 -->
     <arg name="DT" default="-1"/>
-    <arg name="map_type" default="-1"/>
+    <arg name="map" default="-1"/>
+
+    <param name="DTparam" value="$(arg DT)" />
 
     <!-- EKF node -->
-    <node pkg="ekf_pkg" type="cpp_ekf_node" name="cpp_ekf_node"  args="$(arg DT)" output="screen" />
-    <!-- node to read data from file and publish to ekf -->
-    <node pkg="data_pkg" type="data_fwd_node.py" name="data_fwd_node"  args="$(arg DT) $(arg map_type)" output="screen" />
-    <!-- plotting node -->
-    <node pkg="data_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
+    <node pkg="ekf_pkg" type="cpp_ekf_node" name="cpp_ekf_node"  output="screen" />
+    
+    <!-- Call main driver script. -->
+    <include file="$(find data_pkg)/launch/demo_base.launch" >
+        <arg name="DT" value="$(arg DT)"/>
+        <arg name="map" value="$(arg map)"/>
+    </include>
 </launch>
