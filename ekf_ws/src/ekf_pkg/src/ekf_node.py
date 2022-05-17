@@ -49,10 +49,6 @@ def ekf_iteration(event):
     # pop the next data off the queue.
     odom = odom_queue.pop(0)
     lm_meas = lm_meas_queue.pop(0)
-    # odom = odom_queue[0]
-    # odom_queue = odom_queue[1:]
-    # lm_meas = lm_meas_queue[0]
-    # lm_meas_queue = lm_meas_queue[1:]
 
     ############# PREDICTION STEP ##################
     # odom gives us a (dist, heading) "command".
@@ -74,9 +70,9 @@ def ekf_iteration(event):
     # Make predictions.
     # landmarks are assumed constant, so we predict only vehicle position will change.
     x_pred = x_t
-    x_pred[0,0] = x_t[0,0].item() + (d_d + v_d)*cos(x_t[2,0].item())
-    x_pred[1,0] = x_t[1,0].item() + (d_d + v_d)*sin(x_t[2,0].item())
-    x_pred[2,0] = x_t[2,0].item() + d_th + v_th
+    x_pred[0,0] = x_t[0,0] + (d_d + v_d)*cos(x_t[2,0])
+    x_pred[1,0] = x_t[1,0] + (d_d + v_d)*sin(x_t[2,0])
+    x_pred[2,0] = x_t[2,0] + d_th + v_th
     # cap heading to (-pi,pi).
     x_pred[2,0] = remainder(x_pred[2,0], tau)
     # propagate covariance.
@@ -199,7 +195,7 @@ def main():
     rospy.Subscriber("/odom", Vector3, get_odom, queue_size=1)
 
     # create publisher for the current state.
-    state_pub = rospy.Publisher("/ekf/state", EKFState, queue_size=1)
+    state_pub = rospy.Publisher("/state/ekf", EKFState, queue_size=1)
 
     rospy.Timer(rospy.Duration(DT), ekf_iteration)
     rospy.spin()

@@ -28,11 +28,17 @@ SHOW_TRUE_TRAJ = True
 ARROW_LEN = 0.1
 timestep_num = 1; time_text = None; time_text_position = None
 lm_pts = None; veh_pts = None; ell_pts = None; veh_true = None
+# set of PF particle plots.
+particle_plots = []
+# output filename prefix.
+fname = ""
 #################################################
 
 # get the state published by the EKF.
-def get_state(msg):
-    global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts, veh_true, true_map, true_pose, timestep_num, time_text, time_text_position
+def get_ekf_state(msg):
+    global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts, veh_true, true_map, true_pose, timestep_num, time_text, time_text_position, fname
+    # set filename for EKF.
+    fname = "ekf"
     # save what we want to plot.
     # extract the covariance matrix for the vehicle.
     n = int(len(msg.P)**(1/2))
@@ -113,19 +119,63 @@ def get_state(msg):
     plt.pause(0.00000000001)
 
 
+# get the state published by the PF.
+def get_pf_state(msg):
+    global true_map, true_pose, timestep_num, time_text, time_text_position, particle_plots, fname
+    # set filename for PF output.
+    fname = "pf"
+    # plot ground truth map.
+    if true_map is not None:
+        plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black")
+        # make sure the time text will be on screen but not blocking a lm.
+        time_text_position = (min(true_map[0]), max(true_map[1])+0.1)
+        # this should only run once to avoid wasting time.
+        true_map = None
+
+    # plot full ground truth trajectory.
+    # if SHOW_TRUE_TRAJ and true_pose is not None:
+    #     for timestep in range(0,len(true_pose)//3):
+    #         plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], ARROW_LEN*cos(true_pose[timestep*3+2]), ARROW_LEN*sin(true_pose[timestep*3+2]), color="blue", width=0.01)
+    #     true_pose = None
+
+    # plot particle set.
+    if len(particle_plots) > 0:
+        for i in range(len(particle_plots)):
+            particle_plots[i].remove()
+        particle_plots = []
+    # draw a pt with arrow for all particles.
+    for i in range(len(msg.data) // 3):
+        pp = plt.arrow(msg.data[i*3], msg.data[i*3+1], ARROW_LEN*cos(msg.data[i*3+2]), ARROW_LEN*sin(msg.data[i*3+2]), color="red", width=0.1)
+        particle_plots.append(pp)
+
+    # show the timestep on the plot.
+    if time_text is not None:
+        time_text.remove()
+    if time_text_position is not None:
+        time_text = plt.text(time_text_position[0], time_text_position[1], 't = '+str(timestep_num), horizontalalignment='center', verticalalignment='bottom')
+    timestep_num += 1
+
+    # do the plotting.
+    plt.axis("equal")
+    plt.xlabel("x (m)")
+    plt.ylabel("y (m)")
+    plt.title("EKF-Estimated Trajectory and Landmarks")
+    plt.draw()
+    plt.pause(0.00000000001)
+
+
 def save_plot():
     # save plot we've been building upon exit.
     # save to a file in pkg/plots directory.
-    plt.savefig(pkg_path+"/plots/ekf_demo.png", format='png')
+    plt.savefig(pkg_path+"/plots/"+fname+"_demo.png", format='png')
 
 def get_true_pose(msg):
     # save the true traj to plot it along w cur state.
     global true_pose
     true_pose = msg.data
 
-
 def get_true_map(msg):
-    rospy.loginfo("Ground truth map received.")
+    rospy.loginfo("Ground truth map received by plotting node.")
     # plot the true map to compare to estimates.
     global true_map
     lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
@@ -139,13 +189,14 @@ def main():
 
     # find the filepath to this package.
     rospack = rospkg.RosPack()
-    pkg_path = rospack.get_path('ekf_pkg')
+    pkg_path = rospack.get_path('data_pkg')
 
     # when the node exits, make the plot.
     atexit.register(save_plot)
 
     # subscribe to the current state.
-    rospy.Subscriber("/ekf/state", EKFState, get_state, queue_size=1)
+    rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)
+    rospy.Subscriber("/state/pf", Float32MultiArray, get_pf_state, queue_size=1)
 
     # subscribe to ground truth.
     rospy.Subscriber("/truth/veh_pose",Float32MultiArray, get_true_pose, queue_size=1)

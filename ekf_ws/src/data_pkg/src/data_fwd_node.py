@@ -141,6 +141,8 @@ def generate_data():
     V = np.array([[0.0,0.0],[0.0,0.0]]) # no noise
     # param to keep track of true current pos.
     x0 = [0.0,0.0,0.0]
+    # randomize starting pose.
+    # x0 = [2*BOUND*random() - BOUND, 2*BOUND*random() - BOUND, 2*pi*random() - pi]
     x_v = x0
     # init the odom lists.
     odom_dist = []; odom_hdg = []
