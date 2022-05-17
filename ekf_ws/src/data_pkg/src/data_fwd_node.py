@@ -298,8 +298,8 @@ def main():
     # read DT and map_type from command line arg.
     try:
         # get map type.
-        if len(sys.argv) < 3:
-            rospy.logwarn("Map type not provided to data_fwd_node. Using random. Options are [random, grid]")
+        if len(sys.argv) < 3 or sys.argv[2] == "-1":
+            rospy.logwarn("map_type not provided to data_fwd_node. Using random. Options are [random, grid]")
             map_type = "random"
         else:
             map_type = sys.argv[2]

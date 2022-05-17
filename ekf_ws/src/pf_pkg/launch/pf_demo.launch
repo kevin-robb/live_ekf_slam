@@ -1,7 +1,7 @@
 <launch>
     <!-- Usage: roslaunch ekf_slam_demo.launch dt:=0.5 -->
     <arg name="DT" default="-1"/>
-    <arg name="map_type"/>
+    <arg name="map_type" default="-1"/>
 
     <!-- PF node -->
     <node pkg="pf_pkg" type="pf_node.py" name="pf_node"  args="$(arg DT)" output="screen" />

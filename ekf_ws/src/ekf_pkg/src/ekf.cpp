@@ -37,12 +37,11 @@ void EKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
     this->F_x.setIdentity(3+2*this->M, 3+2*this->M);
     this->F_x(0,2) = -1*d_d*sin(this->x_t(2));
     this->F_x(1,2) = d_d*cos(this->x_t(2));
-
+    
     this->F_v.setZero(3+2*this->M, 2);
     this->F_v(0,0) = cos(this->x_t(2));
     this->F_v(1,0) = sin(this->x_t(2));
     this->F_v(2,1) = 1;
-
     // make predictions.
     this->x_pred = this->x_t;
     this->x_pred(0) = this->x_t(0) + (d_d+this->v_d)*cos(this->x_t(2));
@@ -81,7 +80,7 @@ void EKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
             // compute estimated distance from veh to lm.
             float dist = std::sqrt(std::pow(this->x_t(i) - this->x_pred(0),2) + std::pow(this->x_t(i+1) - this->x_pred(1),2));
             // create jacobians.
-            this->H_x.setZero(2,2*M+3);
+            this->H_x.setZero(2,2*this->M+3);
             this->H_x(0,0) = -(this->x_t(i)-this->x_pred(0))/dist;
             this->H_x(0,1) = -(this->x_t(i+1)-this->x_pred(1))/dist;
             this->H_x(1,0) = (this->x_t(i+1)-this->x_pred(1))/(dist*dist);
@@ -111,36 +110,36 @@ void EKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
             this->M += 1;
             // resize the state to fit the new landmark.
             this->x_pred.conservativeResize(3+2*this->M);
-            this->x_pred(3+2*M-2) = this->x_pred(0) + r*cos(this->x_pred(2)+b);
-            this->x_pred(3+2*M-1) = this->x_pred(1) + r*sin(this->x_pred(2)+b);
+            this->x_pred(3+2*this->M-2) = this->x_pred(0) + r*cos(this->x_pred(2)+b);
+            this->x_pred(3+2*this->M-1) = this->x_pred(1) + r*sin(this->x_pred(2)+b);
             // add landmark ID to the list.
             this->lm_IDs.push_back(id);
 
             // compute insertion jacobian.
-            this->Y.setIdentity(3+2*M, 3+2*M);
+            this->Y.setIdentity(3+2*this->M, 3+2*this->M);
             // G_z submatrix.
-            this->Y(M-2,M-2) = cos(this->x_pred(2)+b);
-            this->Y(M-2,M-1) = -r*sin(this->x_pred(2)+b);
-            this->Y(M-1,M-2) = sin(this->x_pred(2)+b);
-            this->Y(M-1,M-1) = r*cos(this->x_pred(2)+b);
+            this->Y(3+2*this->M-2,3+2*this->M-2) = cos(this->x_pred(2)+b);
+            this->Y(3+2*this->M-2,3+2*this->M-1) = -r*sin(this->x_pred(2)+b);
+            this->Y(3+2*this->M-1,3+2*this->M-2) = sin(this->x_pred(2)+b);
+            this->Y(3+2*this->M-1,3+2*this->M-1) = r*cos(this->x_pred(2)+b);
             // G_x submatrix.
-            this->Y(M-2,0) = 1;
-            this->Y(M-2,1) = 0;
-            this->Y(M-2,2) = -r*sin(this->x_pred(2)+b);
-            this->Y(M-1,0) = 0;
-            this->Y(M-1,1) = 1;
-            this->Y(M-1,2) = r*cos(this->x_pred(2)+b);
+            this->Y(3+2*this->M-2,0) = 1;
+            this->Y(3+2*this->M-2,1) = 0;
+            this->Y(3+2*this->M-2,2) = -r*sin(this->x_pred(2)+b);
+            this->Y(3+2*this->M-1,0) = 0;
+            this->Y(3+2*this->M-1,1) = 1;
+            this->Y(3+2*this->M-1,2) = r*cos(this->x_pred(2)+b);
 
             // update covariance.
-            this->p1.resize(3+2*M-2, 3+2*M);
-            this->z1.setZero(3+2*M-2, 2);
+            this->p1.resize(3+2*this->M-2, 3+2*this->M);
+            this->z1.setZero(3+2*this->M-2, 2);
             this->p1 << this->P_pred, this->z1;
 
-            this->p2.resize(2, 3+2*M);
-            this->z2.setZero(2, 3+2*M-2);
+            this->p2.resize(2, 3+2*this->M);
+            this->z2.setZero(2, 3+2*this->M-2);
             this->p2 << z2, this->W;
 
-            this->p3.resize(3+2*M, 3+2*M);
+            this->p3.resize(3+2*this->M, 3+2*this->M);
             this->p3 << this->p1, this->p2;
             
             this->P_pred = this->Y * this->p3 * this->Y.transpose();

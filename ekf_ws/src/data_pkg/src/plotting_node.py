@@ -59,7 +59,7 @@ def get_ekf_state(msg):
     if true_map is not None:
         plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black")
         # make sure the time text will be on screen but not blocking a lm.
-        time_text_position = (min(true_map[0]), max(true_map[1])+0.1)
+        time_text_position = (min(true_map[0]), max(true_map[1])+1)
         # this should only run once to avoid wasting time.
         true_map = None
 
@@ -116,6 +116,8 @@ def get_ekf_state(msg):
     plt.axis("equal")
     plt.xlabel("x (m)")
     plt.ylabel("y (m)")
+    plt.xlim([-1.5*MAP_BOUND,1.5*MAP_BOUND])
+    plt.ylim([-1.5*MAP_BOUND,1.5*MAP_BOUND])
     plt.title("EKF-Estimated Trajectory and Landmarks")
     plt.draw()
     plt.pause(0.00000000001)
@@ -130,7 +132,7 @@ def get_pf_state(msg):
     if true_map is not None:
         plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black")
         # make sure the time text will be on screen but not blocking a lm.
-        time_text_position = (min(true_map[0]), max(true_map[1])+0.1)
+        time_text_position = (min(true_map[0]), max(true_map[1])+1)
         # this should only run once to avoid wasting time.
         true_map = None
 
@@ -147,7 +149,7 @@ def get_pf_state(msg):
         if particle_plots is not None and len(particle_plots) > 0:
             for i in range(len(particle_plots)):
                 particle_plots[i].remove()
-            particle_plots = []
+        particle_plots = []
         # draw a pt with arrow for all particles.
         for i in range(len(msg.data) // 3):
             pp = plt.arrow(msg.data[i*3], msg.data[i*3+1], ARROW_LEN*cos(msg.data[i*3+2]), ARROW_LEN*sin(msg.data[i*3+2]), color="red", width=0.1)

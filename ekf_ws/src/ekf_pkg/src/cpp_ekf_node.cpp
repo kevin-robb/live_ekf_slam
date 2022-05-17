@@ -2,6 +2,7 @@
 #include "geometry_msgs/Vector3.h"
 #include "std_msgs/Float32MultiArray.h"
 #include <queue>
+#include <iostream>
 
 #include "ekf_pkg/ekf.h"
 
@@ -34,30 +35,28 @@ void ekfIterate(const ros::TimerEvent& event) {
 void odomCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
     // receive an odom command and add to the queue.
     odomQueue.push(msg);
-    // ROS_INFO("Received odom: [%s, %s]", msg->x.c_str(), msg->y.c_str());
 }
 
 void lmMeasCallback(const std_msgs::Float32MultiArray::ConstPtr& msg) {
     // receive a landmark detection and add to the queue.
     lmMeasQueue.push(msg);
-    // ROS_INFO("Received lm: [%s]", msg->data.c_str());
 }
 
 int main(int argc, char **argv) {
-    std::string param;
-    ros::init(argc, argv, "ekf_node");
+    // std::string param;
+    ros::init(argc, argv, "cpp_ekf_node");
     ros::NodeHandle node;
-    node.getParam("DT", param);
-    float DT = std::stof(param);
+    // node.getParam("DT", param);
+    // float DT = std::stof(param);
+    float DT = 0.05;
 
     // subscribe to EKF inputs.
     ros::Subscriber odomSub = node.subscribe("/odom", 100, odomCallback);
     ros::Subscriber lmMeasSub = node.subscribe("/landmark", 100, lmMeasCallback);
     // publish EKF state.
-    ros::Publisher statePub = node.advertise<std_msgs::Float32MultiArray>("/ekf/state", 1);
+    statePub = node.advertise<ekf_pkg::EKFState>("/state/ekf", 1);
 
     // timer to update EKF at set frequency.
-    float DT = 0.05;
     ros::Timer ekfIterationTimer = node.createTimer(ros::Duration(DT), &ekfIterate, false);
 
     ros::spin();

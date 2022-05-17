@@ -27,6 +27,13 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
-  ${catkin_INCLUDE_DIRS}
+include
+  # ${ekf_pkg}?
+  ${catkin_INCLUDE_DIRS}/include/**
 )
+
+# Build C++ files
+set(SOURCES src/ekf.cpp src/cpp_ekf_node.cpp)
+add_executable(cpp_ekf_node ${SOURCES})
+# add_executable(cpp_ekf_node src/cpp_ekf_node.cpp)
+target_link_libraries(cpp_ekf_node ${catkin_LIBRARIES})
