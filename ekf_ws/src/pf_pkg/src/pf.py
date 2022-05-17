@@ -7,8 +7,8 @@ using Monte Carlo Localization.
 
 import numpy as np
 from random import random, choices
-from math import sin, cos, remainder, tau, atan2, pi
-from scipy.stats import multivariate_normal
+from math import sin, cos, remainder, tau, atan2, pi, log, exp
+from scipy.stats import multivariate_normal, norm, uniform
 
 
 class PF:
@@ -38,7 +38,7 @@ class PF:
         for i in range(num_particles):
             self.x_t[0,i] = (map_bounds[1]-map_bounds[0])*random() + map_bounds[0]
             self.x_t[1,i] = (map_bounds[1]-map_bounds[0])*random() + map_bounds[0]
-            self.x_t[1,i] = 2*pi*random() - pi
+            self.x_t[2,i] = 2*pi*random() - pi
         # instantiate predictions set as well.
         self.x_pred = self.x_t
 
@@ -49,14 +49,34 @@ class PF:
         """
         # propagate particles forward one timestep.
         self.sample_motion_model(u)
-        # compute particle weights and normalize them.
+        # skip update step if no landmarks were detected.
+        if len(z) < 1:
+            self.x_t = self.x_pred
+            return
+        # compute particle log-likelihood weights.
         wts = [self.sensor_likelihood(z, i) for i in range(self.NUM_PARTICLES)]
-        # normalize weights.
-        wt_tot = sum(wts)
-        wts = [wts[w] / wt_tot for w in range(self.NUM_PARTICLES)]
+        # compute LSE term.
+        wt_mean = sum(wts) / len(wts)
+        lse = log(sum([exp(wts[i]-wt_mean) for i in range(self.NUM_PARTICLES)]))
+        # compute probabilities.
+        prbs = [exp(wt - wt_mean - lse) for wt in wts]
+
+        # cull particles that have likely left the map.
+        for i in range(self.NUM_PARTICLES):
+            if (abs(self.x_pred[0,i]) > (1.5 * self.MAP_BOUNDS[1]) or abs(self.x_pred[1,i]) > (1.5 * self.MAP_BOUNDS[1])):
+                prbs[i] = 0
+        # normalize probabilities.
+        prb_tot = sum(prbs)
+        prbs = [prbs[i] / prb_tot for i in range(self.NUM_PARTICLES)]
         # resample particles based on weights.
-        ind_set = choices(list(range(self.NUM_PARTICLES)), weights=wts, k=self.NUM_PARTICLES)
+        ind_set = choices(list(range(self.NUM_PARTICLES)), weights=prbs, k=self.NUM_PARTICLES)
         self.x_t = np.vstack(tuple([self.x_pred[0:3,i] for i in ind_set])).T
+        # randomly replace some particles with new, random ones.
+        ind_to_replace = choices(list(range(self.NUM_PARTICLES)), k=self.NUM_PARTICLES//100)
+        for i in ind_to_replace:
+            self.x_t[0,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
+            self.x_t[1,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
+            self.x_t[2,i] = 2*pi*random() - pi
 
 
     def sample_motion_model(self, u):
@@ -83,17 +103,20 @@ class PF:
     def sensor_likelihood(self, z, i:int):
         """
         Given the true landmark measurements z,
-        find the likelihood of measuring this scan if particle i
-        is correct. Use the known map.
+        find the log likelihood of measuring this scan if 
+        particle i is correct. Use the known map.
         """
+        # in a real scenario there's always a nonzero chance.
+        wt_rand = 0.05
         # for each observed landmark, compute the distance we'd expect given the map and particle i's pose.
-        error = 0
+        log_likelihood = 0
         for l in range(len(z) // 3):
-            r_exp, b_exp = self.raycast(l, i)
-            r_err = abs(z[l+1] - r_exp)
-            b_err = abs(z[l+2] - b_exp)
-            error += r_err + b_err
-        return 1 / error
+            r_exp, b_exp = self.raycast(z[3*l], i)
+            r_distr = (1-wt_rand)*norm.cdf(z[3*l+1], loc=r_exp, scale=self.W[0,0]) + wt_rand*uniform.cdf(z[3*l+1], loc=0, scale=2**(1/2)*(1.5*self.MAP_BOUNDS[1]-1.5*self.MAP_BOUNDS[0]))
+            b_distr = (1-wt_rand)*norm.cdf(z[3*l+2], loc=b_exp, scale=self.W[1,1]) + wt_rand*uniform.cdf(z[3*l+2], loc=-pi, scale=2*pi)
+            log_likelihood += log(r_distr) + log(b_distr)
+
+        return log_likelihood
 
 
     def raycast(self, l:int, i:int):
@@ -104,6 +127,7 @@ class PF:
         r = ((self.MAP[l][0]-self.x_pred[0,i])**2 + (self.MAP[l][1]-self.x_pred[1,i])**2)**(1/2)
         b = remainder(atan2(self.MAP[l][1]-self.x_pred[1,i], self.MAP[l][0]-self.x_pred[0,i])-self.x_pred[2,i], tau)
         return r, b
+
 
     def get_particle_set(self):
         """

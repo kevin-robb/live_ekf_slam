@@ -13,6 +13,7 @@ import sys
 
 ############ GLOBAL VARIABLES ###################
 DT = 0.05 # timer period used if cmd line param not provided.
+NUM_PARTICLES = 500
 pf = None
 set_pub = None
 # Most recent odom reading and landmark measurements.
@@ -51,7 +52,7 @@ def get_true_map(msg):
     for id in range(len(lm_x)):
         MAP[id] = (lm_x[id], lm_y[id])
     # initialize the particle set.
-    pf = PF(100, DT, MAP)
+    pf = PF(NUM_PARTICLES, DT, MAP)
 
 def get_odom(msg):
     # get measurement of odometry info.

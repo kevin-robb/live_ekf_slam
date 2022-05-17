@@ -15,6 +15,8 @@ def eigsorted(cov):
     return vals[order], vecs[:,order]
 
 ############ GLOBAL VARIABLES ###################
+# map bounds.
+MAP_BOUND = 10
 # state data from the EKF to use for plotting.
 # position/hdg for all times.
 veh_x = []; veh_y = []; veh_th = []
@@ -29,7 +31,7 @@ ARROW_LEN = 0.1
 timestep_num = 1; time_text = None; time_text_position = None
 lm_pts = None; veh_pts = None; ell_pts = None; veh_true = None
 # set of PF particle plots.
-particle_plots = []
+particle_plots = None; true_pt = None
 # output filename prefix.
 fname = ""
 #################################################
@@ -121,7 +123,7 @@ def get_ekf_state(msg):
 
 # get the state published by the PF.
 def get_pf_state(msg):
-    global true_map, true_pose, timestep_num, time_text, time_text_position, particle_plots, fname
+    global true_map, true_pose, timestep_num, time_text, time_text_position, particle_plots, fname, true_pt
     # set filename for PF output.
     fname = "pf"
     # plot ground truth map.
@@ -132,21 +134,38 @@ def get_pf_state(msg):
         # this should only run once to avoid wasting time.
         true_map = None
 
-    # plot full ground truth trajectory.
+    # # plot full ground truth trajectory.
     # if SHOW_TRUE_TRAJ and true_pose is not None:
     #     for timestep in range(0,len(true_pose)//3):
     #         plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], ARROW_LEN*cos(true_pose[timestep*3+2]), ARROW_LEN*sin(true_pose[timestep*3+2]), color="blue", width=0.01)
     #     true_pose = None
 
     # plot particle set.
-    if len(particle_plots) > 0:
-        for i in range(len(particle_plots)):
-            particle_plots[i].remove()
-        particle_plots = []
-    # draw a pt with arrow for all particles.
-    for i in range(len(msg.data) // 3):
-        pp = plt.arrow(msg.data[i*3], msg.data[i*3+1], ARROW_LEN*cos(msg.data[i*3+2]), ARROW_LEN*sin(msg.data[i*3+2]), color="red", width=0.1)
-        particle_plots.append(pp)
+    PLOT_PARTICLE_ARROWS = False
+    if PLOT_PARTICLE_ARROWS:
+        # plot as arrows.
+        if particle_plots is not None and len(particle_plots) > 0:
+            for i in range(len(particle_plots)):
+                particle_plots[i].remove()
+            particle_plots = []
+        # draw a pt with arrow for all particles.
+        for i in range(len(msg.data) // 3):
+            pp = plt.arrow(msg.data[i*3], msg.data[i*3+1], ARROW_LEN*cos(msg.data[i*3+2]), ARROW_LEN*sin(msg.data[i*3+2]), color="red", width=0.1)
+            particle_plots.append(pp)
+    else:
+        # plot as points (faster).
+        if particle_plots is not None:
+            particle_plots.remove()
+        # draw entire particle set at once.
+        particle_plots = plt.scatter([msg.data[i] for i in range(0,len(msg.data),3)], [msg.data[i] for i in range(1,len(msg.data),3)], s=12, color="red")
+
+    # show the current true pose.
+    if SHOW_TRUE_TRAJ and true_pose is not None:
+        # remove previous.
+        if true_pt is not None:
+            true_pt.remove()
+        # draw current.
+        true_pt = plt.arrow(true_pose[timestep_num*3], true_pose[timestep_num*3+1], ARROW_LEN*cos(true_pose[timestep_num*3+2]), ARROW_LEN*sin(true_pose[timestep_num*3+2]), color="blue", width=0.1)
 
     # show the timestep on the plot.
     if time_text is not None:
@@ -159,6 +178,8 @@ def get_pf_state(msg):
     plt.axis("equal")
     plt.xlabel("x (m)")
     plt.ylabel("y (m)")
+    plt.xlim([-1.5*MAP_BOUND,1.5*MAP_BOUND])
+    plt.ylim([-1.5*MAP_BOUND,1.5*MAP_BOUND])
     plt.title("EKF-Estimated Trajectory and Landmarks")
     plt.draw()
     plt.pause(0.00000000001)
