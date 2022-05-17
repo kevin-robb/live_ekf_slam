@@ -15,7 +15,7 @@ from math import pi, atan2, remainder, tau, cos, sin
 import numpy as np
 
 ############ GLOBAL VARIABLES ###################
-USE_RSS_DATA = False # T = use demo set. F = randomize map and create new traj.
+USE_RSS_DATA = False # T = use demo dataset. F = randomize map and create new traj.
 DT = 0.05 # timer period used if cmd line param not provided.
 odom_pub = None; lm_pub = None; true_map_pub = None; true_pose_pub = None
 pkg_path = None # filepath to this package.
@@ -26,17 +26,6 @@ demo_map = { 0 : (6.2945, 8.1158), 1 : (-7.4603, 8.2675), 2 : (2.6472, -8.0492),
         11: (6.9826, 8.6799), 12: (3.5747, 5.1548), 13: (4.8626, -2.1555), 14: (3.1096, -6.5763),
         15: (4.1209, -9.3633), 16: (-4.4615, -9.0766), 17: (-8.0574, 6.4692), 18: (3.8966, -3.6580), 19: (9.0044, -9.3111) }
 #################################################
-
-def main_loop(event):
-    # send stuff to the EKF for testing.
-    odom_msg = Vector3()
-    odom_msg.x = 0.1
-    odom_msg.y = 0.1
-    odom_pub.publish(odom_msg)
-    lm_msg = Float32MultiArray()
-    lm_msg.data = [1, 0.5, 0.7, 4, 1.2, -0.9]
-    lm_pub.publish(lm_msg)
-
 
 def read_rss_data():
     """
@@ -86,7 +75,7 @@ def norm(l1, l2):
     return ((l1[0]-l2[0])**2 + (l1[1]-l2[1])**2)**(1/2) 
 
 
-def generate_data():
+def generate_data(map_type:str):
     """
     Create a set of 20 landmarks forming the map.
     Choose a trajectory through the space that will
@@ -109,10 +98,9 @@ def generate_data():
         else:
             rospy.logwarn("NUM_LANDMARKS must match length of demo_map to use it.")
     # make new map if the demo hasn't been set.
-    USE_GRID_MAP = True
     if len(landmarks.keys()) < 1:
         id = 0
-        if not USE_GRID_MAP:
+        if map_type == "random":
             # randomly spread landmarks across the map.
             while len(landmarks.keys()) < NUM_LANDMARKS:
                 pos = (2*BOUND*random() - BOUND, 2*BOUND*random() - BOUND)
@@ -120,7 +108,7 @@ def generate_data():
                 if True not in dists:
                     landmarks[id] = pos
                     id += 1
-        else:
+        elif map_type == "grid":
             # place landmarks on a grid filling the bounds.
             GRID_STEP = 4
             id = 0
@@ -130,6 +118,9 @@ def generate_data():
                     id += 1
             # update number of landmarks used.
             NUM_LANDMARKS = id
+        else:
+            rospy.logerr("Invalid map_type provided.")
+            exit()
     
     ############# GENERATE TRAJECTORY ###################
     NUM_TIMESTEPS = 1000
@@ -148,12 +139,11 @@ def generate_data():
     odom_dist = []; odom_hdg = []
     """
     We will use travelling salesman problem (TSP) - 
-    nearest neighbors approach to find an efficient path.
-    NOTE: We'll add noise to landmarks, but this method of
+    nearest neighbors approach to find a path.
+    We'll add noise to landmarks, but this method of
     trajectory generation assumes we have a rough idea of 
     where all landmarks are. The EKF doesn't get this info,
-    so it is still performing fully blind EKF SLAM, but
-    the trajectory planner is a knowing helper.
+    so it is still performing fully blind EKF-SLAM.
     """
     # make noisy version of rough map to use.
     LM_NOISE = 0.2
@@ -305,14 +295,22 @@ def main():
     global lm_pub, odom_pub, pkg_path, DT, true_map_pub, true_pose_pub
     rospy.init_node('data_fwd_node')
 
-    # read DT from command line arg.
+    # read DT and map_type from command line arg.
     try:
+        # get map type.
+        if len(sys.argv) < 3:
+            rospy.logwarn("Map type not provided to data_fwd_node. Using random. Options are [random, grid]")
+            map_type = "random"
+        else:
+            map_type = sys.argv[2]
+        
+        # get dt.
         if len(sys.argv) < 2 or sys.argv[1] == "-1":
             rospy.logwarn("DT not provided to data_fwd_node. Using DT="+str(DT))
         else:
             DT = float(sys.argv[1])
             if DT <= 0:
-                raise Exception("Negative DT issued.")
+                raise Exception("DT must be positive.")
     except:
         rospy.logerr("DT param must be a positive float.")
         exit()
@@ -335,9 +333,7 @@ def main():
         read_rss_data()
     else:
         # create data in same format.
-        generate_data()
-        # run the main loop.
-        # rospy.Timer(rospy.Duration(DT), main_loop)
+        generate_data(map_type)
 
     rospy.spin()
 
