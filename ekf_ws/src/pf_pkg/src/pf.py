@@ -111,6 +111,7 @@ class PF:
         # for each observed landmark, compute the distance we'd expect given the map and particle i's pose.
         log_likelihood = 0
         for l in range(len(z) // 3):
+            # TODO likelihood should be zero if range is further than max vision range or bearing is outside fov.
             r_exp, b_exp = self.raycast(z[3*l], i)
             r_distr = (1-wt_rand)*norm.cdf(z[3*l+1], loc=r_exp, scale=self.W[0,0]) + wt_rand*uniform.cdf(z[3*l+1], loc=0, scale=2**(1/2)*(1.5*self.MAP_BOUNDS[1]-1.5*self.MAP_BOUNDS[0]))
             b_distr = (1-wt_rand)*norm.cdf(z[3*l+2], loc=b_exp, scale=self.W[1,1]) + wt_rand*uniform.cdf(z[3*l+2], loc=-pi, scale=2*pi)

@@ -35,16 +35,16 @@ NUM_TIMESTEPS = 1000
 # odom command constraints:
 ODOM_D_MAX = 0.1; ODOM_TH_MAX = 0.0546
 # odom process noise.
-# V = np.array([[0.02**2,0.0],[0.0,(0.5*pi/180)**2]])
-V = np.array([[0.0,0.0],[0.0,0.0]]) # no noise
+V = np.array([[0.02**2,0.0],[0.0,(0.5*pi/180)**2]])
+# V = np.array([[0.0,0.0],[0.0,0.0]]) # no noise
 LM_NOISE = 0.2 # noise to use for generating map for TSP solution.
 VISITATION_THRESHOLD = 3 # how close the veh must get to a lm to mark it as visited in TSP soln.
 # ----- Measurements -----
 # vision constraints:
 RANGE_MAX = 4; FOV = [-pi, pi]
 # sensing noise.
-# W = np.array([[0.1**2,0.0],[0.0,(1*pi/180)**2]])
-W = np.array([[0.0,0.0],[0.0,0.0]]) # no noise
+W = np.array([[0.1**2,0.0],[0.0,(1*pi/180)**2]])
+# W = np.array([[0.0,0.0],[0.0,0.0]]) # no noise
 #################################################
 
 

@@ -49,6 +49,8 @@ def cov_to_ellipse(P_v):
     vals, vecs = np.linalg.eigh(cov)
     order = vals.argsort()[::-1]
     vals = vals[order]; vecs = vecs[:,order]
+    # fix negative eigenvalues killing the lm ellipses.
+    vals = [abs(v) for v in vals]
     # get rotation angle.
     theta = np.arctan2(*vecs[:,0][::-1])
     w, h = NUM_STD_DEV * 2 * np.sqrt(vals)
