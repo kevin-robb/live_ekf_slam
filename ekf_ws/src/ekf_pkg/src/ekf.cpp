@@ -161,8 +161,10 @@ ekf_pkg::EKFState EKF::getState() {
     // landmarks.
     stateMsg.M = this->M;
     std::vector<float> lm;
-    for (int i=0; i<2*M; ++i) {
-        lm.push_back(this->x_t(3+i));
+    for (int i=0; i<M; ++i) {
+        lm.push_back((float) this->lm_IDs[i]);
+        lm.push_back(this->x_t(3+i*2));
+        lm.push_back(this->x_t(3+i*2+1));
     }
     stateMsg.landmarks = lm;
     // covariance. collapse all rows side by side into a vector.

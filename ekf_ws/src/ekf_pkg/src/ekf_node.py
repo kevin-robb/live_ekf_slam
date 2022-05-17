@@ -152,7 +152,7 @@ def send_state():
     msg.y_v = x_t[1,0]
     msg.yaw_v = x_t[2,0]
     msg.M = (x_t.shape[0] - 3) // 2
-    msg.landmarks = sum([[x_t[i,0], x_t[i+1,0]] for i in range(3,x_t.shape[0],2)], [])
+    msg.landmarks = sum([[lm_IDs[i], x_t[i,0], x_t[i+1,0]] for i in range(3,x_t.shape[0],2)], [])
     # covariance change to one row.
     msg.P = []
     for subl in P_t.tolist():

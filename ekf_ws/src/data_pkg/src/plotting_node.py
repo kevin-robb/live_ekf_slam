@@ -27,18 +27,46 @@ true_pose = None; true_map = None
 # plotting stuff.
 SHOW_ENTIRE_TRAJ = False
 SHOW_TRUE_TRAJ = True
-ARROW_LEN = 0.1
+ARROW_LEN = 0.1 # length of pose arrow.
+NUM_STD_DEV = 1 # number of std dev to include in cov ellipse.
 timestep_num = 1; time_text = None; time_text_position = None
 lm_pts = None; veh_pts = None; ell_pts = None; veh_true = None
+lm_cov = {}
 # set of PF particle plots.
 particle_plots = None; true_pt = None
 # output filename prefix.
 fname = ""
 #################################################
 
+def cov_to_ellipse(P_v):
+    """
+    Given the state covariance matrix,
+    compute points to plot representative ellipse.
+    """
+    # need to take only first 2x2 for veh position cov.
+    cov = P_v[0:2,0:2]
+    # get eigenvectors of cov.
+    vals, vecs = np.linalg.eigh(cov)
+    order = vals.argsort()[::-1]
+    vals = vals[order]; vecs = vecs[:,order]
+    # get rotation angle.
+    theta = np.arctan2(*vecs[:,0][::-1])
+    w, h = NUM_STD_DEV * 2 * np.sqrt(vals)
+    # create parametric ellipse.
+    t = np.linspace(0, 2*pi, 100)
+    ell = np.array([w*np.cos(t) , h*np.sin(t)])
+    # compute rotation transform.
+    R_ell = np.array([[cos(theta), -sin(theta)],[sin(theta) , cos(theta)]])
+    # apply rotation to ellipse.
+    ell_rot = np.zeros((2,ell.shape[1]))
+    for i in range(ell.shape[1]):
+        ell_rot[:,i] = np.dot(R_ell,ell[:,i])
+    return ell_rot
+
+
 # get the state published by the EKF.
 def get_ekf_state(msg):
-    global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts, veh_true, true_map, true_pose, timestep_num, time_text, time_text_position, fname
+    global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts, veh_true, true_map, true_pose, timestep_num, time_text, time_text_position, fname, lm_cov
     # set filename for EKF.
     fname = "ekf"
     # save what we want to plot.
@@ -52,8 +80,8 @@ def get_ekf_state(msg):
     veh_y.append(msg.y_v)
     veh_th.append(msg.yaw_v)
     if n > 3:
-        lm_x = [msg.landmarks[i] for i in range(0,len(msg.landmarks),2)]
-        lm_y = [msg.landmarks[i] for i in range(1,len(msg.landmarks),2)]
+        lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
+        lm_y = [msg.landmarks[i] for i in range(2,len(msg.landmarks),3)]
 
     # plot ground truth map.
     if true_map is not None:
@@ -69,35 +97,30 @@ def get_ekf_state(msg):
             plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], ARROW_LEN*cos(true_pose[timestep*3+2]), ARROW_LEN*sin(true_pose[timestep*3+2]), color="blue", width=0.01)
         true_pose = None
 
-
-    # plot EKF covariance for current position.
-    # referenced https://stackoverflow.com/questions/20126061/creating-a-confidence-ellipses-in-a-sccatterplot-using-matplotlib
-    # and https://stackoverflow.com/questions/10952060/plot-ellipse-with-matplotlib-pyplot-python
-
-    # got cov P_t from EKF. need to take only first 2x2 for position.
-    cov = P_v[0:2,0:2]
-    vals, vecs = eigsorted(cov)
-    theta = np.degrees(np.arctan2(*vecs[:,0][::-1]))
-    num_std_dev = 1
-    w, h = num_std_dev * 2 * np.sqrt(vals)
-    # draw parametric ellipse (instead of using patches).
-    t = np.linspace(0, 2*pi, 100)
-    Ell = np.array([w*np.cos(t) , h*np.sin(t)])
-    R_rot = np.array([[cos(theta) , -sin(theta)],[sin(theta) , cos(theta)]])
-    Ell_rot = np.zeros((2,Ell.shape[1]))
-    for i in range(Ell.shape[1]):
-        Ell_rot[:,i] = np.dot(R_rot,Ell[:,i])
+    # compute parametric ellipse for veh covariance.
+    ell_rot = cov_to_ellipse(P_v)
     # remove old ellipses.
     if not SHOW_ENTIRE_TRAJ and ell_pts is not None:
         ell_pts.remove()
     # plot the ellipse.
-    ell_pts, = plt.plot(msg.x_v+Ell_rot[0,:] , msg.y_v+Ell_rot[1,:],'lightgrey')
+    ell_pts, = plt.plot(msg.x_v+ell_rot[0,:] , msg.y_v+ell_rot[1,:],'lightgrey')
 
-    # remove old landmark estimates
+    # remove old landmark estimates and covariances.
     if lm_pts is not None:
         lm_pts.remove()
     # plot new landmark estimates.
     lm_pts = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black")
+    # plot new landmark covariances.
+    for i in range(len(msg.landmarks) // 3):
+        # remove if it's been plotted before.
+        lm_id = msg.landmarks[i*3] 
+        if lm_id in lm_cov.keys() and lm_cov[lm_id] is not None:
+            lm_cov[lm_id].remove()
+            lm_cov[lm_id] = None
+        # extract 2x2 cov for this landmark.
+        lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
+        # plot its ellipse.
+        lm_cov[lm_id], = plt.plot(lm_x[i]+lm_ell[0,:] , lm_y[i]+lm_ell[1,:],'orange')
 
     # plot current EKF-estimated veh pos.
     if not SHOW_ENTIRE_TRAJ and veh_pts is not None:
@@ -227,11 +250,8 @@ def main():
     rospy.Subscriber("/truth/landmarks",Float32MultiArray, get_true_map, queue_size=1)
 
     # startup the plot.
-    try:
-        plt.ion()
-        plt.show()
-    except:
-        pass
+    plt.ion()
+    plt.show()
 
     rospy.spin()
 
