@@ -1,0 +1,49 @@
+# ----- EKF -----
+# process noise mean.
+v_d = 0.0
+v_th = 0.0
+# process noise cov.
+V_00 = 0.0004
+V_11 = 0.00007615435494667714
+# sensign noise mean.
+w_r = 0.0
+w_b = 0.0
+# sensing noise cov.
+W_00 = 0.01
+W_11 = 0.00030461741978670857
+
+# ----- PF -----
+NUM_PARTICLES = 500
+
+# ----- Map Gen -----
+# all lm will be w/in +- params["MAP_BOUND"] in both x/y.
+MAP_BOUND = 10.0
+NUM_LANDMARKS = 20
+# min dist between landmarks.
+MIN_SEP = 0.05
+# size of grid to place landmarks.
+GRID_STEP = 4
+
+# ----- Trajectory Gen -----
+NUM_TIMESTEPS = 1000
+# odom command constraints:
+ODOM_D_MAX = 0.1
+ODOM_TH_MAX = 0.0546
+# noise to use for generating map for TSP solution.
+LM_NOISE = 0.2
+# how close the veh must get to a lm to mark it as visited in TSP soln.
+VISITATION_THRESHOLD = 3.0
+
+# ----- Measurements Gen -----
+# vision constraints:
+RANGE_MAX = 4.0
+FOV_MIN = -3.141592653589793
+FOV_MAX = 3.141592653589793
+
+# ----- Plotter -----
+SHOW_ENTIRE_TRAJ = False
+SHOW_TRUE_TRAJ = True
+# length of pose arrow.
+ARROW_LEN = 0.1
+# number of std dev to include in cov ellipse.
+COV_STD_DEV = 1

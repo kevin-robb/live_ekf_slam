@@ -15,8 +15,7 @@ def eigsorted(cov):
     return vals[order], vecs[:,order]
 
 ############ GLOBAL VARIABLES ###################
-# map bounds.
-MAP_BOUND = 10
+params = {}
 # state data from the EKF to use for plotting.
 # position/hdg for all times.
 veh_x = []; veh_y = []; veh_th = []
@@ -24,11 +23,6 @@ veh_x = []; veh_y = []; veh_th = []
 lm_x = []; lm_y = []
 # ground truth veh pose.
 true_pose = None; true_map = None
-# plotting stuff.
-SHOW_ENTIRE_TRAJ = False
-SHOW_TRUE_TRAJ = True
-ARROW_LEN = 0.1 # length of pose arrow.
-NUM_STD_DEV = 1 # number of std dev to include in cov ellipse.
 timestep_num = 1; time_text = None; time_text_position = None
 lm_pts = None; veh_pts = None; ell_pts = None; veh_true = None
 lm_cov = {}
@@ -37,6 +31,32 @@ particle_plots = None; true_pt = None
 # output filename prefix.
 fname = ""
 #################################################
+
+
+def read_params(pkg_path):
+    """
+    Read params from config file.
+    @param path to data_pkg.
+    """
+    global params
+    params_file = open(pkg_path+"/config/params.txt", "r")
+    params = {}
+    lines = params_file.readlines()
+    for line in lines:
+        if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
+            continue
+        p_line = line.split("=")
+        key = p_line[0].strip()
+        arg = p_line[1].strip()
+        try:
+            params[key] = int(arg)
+        except:
+            try:
+                params[key] = float(arg)
+            except:
+                params[key] = (arg == "True")
+    print(params)
+
 
 def cov_to_ellipse(P_v):
     """
@@ -53,7 +73,7 @@ def cov_to_ellipse(P_v):
     vals = [abs(v) for v in vals]
     # get rotation angle.
     theta = np.arctan2(*vecs[:,0][::-1])
-    w, h = NUM_STD_DEV * 2 * np.sqrt(vals)
+    w, h = params["COV_STD_DEV"] * 2 * np.sqrt(vals)
     # create parametric ellipse.
     t = np.linspace(0, 2*pi, 100)
     ell = np.array([w*np.cos(t) , h*np.sin(t)])
@@ -94,15 +114,15 @@ def get_ekf_state(msg):
         true_map = None
 
     # plot full ground truth trajectory.
-    if SHOW_TRUE_TRAJ and true_pose is not None:
+    if params["SHOW_TRUE_TRAJ"] and true_pose is not None:
         for timestep in range(0,len(true_pose)//3):
-            plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], ARROW_LEN*cos(true_pose[timestep*3+2]), ARROW_LEN*sin(true_pose[timestep*3+2]), color="blue", width=0.01)
+            plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], params["ARROW_LEN"]*cos(true_pose[timestep*3+2]), params["ARROW_LEN"]*sin(true_pose[timestep*3+2]), color="blue", width=0.01)
         true_pose = None
 
     # compute parametric ellipse for veh covariance.
     ell_rot = cov_to_ellipse(P_v)
     # remove old ellipses.
-    if not SHOW_ENTIRE_TRAJ and ell_pts is not None:
+    if not params["SHOW_ENTIRE_TRAJ"] and ell_pts is not None:
         ell_pts.remove()
     # plot the ellipse.
     ell_pts, = plt.plot(msg.x_v+ell_rot[0,:] , msg.y_v+ell_rot[1,:],'lightgrey')
@@ -125,10 +145,10 @@ def get_ekf_state(msg):
         lm_cov[lm_id], = plt.plot(lm_x[i]+lm_ell[0,:] , lm_y[i]+lm_ell[1,:],'orange')
 
     # plot current EKF-estimated veh pos.
-    if not SHOW_ENTIRE_TRAJ and veh_pts is not None:
+    if not params["SHOW_ENTIRE_TRAJ"] and veh_pts is not None:
         veh_pts.remove()
     # draw a single pt with arrow to represent current veh pose.
-    veh_pts = plt.arrow(msg.x_v, msg.y_v, ARROW_LEN*cos(msg.yaw_v), ARROW_LEN*sin(msg.yaw_v), color="green", width=0.1)
+    veh_pts = plt.arrow(msg.x_v, msg.y_v, params["ARROW_LEN"]*cos(msg.yaw_v), params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1)
 
     # show the timestep on the plot.
     if time_text is not None:
@@ -141,8 +161,8 @@ def get_ekf_state(msg):
     plt.axis("equal")
     plt.xlabel("x (m)")
     plt.ylabel("y (m)")
-    plt.xlim([-1.5*MAP_BOUND,1.5*MAP_BOUND])
-    plt.ylim([-1.5*MAP_BOUND,1.5*MAP_BOUND])
+    plt.xlim([-1.5*params["MAP_BOUND"],1.5*params["MAP_BOUND"]])
+    plt.ylim([-1.5*params["MAP_BOUND"],1.5*params["MAP_BOUND"]])
     plt.title("EKF-Estimated Trajectory and Landmarks")
     plt.draw()
     plt.pause(0.00000000001)
@@ -162,9 +182,9 @@ def get_pf_state(msg):
         true_map = None
 
     # # plot full ground truth trajectory.
-    # if SHOW_TRUE_TRAJ and true_pose is not None:
+    # if params["SHOW_TRUE_TRAJ"] and true_pose is not None:
     #     for timestep in range(0,len(true_pose)//3):
-    #         plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], ARROW_LEN*cos(true_pose[timestep*3+2]), ARROW_LEN*sin(true_pose[timestep*3+2]), color="blue", width=0.01)
+    #         plt.arrow(true_pose[timestep*3], true_pose[timestep*3+1], params["ARROW_LEN"]*cos(true_pose[timestep*3+2]), params["ARROW_LEN"]*sin(true_pose[timestep*3+2]), color="blue", width=0.01)
     #     true_pose = None
 
     # plot particle set.
@@ -177,7 +197,7 @@ def get_pf_state(msg):
         particle_plots = []
         # draw a pt with arrow for all particles.
         for i in range(len(msg.data) // 3):
-            pp = plt.arrow(msg.data[i*3], msg.data[i*3+1], ARROW_LEN*cos(msg.data[i*3+2]), ARROW_LEN*sin(msg.data[i*3+2]), color="red", width=0.1)
+            pp = plt.arrow(msg.data[i*3], msg.data[i*3+1], params["ARROW_LEN"]*cos(msg.data[i*3+2]), params["ARROW_LEN"]*sin(msg.data[i*3+2]), color="red", width=0.1)
             particle_plots.append(pp)
     else:
         # plot as points (faster).
@@ -187,12 +207,12 @@ def get_pf_state(msg):
         particle_plots = plt.scatter([msg.data[i] for i in range(0,len(msg.data),3)], [msg.data[i] for i in range(1,len(msg.data),3)], s=12, color="red")
 
     # show the current true pose.
-    if SHOW_TRUE_TRAJ and true_pose is not None:
+    if params["SHOW_TRUE_TRAJ"] and true_pose is not None:
         # remove previous.
         if true_pt is not None:
             true_pt.remove()
         # draw current.
-        true_pt = plt.arrow(true_pose[timestep_num*3], true_pose[timestep_num*3+1], ARROW_LEN*cos(true_pose[timestep_num*3+2]), ARROW_LEN*sin(true_pose[timestep_num*3+2]), color="blue", width=0.1)
+        true_pt = plt.arrow(true_pose[timestep_num*3], true_pose[timestep_num*3+1], params["ARROW_LEN"]*cos(true_pose[timestep_num*3+2]), params["ARROW_LEN"]*sin(true_pose[timestep_num*3+2]), color="blue", width=0.1)
 
     # show the timestep on the plot.
     if time_text is not None:
@@ -205,14 +225,14 @@ def get_pf_state(msg):
     plt.axis("equal")
     plt.xlabel("x (m)")
     plt.ylabel("y (m)")
-    plt.xlim([-1.5*MAP_BOUND,1.5*MAP_BOUND])
-    plt.ylim([-1.5*MAP_BOUND,1.5*MAP_BOUND])
+    plt.xlim([-1.5*params["MAP_BOUND"],1.5*params["MAP_BOUND"]])
+    plt.ylim([-1.5*params["MAP_BOUND"],1.5*params["MAP_BOUND"]])
     plt.title("EKF-Estimated Trajectory and Landmarks")
     plt.draw()
     plt.pause(0.00000000001)
 
 
-def save_plot():
+def save_plot(pkg_path):
     # save plot we've been building upon exit.
     # save to a file in pkg/plots directory.
     if fname != "":
@@ -233,15 +253,16 @@ def get_true_map(msg):
     
 
 def main():
-    global pkg_path
     rospy.init_node('plotting_node')
 
     # find the filepath to this package.
     rospack = rospkg.RosPack()
     pkg_path = rospack.get_path('data_pkg')
+    # read params.
+    read_params(pkg_path)
 
     # when the node exits, make the plot.
-    atexit.register(save_plot)
+    atexit.register(save_plot, pkg_path)
 
     # subscribe to the current state.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)

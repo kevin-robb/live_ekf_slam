@@ -6,20 +6,45 @@ Localize mobile robot using a known map.
 """
 
 import rospy
+import rospkg
 from pf import PF
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 import sys
 
 ############ GLOBAL VARIABLES ###################
+params = {}
 DT = 0.05 # timer period used if cmd line param not provided.
-NUM_PARTICLES = 500
 pf = None
 set_pub = None
 # Most recent odom reading and landmark measurements.
 # odom = [dist, heading], lm_meas = [id, range, bearing, ...]
 odom_queue = []; lm_meas_queue = []
 #################################################
+
+
+def read_params(pkg_path):
+    """
+    Read params from config file.
+    @param path to data_pkg.
+    """
+    global params
+    params_file = open(pkg_path+"/config/params.txt", "r")
+    params = {}
+    lines = params_file.readlines()
+    for line in lines:
+        if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
+            continue
+        p_line = line.split("=")
+        key = p_line[0].strip()
+        arg = p_line[1].strip()
+        try:
+            params[key] = int(arg)
+        except:
+            try:
+                params[key] = float(arg)
+            except:
+                params[key] = (arg == "True")
 
 
 # main PF loop that uses monte carlo localization.
@@ -52,7 +77,7 @@ def get_true_map(msg):
     for id in range(len(lm_x)):
         MAP[id] = (lm_x[id], lm_y[id])
     # initialize the particle set.
-    pf = PF(NUM_PARTICLES, DT, MAP)
+    pf = PF(params["NUM_PARTICLES"], DT, MAP, params["MAP_BOUND"])
 
 def get_odom(msg):
     # get measurement of odometry info.
@@ -80,6 +105,12 @@ def main():
     except:
         rospy.logerr("DT param must be a positive float.")
         exit()
+
+    # find the filepath to data package.
+    rospack = rospkg.RosPack()
+    pkg_path = rospack.get_path('data_pkg')
+    # read params.
+    read_params(pkg_path)
 
     # subscribe to landmark detections: [id1,r1,b1,...idN,rN,bN]
     rospy.Subscriber("/landmark", Float32MultiArray, get_landmarks, queue_size=1)

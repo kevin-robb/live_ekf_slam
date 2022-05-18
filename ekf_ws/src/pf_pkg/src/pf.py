@@ -22,9 +22,9 @@ class PF:
     W = np.array([[0.1**2,0.0],[0.0,(1*pi/180)**2]])
 
 
-    def __init__(self, num_particles, DT, map, map_bounds = (-10,10)):
+    def __init__(self, num_particles, DT, map, map_bound):
         """
-        Initialize the particles uniformly across the entire map.map_bounds
+        Initialize the particles uniformly across the entire map.
         True map is available
             -> Randomly select locations in the world.
             -> Assign particles to those locations along with a random orientation value in (-pi, pi).
@@ -32,12 +32,12 @@ class PF:
         self.NUM_PARTICLES = num_particles
         self.DT = DT
         self.MAP = map
-        self.MAP_BOUNDS = map_bounds
+        self.MAP_BOUNDS = (-map_bound, map_bound)
         # create particle set, x_t.
         self.x_t = np.empty((3,num_particles))
         for i in range(num_particles):
-            self.x_t[0,i] = (map_bounds[1]-map_bounds[0])*random() + map_bounds[0]
-            self.x_t[1,i] = (map_bounds[1]-map_bounds[0])*random() + map_bounds[0]
+            self.x_t[0,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
+            self.x_t[1,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
             self.x_t[2,i] = 2*pi*random() - pi
         # instantiate predictions set as well.
         self.x_pred = self.x_t

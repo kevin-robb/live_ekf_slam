@@ -11,10 +11,11 @@ from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 import sys
 from random import random
-from math import pi, atan2, remainder, tau, cos, sin
+from math import atan2, remainder, tau, cos, sin
 import numpy as np
 
 ############ GLOBAL VARIABLES ###################
+params = {}
 DT = 0.05 # timer period used if cmd line param not provided.
 odom_pub = None; lm_pub = None; true_map_pub = None; true_pose_pub = None
 pkg_path = None # filepath to this package.
@@ -24,28 +25,31 @@ demo_map = { 0 : (6.2945, 8.1158), 1 : (-7.4603, 8.2675), 2 : (2.6472, -8.0492),
         7 : (6.0056, -7.1623), 8 : (-1.5648, 8.3147), 9 : (5.8441, 9.1898), 10: (3.1148, -9.2858),
         11: (6.9826, 8.6799), 12: (3.5747, 5.1548), 13: (4.8626, -2.1555), 14: (3.1096, -6.5763),
         15: (4.1209, -9.3633), 16: (-4.4615, -9.0766), 17: (-8.0574, 6.4692), 18: (3.8966, -3.6580), 19: (9.0044, -9.3111) }
-############# DATA GEN PARAMS ###################
-# ----- Map -----
-BOUND = 10 # all lm will be w/in +- BOUND in both x/y.
-NUM_LANDMARKS = 20
-MIN_SEP = 0.05 # min dist between landmarks.
-GRID_STEP = 4 # size of grid to place landmarks.
-# ----- Trajectory -----
-NUM_TIMESTEPS = 1000
-# odom command constraints:
-ODOM_D_MAX = 0.1; ODOM_TH_MAX = 0.0546
-# odom process noise.
-V = np.array([[0.02**2,0.0],[0.0,(0.5*pi/180)**2]])
-# V = np.array([[0.0,0.0],[0.0,0.0]]) # no noise
-LM_NOISE = 0.2 # noise to use for generating map for TSP solution.
-VISITATION_THRESHOLD = 3 # how close the veh must get to a lm to mark it as visited in TSP soln.
-# ----- Measurements -----
-# vision constraints:
-RANGE_MAX = 4; FOV = [-pi, pi]
-# sensing noise.
-W = np.array([[0.1**2,0.0],[0.0,(1*pi/180)**2]])
-# W = np.array([[0.0,0.0],[0.0,0.0]]) # no noise
 #################################################
+
+
+def read_params(pkg_path):
+    """
+    Read params from config file.
+    @param path to data_pkg.
+    """
+    global params
+    params_file = open(pkg_path+"/config/params.txt", "r")
+    params = {}
+    lines = params_file.readlines()
+    for line in lines:
+        if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
+            continue
+        p_line = line.split("=")
+        key = p_line[0].strip()
+        arg = p_line[1].strip()
+        try:
+            params[key] = int(arg)
+        except:
+            try:
+                params[key] = float(arg)
+            except:
+                params[key] = (arg == "True")
 
 
 def read_rss_data():
@@ -114,33 +118,33 @@ def generate_data(map_type:str):
     measurements for all timesteps.
     Publish these one at a time for the EKF.
     """
-    global NUM_LANDMARKS
+    global params
     ################ GENERATE MAP #######################
     # key = integer ID. value = (x,y) position.
     landmarks = {}
 
     if map_type == "demo_map":
         # force number of landmarks to match.
-        NUM_LANDMARKS = len(demo_map.keys()) 
+        params["NUM_LANDMARKS"] = len(demo_map.keys()) 
         landmarks = demo_map
     elif map_type in ["random", "rand"]:
         id = 0
         # randomly spread landmarks across the map.
-        while len(landmarks.keys()) < NUM_LANDMARKS:
-            pos = (2*BOUND*random() - BOUND, 2*BOUND*random() - BOUND)
-            dists = [ norm(lm_pos, pos) < MIN_SEP for lm_pos in landmarks.values()]
+        while len(landmarks.keys()) < params["NUM_LANDMARKS"]:
+            pos = (2*params["MAP_BOUND"]*random() - params["MAP_BOUND"], 2*params["MAP_BOUND"]*random() - params["MAP_BOUND"])
+            dists = [ norm(lm_pos, pos) < params["MIN_SEP"] for lm_pos in landmarks.values()]
             if True not in dists:
                 landmarks[id] = pos
                 id += 1
     elif map_type == "grid":
         # place landmarks on a grid filling the bounds.
         id = 0
-        for r in np.arange(-BOUND, BOUND, GRID_STEP):
-            for c in np.arange(-BOUND, BOUND, GRID_STEP):
+        for r in np.arange(-params["MAP_BOUND"], params["MAP_BOUND"], params["GRID_STEP"]):
+            for c in np.arange(-params["MAP_BOUND"], params["MAP_BOUND"], params["GRID_STEP"]):
                 landmarks[id] = (r, c)
                 id += 1
         # update number of landmarks used.
-        NUM_LANDMARKS = id
+        params["NUM_LANDMARKS"] = id
     else:
         rospy.logerr("Invalid map_type provided.")
         exit()
@@ -156,7 +160,7 @@ def generate_data(map_type:str):
         # param to keep track of true current pos.
         x0 = [0.0,0.0,0.0]
         # randomize starting pose.
-        # x0 = [2*BOUND*random() - BOUND, 2*BOUND*random() - BOUND, 2*pi*random() - pi]
+        # x0 = [2*params["MAP_BOUND"]*random() - params["MAP_BOUND"], 2*params["MAP_BOUND"]*random() - params["MAP_BOUND"], 2*pi*random() - pi]
         x_v = x0
         # init the odom lists.
         odom_dist = []; odom_hdg = []
@@ -170,11 +174,11 @@ def generate_data(map_type:str):
         """
         # make noisy version of rough map to use.
         noisy_lm = {}
-        for id in range(NUM_LANDMARKS):
-            noisy_lm[id] = (landmarks[id][0] + 2*LM_NOISE*random()-LM_NOISE, landmarks[id][1] + 2*LM_NOISE*random()-LM_NOISE)
+        for id in range(params["NUM_LANDMARKS"]):
+            noisy_lm[id] = (landmarks[id][0] + 2*params["LM_NOISE"]*random()-params["LM_NOISE"], landmarks[id][1] + 2*params["LM_NOISE"]*random()-params["LM_NOISE"])
         # choose nearest landmark to x0 as first node.
         cur_goal = 0; cur_dist = norm(noisy_lm[cur_goal], x_v)
-        for id in range(NUM_LANDMARKS):
+        for id in range(params["NUM_LANDMARKS"]):
             if norm(noisy_lm[id], x_v) < cur_dist:
                 cur_goal = id
                 cur_dist = norm(noisy_lm[id], x_v)
@@ -182,7 +186,7 @@ def generate_data(map_type:str):
         cur_node = cur_goal
         # store path of lm indices to visit in order.
         lm_path = [cur_node]
-        unvisited = [id for id in range(NUM_LANDMARKS)]
+        unvisited = [id for id in range(params["NUM_LANDMARKS"])]
         unvisited.remove(cur_node)
         # find next nearest neighbor until all nodes are visited.
         while len(unvisited) > 0:
@@ -199,11 +203,11 @@ def generate_data(map_type:str):
             unvisited.remove(cur_node)
         # now traverse our graph to get an actual trajectory.
         t = 0
-        for t in range(NUM_TIMESTEPS):
+        for t in range(params["NUM_TIMESTEPS"]):
             # first entry in lm_path always the current goal.
             # we will move it to the end once approx achieved.
             # thus, robot will loop around until time runs out.
-            if norm(x_v, noisy_lm[lm_path[0]]) < VISITATION_THRESHOLD:
+            if norm(x_v, noisy_lm[lm_path[0]]) < params["VISITATION_THRESHOLD"]:
                 # mark as arrived.
                 lm_path = lm_path[1:] + [lm_path[0]]
 
@@ -215,13 +219,13 @@ def generate_data(map_type:str):
             gb = atan2(diff_vec[1], diff_vec[0]) # global bearing.
             hdg = remainder(gb - x_v[2], tau) # bearing rel to robot.
             # choose odom cmd w/in constraints.
-            d = min(d, ODOM_D_MAX) # always pos.
-            if abs(hdg) > ODOM_TH_MAX:
+            d = min(d, params["ODOM_D_MAX"]) # always pos.
+            if abs(hdg) > params["ODOM_TH_MAX"]:
                 # cap magnitude but keep sign.
-                hdg = ODOM_TH_MAX * np.sign(hdg)
+                hdg = params["ODOM_TH_MAX"] * np.sign(hdg)
             # add noise.
-            d = d + 2*V[0,0]*random()-V[0,0]
-            hdg = hdg + 2*V[1,1]*random()-V[1,1]
+            d = d + 2*params["V_00"]*random()-params["V_00"]
+            hdg = hdg + 2*params["V_11"]*random()-params["V_11"]
             # update veh position given this odom cmd.
             x_v = [x_v[0] + d*cos(x_v[2]), x_v[1] + d*sin(x_v[2]), x_v[2] + hdg]
             # add noise to odom and add to trajectory.
@@ -231,7 +235,7 @@ def generate_data(map_type:str):
     ############## ODOM -> TRAJECTORY ##################
     # Propagate odom to get veh pos at all times.
     pos_true = [x0]; x_v = x0
-    for t in range(NUM_TIMESTEPS):
+    for t in range(params["NUM_TIMESTEPS"]):
         x_v = [x_v[0] + odom_dist[t]*cos(x_v[2]), x_v[1] + odom_dist[t]*sin(x_v[2]), x_v[2] + odom_hdg[t]]
         pos_true.append(x_v)
 
@@ -247,10 +251,10 @@ def generate_data(map_type:str):
     landmarks are detected, and what the measured
     range, bearing should be.
     """
-    for t in range(NUM_TIMESTEPS):
+    for t in range(params["NUM_TIMESTEPS"]):
         # loop and determine which landmarks are visible.
         visible_landmarks = []
-        for id in range(NUM_LANDMARKS):
+        for id in range(params["NUM_LANDMARKS"]):
             # compute vector from veh pos to lm.
             diff_vec = [landmarks[id][i] - pos_true[t][i] for i in range(2)]
             # extract range and bearing.
@@ -258,17 +262,17 @@ def generate_data(map_type:str):
             gb = atan2(diff_vec[1], diff_vec[0]) # global bearing.
             beta = remainder(gb - pos_true[t][2], tau) # bearing rel to robot
             # check if this is visible to the robot.
-            if r > RANGE_MAX:
+            if r > params["RANGE_MAX"]:
                 continue
-            elif beta > FOV[0] and beta < FOV[1]:
+            elif beta > params["FOV_MIN"] and beta < params["FOV_MAX"]:
                 # within range and fov.
                 visible_landmarks.append([id, r, beta])
         # set number of detections on this timestep.
         z_num_det.append(len(visible_landmarks))
         # add noise to all detections and add to list.
         z.append(sum([[visible_landmarks[i][0], 
-            visible_landmarks[i][1]+2*W[0,0]*random()-W[0,0], 
-            visible_landmarks[i][2]+2*W[1,1]*random()-W[1,1]] 
+            visible_landmarks[i][1]+2*params["W_00"]*random()-params["W_00"], 
+            visible_landmarks[i][2]+2*params["W_11"]*random()-params["W_11"]] 
             for i in range(len(visible_landmarks))], []))
 
     ############### SEND DATA ################
@@ -288,7 +292,7 @@ def generate_data(map_type:str):
     lm_msg = Float32MultiArray()
     r = rospy.Rate(1/DT) # freq in Hz
     while not rospy.is_shutdown():
-        if t == NUM_TIMESTEPS: return
+        if t == params["NUM_TIMESTEPS"]: return
         # send odom as x,y components of a vector.
         odom_msg.x = odom_dist[t]
         odom_msg.y = odom_hdg[t]
@@ -329,6 +333,8 @@ def main():
     # find the filepath to this package.
     rospack = rospkg.RosPack()
     pkg_path = rospack.get_path('data_pkg')
+    # read params.
+    read_params(pkg_path)
 
     # publish landmark detections: [id1,r1,b1,...idN,rN,bN]
     lm_pub = rospy.Publisher("/landmark", Float32MultiArray, queue_size=1)

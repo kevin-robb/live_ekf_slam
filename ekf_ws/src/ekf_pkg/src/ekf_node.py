@@ -8,23 +8,20 @@ and the rest are the positions of M landmarks.
 """
 
 import rospy
+import rospkg
 import numpy as np
-from math import sin, cos, remainder, tau, atan2, pi
+from math import sin, cos, remainder, tau, atan2
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from ekf_pkg.msg import EKFState
 import sys
 
 ############ GLOBAL VARIABLES ###################
+params = {}
+V = None; W = None
 DT = 0.05 # timer period used if cmd line param not provided.
 state_pub = None
 ############## NEEDED BY EKF ####################
-# Process noise in (forward, angular). Assume zero mean.
-v_d = 0; v_th = 0
-V = np.array([[0.02**2,0.0],[0.0,(0.5*pi/180)**2]])
-# Sensing noise in (range, bearing). Assume zero mean.
-w_r = 0; w_b = 0
-W = np.array([[0.1**2,0.0],[0.0,(1*pi/180)**2]])
 # Initial vehicle state mean and covariance.
 x0 = np.array([[0.0],[0.0],[0.0]])
 P0 = np.array([[0.01**2,0.0,0.0],[0.0,0.01**2,0.0],[0.0,0.0,0.005**2]])
@@ -39,11 +36,38 @@ lm_IDs = []
 timestep = 0
 #################################################
 
+def read_params(pkg_path):
+    """
+    Read params from config file.
+    @param path to data_pkg.
+    """
+    global params, V, W
+    params_file = open(pkg_path+"/config/params.txt", "r")
+    params = {}
+    lines = params_file.readlines()
+    for line in lines:
+        if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
+            continue
+        p_line = line.split("=")
+        key = p_line[0].strip()
+        arg = p_line[1].strip()
+        try:
+            params[key] = int(arg)
+        except:
+            try:
+                params[key] = float(arg)
+            except:
+                params[key] = (arg == "True")
+    # set process and sensing noise.
+    V = np.array([[params["V_00"],0.0],[0.0,params["V_11"]]])
+    W = np.array([[params["W_00"],0.0],[0.0,params["W_11"]]])
+
+
 # main EKF loop that happens every timestep.
 def ekf_iteration(event):
     global x_t, P_t, lm_IDs, lm_meas_queue, odom_queue, timestep
-    # skip if there's no prediction or measurement yet.
-    if len(odom_queue) < 1 or len(lm_meas_queue) < 1:
+    # skip if params not read yet or there's no prediction or measurement.
+    if W is None or len(odom_queue) < 1 or len(lm_meas_queue) < 1:
         return
     timestep += 1
     # pop the next data off the queue.
@@ -70,9 +94,9 @@ def ekf_iteration(event):
     # Make predictions.
     # landmarks are assumed constant, so we predict only vehicle position will change.
     x_pred = x_t
-    x_pred[0,0] = x_t[0,0] + (d_d + v_d)*cos(x_t[2,0])
-    x_pred[1,0] = x_t[1,0] + (d_d + v_d)*sin(x_t[2,0])
-    x_pred[2,0] = x_t[2,0] + d_th + v_th
+    x_pred[0,0] = x_t[0,0] + (d_d + params["v_d"])*cos(x_t[2,0])
+    x_pred[1,0] = x_t[1,0] + (d_d + params["v_d"])*sin(x_t[2,0])
+    x_pred[2,0] = x_t[2,0] + d_th + params["v_th"]
     # cap heading to (-pi,pi).
     x_pred[2,0] = remainder(x_pred[2,0], tau)
     # propagate covariance.
@@ -106,7 +130,7 @@ def ekf_iteration(event):
                 # compute innovation.
                 ang = remainder(atan2(x_t[i+1,0]-x_pred[1,0], x_t[i,0]-x_pred[0,0])-x_pred[2,0],tau)
                 z_est = np.array([[dist], [ang]])
-                nu = np.array([[r],[b]]) - z_est - np.array([[w_r],[w_b]])
+                nu = np.array([[r],[b]]) - z_est - np.array([[params["w_r"]],[params["w_b"]]])
                 # compute kalman gain.
                 S = H_x @ P_pred @ H_x.T + H_w @ W @ H_w.T
                 K = P_pred @ H_x.T @ np.linalg.inv(S)
@@ -152,7 +176,7 @@ def send_state():
     msg.y_v = x_t[1,0]
     msg.yaw_v = x_t[2,0]
     msg.M = (x_t.shape[0] - 3) // 2
-    msg.landmarks = sum([[lm_IDs[i], x_t[i,0], x_t[i+1,0]] for i in range(3,x_t.shape[0],2)], [])
+    msg.landmarks = sum([[lm_IDs[i], x_t[3+2*i,0], x_t[3+2*i+1,0]] for i in range(len(lm_IDs))], [])
     # covariance change to one row.
     msg.P = []
     for subl in P_t.tolist():
@@ -188,6 +212,12 @@ def main():
     except:
         rospy.logerr("DT param must be a positive float.")
         exit()
+
+    # find the filepath to data package.
+    rospack = rospkg.RosPack()
+    pkg_path = rospack.get_path('data_pkg')
+    # read params.
+    read_params(pkg_path)
 
     # subscribe to landmark detections: [id1,r1,b1,...idN,rN,bN]
     rospy.Subscriber("/landmark", Float32MultiArray, get_landmarks, queue_size=1)
