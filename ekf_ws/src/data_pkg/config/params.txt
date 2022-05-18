@@ -47,3 +47,5 @@ SHOW_TRUE_TRAJ = True
 ARROW_LEN = 0.1
 # number of std dev to include in cov ellipse.
 COV_STD_DEV = 1
+# show individual heading for all particles.
+PLOT_PARTICLE_ARROWS = False
