@@ -27,7 +27,6 @@ x0 = np.array([[0.0],[0.0],[0.0]])
 P0 = np.array([[0.01**2,0.0,0.0],[0.0,0.01**2,0.0],[0.0,0.0,0.005**2]])
 # Most recent odom reading and landmark measurements.
 odom_queue = []; lm_meas_queue = []
-# odom = [dist, heading], lm_meas = [id, range, bearing, ...]
 # Current state mean and covariance.
 x_t = x0; P_t = P0
 # IDs of seen landmarks. Order corresponds to ind in state.
@@ -174,6 +173,7 @@ def ekf_iteration(event):
 # create EKFState message and publish it.
 def send_state():
     msg = EKFState()
+    msg.timestep = timestep
     msg.x_v = x_t[0,0]
     msg.y_v = x_t[1,0]
     msg.yaw_v = x_t[2,0]
@@ -191,11 +191,12 @@ def send_state():
 # get measurement of odometry info.
 def get_odom(msg):
     global odom_queue
+    # format: x = distance, y = heading.
     odom_queue.append([msg.x, msg.y])
 
 # get measurement of landmarks.
 def get_landmarks(msg):
-    # format: [id1,r1,b1,...idN,rN,bN]
+    # format: [id1,range1,bearing1,...idN,rN,bN]
     global lm_meas_queue
     lm_meas_queue.append(msg.data)
 

@@ -28,6 +28,9 @@ EKF::EKF() {
 
 // perform a full iteration of the EKF for this timestep.
 void EKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
+    // update timestep.
+    this->timestep += 1;
+
     ////////////// PREDICTION STAGE /////////////////
     // extract odom.
     float d_d = odomMsg->x;
@@ -154,6 +157,8 @@ void EKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
 // return the state as a message.
 ekf_pkg::EKFState EKF::getState() {
     ekf_pkg::EKFState stateMsg;
+    // timestep.
+    stateMsg.timestep = this->timestep;
     // vehicle pose.
     stateMsg.x_v = this->x_t(0);
     stateMsg.y_v = this->x_t(1);

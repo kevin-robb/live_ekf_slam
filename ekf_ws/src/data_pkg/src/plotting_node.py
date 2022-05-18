@@ -5,6 +5,7 @@ import rospy
 import rospkg
 from std_msgs.msg import Float32MultiArray
 from ekf_pkg.msg import EKFState
+from pf_pkg.msg import PFState
 from matplotlib import pyplot as plt
 import numpy as np
 import atexit
@@ -17,18 +18,10 @@ def eigsorted(cov):
 
 ############ GLOBAL VARIABLES ###################
 params = {}
-# state data from the EKF to use for plotting.
-# position/hdg for all times.
-veh_x = []; veh_y = []; veh_th = []
-# current estimate for all landmark positions.
-lm_x = []; lm_y = []
-# ground truth veh pose.
+# store all plots objects we want to be able to remove later.
+plots = {"lm_cov_est" : {}}
+# ground truth.
 true_traj = None; true_map = None
-timestep_num = 1; time_text = None; time_text_position = None
-lm_pts = None; veh_pts = None; ell_pts = None; veh_true = None
-lm_cov = {}
-# set of PF particle plots.
-particle_plots = None; true_pt = None
 # output filename prefix.
 fname = ""
 #################################################
@@ -88,99 +81,92 @@ def cov_to_ellipse(P_v):
 
 def update_plot(filter:str, msg):
     # draw everything for this timestep.
-    global veh_x, veh_y, veh_th, lm_x, lm_y, lm_pts, veh_pts, ell_pts, veh_true, true_map, true_traj, timestep_num, time_text, time_text_position, lm_cov, particle_plots, true_pt
+    global plots, pos_time_display, true_map, true_traj
     
     #################### TRUE MAP #######################
     if true_map is not None:
         plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black")
         # make sure the time text will be on screen but not blocking a lm.
-        time_text_position = (min(true_map[0]), max(true_map[1])+2)
+        pos_time_display = (min(true_map[0]), max(true_map[1])+2)
         # this should only run once to avoid wasting time.
         true_map = None
 
     ################ TRUE TRAJECTORY #####################
     if params["SHOW_TRUE_TRAJ"] and true_traj is not None:
-        plt.scatter(true_traj[0::3], true_traj[1::3], s=1, color="blue")
-        # for timestep in range(0,len(true_traj)//3):
-        #     plt.arrow(true_traj[timestep*3], true_traj[timestep*3+1], params["ARROW_LEN"]*cos(true_traj[timestep*3+2]), params["ARROW_LEN"]*sin(true_traj[timestep*3+2]), color="blue", width=0.01)
-        true_traj = None
+        # plot entire trajectory at the beginning.
+        # plt.scatter(true_traj[0::3], true_traj[1::3], s=1, color="blue")
+        # true_traj = None
+
+        # plot only the current veh pos.
+        if "veh_pos_true" in plots.keys():
+            plots["veh_pos_true"].remove()
+        plots["veh_pos_true"] = plt.arrow(true_traj[msg.timestep*3], true_traj[msg.timestep*3+1], params["ARROW_LEN"]*cos(true_traj[msg.timestep*3+2]), params["ARROW_LEN"]*sin(true_traj[msg.timestep*3+2]), color="blue", width=0.1)
+
+    ###################### TIMESTEP #####################
+    if "timestep" in plots.keys():
+        plots["timestep"].remove()
+    if pos_time_display is not None:
+        plots["timestep"] = plt.text(pos_time_display[0], pos_time_display[1], 't = '+str(msg.timestep), horizontalalignment='center', verticalalignment='bottom')
 
     ####################### EKF SLAM #########################
     if filter == "ekf":
         ################ VEH POS #################
         # plot current EKF-estimated veh pos.
-        if not params["SHOW_ENTIRE_TRAJ"] and veh_pts is not None:
-            veh_pts.remove()
+        if not params["SHOW_ENTIRE_TRAJ"] and "veh_pos_est" in plots.keys():
+            plots["veh_pos_est"].remove()
         # draw a single pt with arrow to represent current veh pose.
-        veh_pts = plt.arrow(msg.x_v, msg.y_v, params["ARROW_LEN"]*cos(msg.yaw_v), params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1)
+        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, params["ARROW_LEN"]*cos(msg.yaw_v), params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1)
 
         ################ VEH COV ##################
         n = int(len(msg.P)**(1/2)) # length of state n = 3+2M
         # compute parametric ellipse for veh covariance.
-        ell_rot = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
+        veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
         # remove old ellipses.
-        if not params["SHOW_ENTIRE_TRAJ"] and ell_pts is not None:
-            ell_pts.remove()
+        if not params["SHOW_ENTIRE_TRAJ"] and "veh_cov_est" in plots.keys():
+            plots["veh_cov_est"].remove()
         # plot the ellipse.
-        ell_pts, = plt.plot(msg.x_v+ell_rot[0,:] , msg.y_v+ell_rot[1,:],'lightgrey')
+        plots["veh_cov_est"], = plt.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey')
 
         ############## LANDMARK EST ##################
         if n > 3:
             lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
             lm_y = [msg.landmarks[i] for i in range(2,len(msg.landmarks),3)]
         # remove old landmark estimates.
-        if lm_pts is not None:
-            lm_pts.remove()
+        if "lm_pos_est" in plots.keys():
+            plots["lm_pos_est"].remove()
         # plot new landmark estimates.
-        lm_pts = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black")
+        plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black")
 
         ############## LANDMARK COV ###################
         # plot new landmark covariances.
         for i in range(len(msg.landmarks) // 3):
             # replace previous if it's been plotted before.
             lm_id = msg.landmarks[i*3] 
-            if lm_id in lm_cov.keys() and lm_cov[lm_id] is not None:
-                lm_cov[lm_id].remove()
-                lm_cov[lm_id] = None
+            if lm_id in plots["lm_cov_est"].keys():
+                plots["lm_cov_est"][lm_id].remove()
             # extract 2x2 cov for this landmark.
             lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
             # plot its ellipse.
-            lm_cov[lm_id], = plt.plot(lm_x[i]+lm_ell[0,:] , lm_y[i]+lm_ell[1,:],'orange')
+            plots["lm_cov_est"][lm_id], = plt.plot(lm_x[i]+lm_ell[0,:] , lm_y[i]+lm_ell[1,:],'orange')
 
     ############## PARTICLE FILTER LOCALIZATION #####################
     elif filter == "pf":
         ########## PARTICLE SET ###############
         if params["PLOT_PARTICLE_ARROWS"]:
-            # plot as arrows.
-            if particle_plots is not None and len(particle_plots) > 0:
-                for i in range(len(particle_plots)):
-                    particle_plots[i].remove()
-            particle_plots = []
+            # plot as arrows (slow).
+            if "particle_set" in plots.keys() and len(plots["particle_set"].keys()) > 0:
+                for i in plots["particle_set"].keys():
+                    plots["particle_set"][i].remove()
+            plots["particle_set"] = {}
             # draw a pt with arrow for all particles.
-            for i in range(len(msg.data) // 3):
-                pp = plt.arrow(msg.data[i*3], msg.data[i*3+1], params["ARROW_LEN"]*cos(msg.data[i*3+2]), params["ARROW_LEN"]*sin(msg.data[i*3+2]), color="red", width=0.1)
-                particle_plots.append(pp)
+            for i in range(len(msg.x)):
+                plots["particle_set"][i] = plt.arrow(msg.x[i], msg.y[i], params["ARROW_LEN"]*cos(msg.yaw[i]), params["ARROW_LEN"]*sin(msg.yaw[i]), color="red", width=0.1)
         else:
             # plot as points (faster).
-            if particle_plots is not None:
-                particle_plots.remove()
+            if "particle_set" in plots.keys():
+                plots["particle_set"].remove()
             # draw entire particle set at once.
-            particle_plots = plt.scatter([msg.data[i] for i in range(0,len(msg.data),3)], [msg.data[i] for i in range(1,len(msg.data),3)], s=12, color="red")
-
-        ########## TRUE VEH POSE ###########
-        if params["SHOW_TRUE_TRAJ"] and true_traj is not None:
-            # remove previous.
-            if true_pt is not None:
-                true_pt.remove()
-            # draw current.
-            true_pt = plt.arrow(true_traj[timestep_num*3], true_traj[timestep_num*3+1], params["ARROW_LEN"]*cos(true_traj[timestep_num*3+2]), params["ARROW_LEN"]*sin(true_traj[timestep_num*3+2]), color="blue", width=0.1)
-
-    # show the timestep on the plot.
-    if time_text is not None:
-        time_text.remove()
-    if time_text_position is not None:
-        time_text = plt.text(time_text_position[0], time_text_position[1], 't = '+str(timestep_num), horizontalalignment='center', verticalalignment='bottom')
-    timestep_num += 1
+            plots["particle_set"] = plt.scatter([msg.x[i] for i in range(len(msg.x))], [msg.y[i] for i in range(len(msg.y))], s=8, color="red")
 
     # do the plotting.
     plt.axis("equal")
@@ -243,7 +229,7 @@ def main():
 
     # subscribe to the current state.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)
-    rospy.Subscriber("/state/pf", Float32MultiArray, get_pf_state, queue_size=1)
+    rospy.Subscriber("/state/pf", PFState, get_pf_state, queue_size=1)
 
     # subscribe to ground truth.
     rospy.Subscriber("/truth/veh_pose",Float32MultiArray, get_true_traj, queue_size=1)

@@ -10,6 +10,7 @@ import rospkg
 from pf import PF
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
+from pf_pkg.msg import PFState
 import sys
 
 ############ GLOBAL VARIABLES ###################
@@ -63,9 +64,7 @@ def mcl_iteration(event):
     pf.iterate(odom, z)
 
     # publish the particle set for plotting.
-    msg = Float32MultiArray()
-    msg.data = pf.get_particle_set()
-    set_pub.publish(msg)
+    set_pub.publish(pf.get_state())
 
 
 # Getters
@@ -111,7 +110,7 @@ def main():
     rospy.Subscriber("/truth/landmarks",Float32MultiArray, get_true_map, queue_size=1)
 
     # create publisher for the current state.
-    set_pub = rospy.Publisher("/state/pf", Float32MultiArray, queue_size=1)
+    set_pub = rospy.Publisher("/state/pf", PFState, queue_size=1)
 
     rospy.Timer(rospy.Duration(params["DT"]), mcl_iteration)
     rospy.spin()

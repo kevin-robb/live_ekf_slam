@@ -9,7 +9,7 @@ import numpy as np
 from random import random, choices
 from math import sin, cos, remainder, tau, atan2, pi, log, exp
 from scipy.stats import multivariate_normal, norm, uniform
-
+from pf_pkg.msg import PFState
 
 class PF:
     ##### CONFIG VALUES #####
@@ -29,6 +29,7 @@ class PF:
             -> Randomly select locations in the world.
             -> Assign particles to those locations along with a random orientation value in (-pi, pi).
         """
+        self.timestep = 0
         self.NUM_PARTICLES = num_particles
         self.DT = DT
         self.MAP = map
@@ -47,6 +48,8 @@ class PF:
         """
         Perform one iteration of MCL.
         """
+        # update timestep.
+        self.timestep += 1
         # propagate particles forward one timestep.
         self.sample_motion_model(u)
         # skip update step if no landmarks were detected.
@@ -130,11 +133,14 @@ class PF:
         return r, b
 
 
-    def get_particle_set(self):
+    def get_state(self):
         """
-        Return the current set of particles as a 1x3N list.
+        Return the current set of particles as a PFState msg.
         """
-        pset = []
-        for i in range(self.NUM_PARTICLES):
-            pset += [self.x_t[0,i], self.x_t[1,i], self.x_t[2,i]]
-        return pset
+        msg = PFState()
+        msg.timestep = self.timestep
+        msg.x = [self.x_t[0,i] for i in range(self.NUM_PARTICLES)]
+        msg.y = [self.x_t[1,i] for i in range(self.NUM_PARTICLES)]
+        msg.yaw = [self.x_t[2,i] for i in range(self.NUM_PARTICLES)]
+        # TODO look into publishing weights as well.
+        return msg

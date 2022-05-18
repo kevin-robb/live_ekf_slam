@@ -13,6 +13,8 @@
 
 class EKF {
     public:
+    // current timestep.
+    int timestep = 0;
     // state distribution.
     Eigen::VectorXd x_t;
     Eigen::MatrixXd P_t;
