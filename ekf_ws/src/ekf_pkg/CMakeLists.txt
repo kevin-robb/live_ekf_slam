@@ -33,7 +33,6 @@ include
 )
 
 # Build C++ files
-set(SOURCES src/ekf.cpp src/cpp_ekf_node.cpp)
-add_executable(cpp_ekf_node ${SOURCES})
-# add_executable(cpp_ekf_node src/cpp_ekf_node.cpp)
-target_link_libraries(cpp_ekf_node ${catkin_LIBRARIES})
+set(SOURCES src/ekf.cpp src/ekf_node.cpp)
+add_executable(ekf_node ${SOURCES})
+target_link_libraries(ekf_node ${catkin_LIBRARIES})

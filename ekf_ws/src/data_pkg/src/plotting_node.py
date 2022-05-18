@@ -218,6 +218,9 @@ def get_true_map(msg):
 def main():
     rospy.init_node('plotting_node')
 
+    # make live plot bigger.
+    plt.rcParams["figure.figsize"] = (9,9)
+
     # find the filepath to this package.
     rospack = rospkg.RosPack()
     pkg_path = rospack.get_path('data_pkg')

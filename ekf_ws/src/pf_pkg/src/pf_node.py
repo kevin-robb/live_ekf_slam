@@ -78,7 +78,7 @@ def get_true_map(msg):
     for id in range(len(lm_x)):
         MAP[id] = (lm_x[id], lm_y[id])
     # initialize the particle set.
-    pf = PF(params["NUM_PARTICLES"], DT, MAP, params["MAP_BOUND"])
+    pf = PF(params, DT, MAP)
 
 def get_odom(msg):
     # get measurement of odometry info.

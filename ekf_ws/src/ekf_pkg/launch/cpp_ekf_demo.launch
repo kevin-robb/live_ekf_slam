@@ -1,10 +1,8 @@
 <launch>
     <arg name="map" default="-1"/>
 
-    <!-- <param name="DT" value="0.05" /> -->
-
-    <!-- EKF node -->
-    <node pkg="ekf_pkg" type="cpp_ekf_node" name="cpp_ekf_node"  output="screen" />
+    <!-- C++ EKF node -->
+    <node pkg="ekf_pkg" type="ekf_node" name="ekf_node"  output="screen" />
     
     <!-- Call main driver script. -->
     <include file="$(find data_pkg)/launch/demo_base.launch" >

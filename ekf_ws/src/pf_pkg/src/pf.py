@@ -12,17 +12,19 @@ from scipy.stats import multivariate_normal, norm, uniform
 from pf_pkg.msg import PFState
 
 class PF:
-    ##### CONFIG VALUES #####
-    # Process noise in (forward, angular). Assume zero mean.
-    v_d = 0; v_th = 0
-    # process noise covariance: symmetric positive-definite matrix.
-    V = np.array([[0.02**2,0.0],[0.0,(0.5*pi/180)**2]])
-    # Sensing noise in (range, bearing). Assume zero mean.
-    w_r = 0; w_b = 0
-    W = np.array([[0.1**2,0.0],[0.0,(1*pi/180)**2]])
+# ODOM_D_MAX = 0.1
+# ODOM_TH_MAX = 0.0546
+# # noise to use for generating map for TSP solution.
+# LM_NOISE = 0.2
+# # how close the veh must get to a lm to mark it as visited in TSP soln.
+# VISITATION_THRESHOLD = 3.0
 
-
-    def __init__(self, num_particles, DT, map, map_bound):
+# # ----- Measurements Gen -----
+# # vision constraints:
+# RANGE_MAX = 4.0
+# FOV_MIN = -3.141592653589793
+# FOV_MAX = 3.141592653589793
+    def __init__(self, params, DT, map):
         """
         Initialize the particles uniformly across the entire map.
         True map is available
@@ -30,13 +32,16 @@ class PF:
             -> Assign particles to those locations along with a random orientation value in (-pi, pi).
         """
         self.timestep = 0
-        self.NUM_PARTICLES = num_particles
+        self.params = params
+        # set process and sensing noise.
+        self.V = np.array([[params["V_00"],0.0],[0.0,params["V_11"]]])
+        self.W = np.array([[params["W_00"],0.0],[0.0,params["W_11"]]])
         self.DT = DT
         self.MAP = map
-        self.MAP_BOUNDS = (-map_bound, map_bound)
+        self.MAP_BOUNDS = (-params["MAP_BOUND"], params["MAP_BOUND"])
         # create particle set, x_t.
-        self.x_t = np.empty((3,num_particles))
-        for i in range(num_particles):
+        self.x_t = np.empty((3,params["NUM_PARTICLES"]))
+        for i in range(params["NUM_PARTICLES"]):
             self.x_t[0,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
             self.x_t[1,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
             self.x_t[2,i] = 2*pi*random() - pi
@@ -57,25 +62,25 @@ class PF:
             self.x_t = self.x_pred
             return
         # compute particle log-likelihood weights.
-        wts = [self.sensor_likelihood(z, i) for i in range(self.NUM_PARTICLES)]
+        wts = [self.sensor_likelihood(z, i) for i in range(self.params["NUM_PARTICLES"])]
         # compute LSE term.
         wt_mean = sum(wts) / len(wts)
-        lse = log(sum([exp(wts[i]-wt_mean) for i in range(self.NUM_PARTICLES)]))
+        lse = log(sum([exp(wts[i]-wt_mean) for i in range(self.params["NUM_PARTICLES"])]))
         # compute probabilities.
         prbs = [exp(wt - wt_mean - lse) for wt in wts]
 
         # cull particles that have likely left the map.
-        for i in range(self.NUM_PARTICLES):
+        for i in range(self.params["NUM_PARTICLES"]):
             if (abs(self.x_pred[0,i]) > (1.5 * self.MAP_BOUNDS[1]) or abs(self.x_pred[1,i]) > (1.5 * self.MAP_BOUNDS[1])):
                 prbs[i] = 0
         # normalize probabilities.
         prb_tot = sum(prbs)
-        prbs = [prbs[i] / prb_tot for i in range(self.NUM_PARTICLES)]
+        prbs = [prbs[i] / prb_tot for i in range(self.params["NUM_PARTICLES"])]
         # resample particles based on weights.
-        ind_set = choices(list(range(self.NUM_PARTICLES)), weights=prbs, k=self.NUM_PARTICLES)
+        ind_set = choices(list(range(self.params["NUM_PARTICLES"])), weights=prbs, k=self.params["NUM_PARTICLES"])
         self.x_t = np.vstack(tuple([self.x_pred[0:3,i] for i in ind_set])).T
         # randomly replace some particles with new, random ones.
-        ind_to_replace = choices(list(range(self.NUM_PARTICLES)), k=self.NUM_PARTICLES//100)
+        ind_to_replace = choices(list(range(self.params["NUM_PARTICLES"])), k=self.params["NUM_PARTICLES"]//100)
         for i in ind_to_replace:
             self.x_t[0,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
             self.x_t[1,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
@@ -93,8 +98,8 @@ class PF:
         # extract odometry commands.
         d_d = u[0]; d_th = u[1]
         # create process noise distribution.
-        noise = multivariate_normal.rvs(mean=None, cov=self.V, size=self.NUM_PARTICLES)
-        for i in range(self.NUM_PARTICLES):
+        noise = multivariate_normal.rvs(mean=None, cov=self.V, size=self.params["NUM_PARTICLES"])
+        for i in range(self.params["NUM_PARTICLES"]):
             # sample a random realization of the process noise. 
             # apply motion model to predict next pose for this particle.
             self.x_pred[0,i] = self.x_t[0,i] + (d_d + noise[i][0])*cos(self.x_t[2,i])
@@ -114,10 +119,10 @@ class PF:
         # for each observed landmark, compute the distance we'd expect given the map and particle i's pose.
         log_likelihood = 0
         for l in range(len(z) // 3):
-            # TODO likelihood should be zero if range is further than max vision range or bearing is outside fov.
+            # likelihood should be ~ zero if range is further than max vision range or bearing is outside fov.
             r_exp, b_exp = self.raycast(z[3*l], i)
-            r_distr = (1-wt_rand)*norm.cdf(z[3*l+1], loc=r_exp, scale=self.W[0,0]) + wt_rand*uniform.cdf(z[3*l+1], loc=0, scale=2**(1/2)*(1.5*self.MAP_BOUNDS[1]-1.5*self.MAP_BOUNDS[0]))
-            b_distr = (1-wt_rand)*norm.cdf(z[3*l+2], loc=b_exp, scale=self.W[1,1]) + wt_rand*uniform.cdf(z[3*l+2], loc=-pi, scale=2*pi)
+            r_distr = (1-wt_rand)*norm.cdf(z[3*l+1], loc=r_exp, scale=self.W[0,0]) + wt_rand*uniform.cdf(z[3*l+1], loc=0, scale=self.params["RANGE_MAX"])
+            b_distr = (1-wt_rand)*norm.cdf(z[3*l+2], loc=b_exp, scale=self.W[1,1]) + wt_rand*uniform.cdf(z[3*l+2], loc=self.params["FOV_MIN"], scale=self.params["FOV_MAX"]-self.params["FOV_MIN"])
             log_likelihood += log(r_distr) + log(b_distr)
 
         return log_likelihood
@@ -139,8 +144,8 @@ class PF:
         """
         msg = PFState()
         msg.timestep = self.timestep
-        msg.x = [self.x_t[0,i] for i in range(self.NUM_PARTICLES)]
-        msg.y = [self.x_t[1,i] for i in range(self.NUM_PARTICLES)]
-        msg.yaw = [self.x_t[2,i] for i in range(self.NUM_PARTICLES)]
+        msg.x = [self.x_t[0,i] for i in range(self.params["NUM_PARTICLES"])]
+        msg.y = [self.x_t[1,i] for i in range(self.params["NUM_PARTICLES"])]
+        msg.yaw = [self.x_t[2,i] for i in range(self.params["NUM_PARTICLES"])]
         # TODO look into publishing weights as well.
         return msg

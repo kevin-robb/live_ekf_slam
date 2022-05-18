@@ -44,7 +44,7 @@ void lmMeasCallback(const std_msgs::Float32MultiArray::ConstPtr& msg) {
 
 int main(int argc, char **argv) {
     float param = -2;
-    ros::init(argc, argv, "cpp_ekf_node");
+    ros::init(argc, argv, "ekf_node");
     ros::NodeHandle node("~");
     node.getParam("/DT", param);
     float DT = param; //std::stof(param);
