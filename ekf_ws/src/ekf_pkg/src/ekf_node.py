@@ -61,6 +61,8 @@ def read_params(pkg_path):
     # set process and sensing noise.
     V = np.array([[params["V_00"],0.0],[0.0,params["V_11"]]])
     W = np.array([[params["W_00"],0.0],[0.0,params["W_11"]]])
+    # get DT from rosparam.
+    params["DT"] = rospy.get_param("/DT")
 
 
 # main EKF loop that happens every timestep.
@@ -198,20 +200,8 @@ def get_landmarks(msg):
     lm_meas_queue.append(msg.data)
 
 def main():
-    global state_pub, DT
+    global state_pub
     rospy.init_node('ekf_node')
-
-    # read DT from command line arg.
-    try:
-        if len(sys.argv) < 2 or sys.argv[1] == "-1":
-            rospy.logwarn("DT not provided to ekf_node. Using DT="+str(DT))
-        else:
-            DT = float(sys.argv[1])
-            if DT <= 0:
-                raise Exception("Negative DT issued.")
-    except:
-        rospy.logerr("DT param must be a positive float.")
-        exit()
 
     # find the filepath to data package.
     rospack = rospkg.RosPack()
@@ -227,7 +217,7 @@ def main():
     # create publisher for the current state.
     state_pub = rospy.Publisher("/state/ekf", EKFState, queue_size=1)
 
-    rospy.Timer(rospy.Duration(DT), ekf_iteration)
+    rospy.Timer(rospy.Duration(params["DT"]), ekf_iteration)
     rospy.spin()
 
 

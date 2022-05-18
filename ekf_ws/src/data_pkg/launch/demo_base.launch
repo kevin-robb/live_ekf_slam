@@ -1,10 +1,11 @@
 <launch>
     <!-- Launch the basic necessities for all demos. -->
-    <arg name="DT" default="-1"/>
     <arg name="map" default="-1"/>
 
+    <param name="DT" value="0.05" />
+
     <!-- node to send odom and measurements to the ekf -->
-    <node pkg="data_pkg" type="data_fwd_node.py" name="data_fwd_node"  args="$(arg DT) $(arg map)" output="screen" />
+    <node pkg="data_pkg" type="data_fwd_node.py" name="data_fwd_node"  args="$(arg map)" output="screen" />
     <!-- plotting node -->
     <node pkg="data_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
 </launch>

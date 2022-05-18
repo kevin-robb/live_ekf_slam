@@ -1,14 +1,11 @@
 <launch>
-    <!-- Usage: roslaunch ekf_slam_demo.launch dt:=0.5 -->
-    <arg name="DT" default="-1"/>
     <arg name="map" default="-1"/>
 
     <!-- EKF node -->
-    <node pkg="ekf_pkg" type="ekf_node.py" name="ekf_node"  args="$(arg DT)" output="screen" />
+    <node pkg="ekf_pkg" type="ekf_node.py" name="ekf_node" output="screen" />
 
     <!-- Call main driver script. -->
     <include file="$(find data_pkg)/launch/demo_base.launch" >
-        <arg name="DT" value="$(arg DT)"/>
         <arg name="map" value="$(arg map)"/>
     </include>
 </launch>

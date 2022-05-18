@@ -1,16 +1,13 @@
 <launch>
-    <!-- Usage: roslaunch cpp_ekf_demo.launch dt:=0.5 -->
-    <arg name="DT" default="-1"/>
     <arg name="map" default="-1"/>
 
-    <param name="DTparam" value="$(arg DT)" />
+    <!-- <param name="DT" value="0.05" /> -->
 
     <!-- EKF node -->
     <node pkg="ekf_pkg" type="cpp_ekf_node" name="cpp_ekf_node"  output="screen" />
     
     <!-- Call main driver script. -->
     <include file="$(find data_pkg)/launch/demo_base.launch" >
-        <arg name="DT" value="$(arg DT)"/>
         <arg name="map" value="$(arg map)"/>
     </include>
 </launch>

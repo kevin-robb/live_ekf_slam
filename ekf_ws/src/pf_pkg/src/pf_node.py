@@ -45,6 +45,8 @@ def read_params(pkg_path):
                 params[key] = float(arg)
             except:
                 params[key] = (arg == "True")
+    # get DT from rosparam.
+    params["DT"] = rospy.get_param("/DT")
 
 
 # main PF loop that uses monte carlo localization.
@@ -94,18 +96,6 @@ def main():
     global DT, set_pub
     rospy.init_node('pf_node')
 
-    # read DT from command line arg.
-    try:
-        if len(sys.argv) < 2 or sys.argv[1] == "-1":
-            rospy.logwarn("DT not provided to ekf_node. Using DT="+str(DT))
-        else:
-            DT = float(sys.argv[1])
-            if DT <= 0:
-                raise Exception("Negative DT issued.")
-    except:
-        rospy.logerr("DT param must be a positive float.")
-        exit()
-
     # find the filepath to data package.
     rospack = rospkg.RosPack()
     pkg_path = rospack.get_path('data_pkg')
@@ -123,7 +113,7 @@ def main():
     # create publisher for the current state.
     set_pub = rospy.Publisher("/state/pf", Float32MultiArray, queue_size=1)
 
-    rospy.Timer(rospy.Duration(DT), mcl_iteration)
+    rospy.Timer(rospy.Duration(params["DT"]), mcl_iteration)
     rospy.spin()
 
 

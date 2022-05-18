@@ -55,7 +55,6 @@ def read_params(pkg_path):
                 params[key] = float(arg)
             except:
                 params[key] = (arg == "True")
-    print(params)
 
 
 def cov_to_ellipse(P_v):

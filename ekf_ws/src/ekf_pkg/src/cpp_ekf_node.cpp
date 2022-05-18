@@ -46,10 +46,10 @@ int main(int argc, char **argv) {
     float param = -2;
     ros::init(argc, argv, "cpp_ekf_node");
     ros::NodeHandle node("~");
-    node.getParam("/DTparam", param);
+    node.getParam("/DT", param);
     float DT = param; //std::stof(param);
     if (DT <= 0) {
-        std::cout << "DT must be positive. Using DT=0.05." << std::endl << std::flush;
+        std::cout << "Using DT=0.05." << std::endl << std::flush;
         DT = 0.05;
     }
 

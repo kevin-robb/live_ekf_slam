@@ -16,9 +16,8 @@ import numpy as np
 
 ############ GLOBAL VARIABLES ###################
 params = {}
-DT = 0.05 # timer period used if cmd line param not provided.
+# publishers
 odom_pub = None; lm_pub = None; true_map_pub = None; true_pose_pub = None
-pkg_path = None # filepath to this package.
 # Default map from RSS demo:
 demo_map = { 0 : (6.2945, 8.1158), 1 : (-7.4603, 8.2675), 2 : (2.6472, -8.0492), 
         3 : (-4.4300, 0.9376), 4 : (9.1501, 9.2978), 5 : (-6.8477, 9.4119), 6 : (9.1433, -0.2925),
@@ -35,7 +34,6 @@ def read_params(pkg_path):
     """
     global params
     params_file = open(pkg_path+"/config/params.txt", "r")
-    params = {}
     lines = params_file.readlines()
     for line in lines:
         if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
@@ -50,9 +48,11 @@ def read_params(pkg_path):
                 params[key] = float(arg)
             except:
                 params[key] = (arg == "True")
+    # get DT from rosparam.
+    params["DT"] = rospy.get_param("/DT")
 
 
-def read_rss_data():
+def read_rss_data(pkg_path):
     """
     Files have a demo set of pre-generated data,
     including odometry commands and sensor measurements
@@ -83,7 +83,7 @@ def read_rss_data():
     true_map_pub.publish(true_map_msg)
     # send data one timestep at a time to the ekf.
     i_z = 0; i = 0
-    r = rospy.Rate(1/DT) # freq in Hz
+    r = rospy.Rate(1/params["DT"]) # freq in Hz
     while not rospy.is_shutdown():
         if i == len(z_id): return
     
@@ -109,7 +109,7 @@ def norm(l1, l2):
     return ((l1[0]-l2[0])**2 + (l1[1]-l2[1])**2)**(1/2) 
 
 
-def generate_data(map_type:str):
+def generate_data(map_type:str, pkg_path):
     """
     Create a set of 20 landmarks forming the map.
     Choose a trajectory through the space that will
@@ -290,7 +290,7 @@ def generate_data(map_type:str):
     t = 0
     odom_msg = Vector3()
     lm_msg = Float32MultiArray()
-    r = rospy.Rate(1/DT) # freq in Hz
+    r = rospy.Rate(1/params["DT"]) # freq in Hz
     while not rospy.is_shutdown():
         if t == params["NUM_TIMESTEPS"]: return
         # send odom as x,y components of a vector.
@@ -307,28 +307,15 @@ def generate_data(map_type:str):
     
 
 def main():
-    global lm_pub, odom_pub, pkg_path, DT, true_map_pub, true_pose_pub
+    global lm_pub, odom_pub, pkg_path, true_map_pub, true_pose_pub
     rospy.init_node('data_fwd_node')
 
-    # read DT and map from command line arg.
-    try:
-        # get map type.
-        if len(sys.argv) < 3 or sys.argv[2] == "-1":
-            rospy.logwarn("map not provided to data_fwd_node. Using random.\nOptions for map type include [random, grid, demo_full]")
-            map_type = "random"
-        else:
-            map_type = sys.argv[2]
-        
-        # get dt.
-        if len(sys.argv) < 2 or sys.argv[1] == "-1":
-            rospy.logwarn("DT not provided to data_fwd_node. Using DT="+str(DT))
-        else:
-            DT = float(sys.argv[1])
-            if DT <= 0:
-                raise Exception("DT must be positive.")
-    except:
-        rospy.logerr("DT param must be a positive float.")
-        exit()
+    # read map type from command line arg.
+    if len(sys.argv) < 2 or sys.argv[1] == "-1":
+        rospy.logwarn("map not provided to data_fwd_node. Using random.\nOptions for map type include [random, grid, demo_full]")
+        map_type = "random"
+    else:
+        map_type = sys.argv[1]
 
     # find the filepath to this package.
     rospack = rospkg.RosPack()
@@ -347,10 +334,10 @@ def main():
 
     if map_type == "demo_full":
         # read data from RSS-RVC demo.
-        read_rss_data()
+        read_rss_data(pkg_path)
     else:
         # create data.
-        generate_data(map_type)
+        generate_data(map_type, pkg_path)
 
     rospy.spin()
 
