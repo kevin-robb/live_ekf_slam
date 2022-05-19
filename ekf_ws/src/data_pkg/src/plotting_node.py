@@ -128,9 +128,8 @@ def update_plot(filter:str, msg):
         plots["veh_cov_est"], = plt.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey')
 
         ############## LANDMARK EST ##################
-        if n > 3:
-            lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
-            lm_y = [msg.landmarks[i] for i in range(2,len(msg.landmarks),3)]
+        lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
+        lm_y = [msg.landmarks[i] for i in range(2,len(msg.landmarks),3)]
         # remove old landmark estimates.
         if "lm_pos_est" in plots.keys():
             plots["lm_pos_est"].remove()

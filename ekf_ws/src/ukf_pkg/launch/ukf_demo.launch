@@ -1,0 +1,11 @@
+<launch>
+    <arg name="map" default="-1"/>
+
+    <!-- C++ EKF node -->
+    <node pkg="ukf_pkg" type="ukf_node" name="ukf_node"  output="screen" />
+    
+    <!-- Call main driver script. -->
+    <include file="$(find data_pkg)/launch/demo_base.launch" >
+        <arg name="map" value="$(arg map)"/>
+    </include>
+</launch>
