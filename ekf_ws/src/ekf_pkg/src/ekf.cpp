@@ -134,18 +134,11 @@ void EKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
             this->Y(3+2*this->M-1,2) = r*cos(this->x_pred(2)+b);
 
             // update covariance.
-            this->p1.resize(3+2*this->M-2, 3+2*this->M);
-            this->z1.setZero(3+2*this->M-2, 2);
-            this->p1 << this->P_pred, this->z1;
-
-            this->p2.resize(2, 3+2*this->M);
-            this->z2.setZero(2, 3+2*this->M-2);
-            this->p2 << z2, this->W;
-
-            this->p3.resize(3+2*this->M, 3+2*this->M);
-            this->p3 << this->p1, this->p2;
+            this->p_temp.setZero(3+2*this->M, 3+2*this->M);
+            this->p_temp.block(0,0,3+2*this->M-2,3+2*this->M-2) = this->P_pred;
+            this->p_temp.block(3+2*this->M-2,3+2*this->M-2,2,2) = this->W;
             
-            this->P_pred = this->Y * this->p3 * this->Y.transpose();
+            this->P_pred = this->Y * this->p_temp * this->Y.transpose();
         }
     }
     // after all landmarks have been processed, update the state.

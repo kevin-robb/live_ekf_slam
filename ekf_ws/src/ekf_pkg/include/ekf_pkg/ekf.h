@@ -44,12 +44,8 @@ class EKF {
     Eigen::MatrixXd G_z;
     Eigen::MatrixXd G_x;
     Eigen::MatrixXd Y; //insertion jacobian
-    // intermediary matrices needed to update cov.
-    Eigen::MatrixXd p1;
-    Eigen::MatrixXd z1;
-    Eigen::MatrixXd p2;
-    Eigen::MatrixXd z2;
-    Eigen::MatrixXd p3;
+    // intermediary matrix used to update cov.
+    Eigen::MatrixXd p_temp;
 
     EKF();
     void update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
