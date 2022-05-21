@@ -173,7 +173,7 @@ def main():
     read_params(pkg_path)
 
     # subscribe to odom commands.
-    rospy.Subscriber("/odom", Vector3, get_cmd, queue_size=100)
+    rospy.Subscriber("/odom", Vector3, get_cmd, queue_size=1)
     # publish first odom cmd to start it all off.
     cmd_pub = rospy.Publisher("/odom", Vector3, queue_size=1)
 

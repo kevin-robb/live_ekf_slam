@@ -10,6 +10,7 @@ from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from ekf_pkg.msg import EKFState
 from pf_pkg.msg import PFState
+from matplotlib.backend_bases import MouseButton
 from matplotlib import pyplot as plt
 import numpy as np
 import atexit
@@ -26,6 +27,8 @@ true_map = None # true landmark map.
 pos_time_display = None
 # output filename prefix.
 fname = ""
+# publish clicked point on map for planner.
+goal_pub = None
 #################################################
 
 
@@ -211,7 +214,43 @@ def get_true_map(msg):
     lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
     true_map = [lm_x, lm_y]
 
+# def move_figure(f, x, y):
+# # change position that the plot appears.
+# # https://stackoverflow.com/questions/7449585/how-do-you-set-the-absolute-position-of-figure-windows-with-matplotlib
+#     """Move figure's upper left corner to pixel (x, y)"""
+#     backend = matplotlib.get_backend()
+#     if backend == 'TkAgg':
+#         f.canvas.manager.window.wm_geometry("+%d+%d" % (x, y))
+#     elif backend == 'WXAgg':
+#         f.canvas.manager.window.SetPosition((x, y))
+#     else:
+#         # This works for QT and GTK
+#         # You can also use window.setGeometry
+#         f.canvas.manager.window.move(x, y)
+
+# binding_id = plt.connect('motion_notify_event', on_move)
+# def on_move(event):
+#     # get the x and y pixel coords
+#     x, y = event.x, event.y
+#     if event.inaxes:
+#         ax = event.inaxes  # the axes instance
+#         print('data coords %f %f' % (event.xdata, event.ydata))
+
+def on_click(event):
+    global plots
+    if event.button is MouseButton.LEFT:
+        # set clicked point to the new goal.
+        print("Setting goal to ("+str(event.xdata)+", "+str(event.ydata)+")")
+        goal = [event.xdata, event.ydata]
+        # update the plot to show the current goal.
+        if "goal_pt" in plots.keys():
+            plots["goal_pt"].remove()
+        plots["goal_pt"] = plt.scatter(event.xdata, event.ydata, color="yellow", edgecolors="black", s=40)
+    # publish new goal pt for the planner.
+    goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
+
 def main():
+    global goal_pub
     rospy.init_node('plotting_node')
 
     # make live plot bigger.
@@ -231,12 +270,16 @@ def main():
     rospy.Subscriber("/state/pf", PFState, get_pf_state, queue_size=1)
 
     # subscribe to ground truth.
-    rospy.Subscriber("/truth/veh_pose",Vector3, get_true_pose, queue_size=1)
-    rospy.Subscriber("/truth/landmarks",Float32MultiArray, get_true_map, queue_size=1)
+    rospy.Subscriber("/truth/veh_pose", Vector3, get_true_pose, queue_size=1)
+    rospy.Subscriber("/truth/landmarks", Float32MultiArray, get_true_map, queue_size=1)
+
+    # publish the chosen goal point for the planner.
+    goal_pub = rospy.Publisher("/plan/goal", Vector3, queue_size=1)
 
     # startup the plot.
     # plt.ion()
     plt.figure()
+    plt.connect('button_press_event', on_click)
     plt.show()
 
     rospy.spin()
