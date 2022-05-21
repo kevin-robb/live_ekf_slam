@@ -6,6 +6,6 @@
     <node pkg="data_pkg" type="sim_node.py" name="sim_node"  args="$(arg map)" output="screen" />
     <!-- plotting node -->
     <node pkg="data_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
-    <!-- path planning node -->
-    <node pkg="planning_pkg" type="planning_node.py" name="planning_node" output="screen" />
+    <!-- node to pursue point chosen as goal -->
+    <node pkg="planning_pkg" type="goal_pursuit_node.py" name="goal_pursuit_node" output="screen" />
 </launch>

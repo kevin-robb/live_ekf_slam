@@ -156,7 +156,7 @@ def generate_data(map_type:str, pkg_path):
         odom_hdg = [float(h) for h in odom_raw[1].split(",")]
     else:
         # param to keep track of true current pos.
-        x0 = [0.0,0.0,0.0]
+        x0 = [params["x_0"],params["y_0"],params["yaw_0"]]
         # randomize starting pose.
         # x0 = [2*params["MAP_BOUND"]*random() - params["MAP_BOUND"], 2*params["MAP_BOUND"]*random() - params["MAP_BOUND"], 2*pi*random() - pi]
         x_v = x0
@@ -275,29 +275,20 @@ def generate_data(map_type:str, pkg_path):
 
     ############### SEND DATA ################
     # Publish ground truth of map and veh pose for plotter.
-    rospy.loginfo("Waiting to publish ground truth for plotter.")
+    # rospy.loginfo("Waiting to publish ground truth for plotter.")
     # if we send it before the other nodes have initialized, they'll miss their one chance to get it.
     rospy.sleep(1)
-    true_pose_msg = Float32MultiArray()
-    true_pose_msg.data = sum(pos_true, [])
-    true_pose_pub.publish(true_pose_msg)
-    true_map_msg = Float32MultiArray()
-    true_map_msg.data = sum([[id, landmarks[id][0], landmarks[id][1]] for id in landmarks.keys()], [])
-    true_map_pub.publish(true_map_msg)
+    true_map_pub.publish(Float32MultiArray(data=sum([[id, landmarks[id][0], landmarks[id][1]] for id in landmarks.keys()], [])))
     # Send noisy data one timestep at a time to the ekf.
     t = 0
-    odom_msg = Vector3()
-    lm_msg = Float32MultiArray()
     r = rospy.Rate(1/params["DT"]) # freq in Hz
     while not rospy.is_shutdown():
         if t == params["NUM_TIMESTEPS"]: return
-        # send odom as x,y components of a vector.
-        odom_msg.x = odom_dist[t]
-        odom_msg.y = odom_hdg[t]
-        odom_pub.publish(odom_msg)
+        # send odom as x,y components of a vector3.
+        odom_pub.publish(Vector3(x=odom_dist[t], y=odom_hdg[t]))
+        true_pose_pub.publish(Vector3(x=pos_true[t][0], y=pos_true[t][1], z=pos_true[t][2]))
         # always send a measurement. empty list if no detection.
-        lm_msg.data = z[t]
-        lm_pub.publish(lm_msg)
+        lm_pub.publish(data=z[t])
         # increment time.
         t += 1
         # sleep to publish at desired freq.
@@ -327,7 +318,7 @@ def main():
     odom_pub = rospy.Publisher("/odom", Vector3, queue_size=1)
 
     # publish ground truth for the plotter.
-    true_pose_pub = rospy.Publisher("/truth/veh_pose",Float32MultiArray, queue_size=1)
+    true_pose_pub = rospy.Publisher("/truth/veh_pose",Vector3, queue_size=1)
     true_map_pub = rospy.Publisher("/truth/landmarks",Float32MultiArray, queue_size=1)
 
     if map_type == "demo_full":

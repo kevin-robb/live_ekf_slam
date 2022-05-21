@@ -207,47 +207,26 @@ def get_true_pose(msg):
     true_pose = msg
 
 def get_true_map(msg):
-    rospy.loginfo("Ground truth map received by plotting node.")
+    # rospy.loginfo("Ground truth map received by plotting node.")
     # plot the true map to compare to estimates.
     global true_map
     lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
     lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
     true_map = [lm_x, lm_y]
 
-# def move_figure(f, x, y):
-# # change position that the plot appears.
-# # https://stackoverflow.com/questions/7449585/how-do-you-set-the-absolute-position-of-figure-windows-with-matplotlib
-#     """Move figure's upper left corner to pixel (x, y)"""
-#     backend = matplotlib.get_backend()
-#     if backend == 'TkAgg':
-#         f.canvas.manager.window.wm_geometry("+%d+%d" % (x, y))
-#     elif backend == 'WXAgg':
-#         f.canvas.manager.window.SetPosition((x, y))
-#     else:
-#         # This works for QT and GTK
-#         # You can also use window.setGeometry
-#         f.canvas.manager.window.move(x, y)
-
-# binding_id = plt.connect('motion_notify_event', on_move)
-# def on_move(event):
-#     # get the x and y pixel coords
-#     x, y = event.x, event.y
-#     if event.inaxes:
-#         ax = event.inaxes  # the axes instance
-#         print('data coords %f %f' % (event.xdata, event.ydata))
-
 def on_click(event):
     global plots
-    if event.button is MouseButton.LEFT:
-        # set clicked point to the new goal.
-        print("Setting goal to ("+str(event.xdata)+", "+str(event.ydata)+")")
-        goal = [event.xdata, event.ydata]
+    if event.button is MouseButton.RIGHT:
+        # kill the node.
+        rospy.loginfo("Killing plotting_node on right click.")
+        exit()
+    elif event.button is MouseButton.LEFT:
         # update the plot to show the current goal.
         if "goal_pt" in plots.keys():
             plots["goal_pt"].remove()
         plots["goal_pt"] = plt.scatter(event.xdata, event.ydata, color="yellow", edgecolors="black", s=40)
-    # publish new goal pt for the planner.
-    goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
+        # publish new goal pt for the planner.
+        goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
 
 def main():
     global goal_pub
@@ -290,3 +269,26 @@ if __name__ == '__main__':
         main()
     except rospy.ROSInterruptException:
         pass
+
+
+# def move_figure(f, x, y):
+# # change position that the plot appears.
+# # https://stackoverflow.com/questions/7449585/how-do-you-set-the-absolute-position-of-figure-windows-with-matplotlib
+#     """Move figure's upper left corner to pixel (x, y)"""
+#     backend = matplotlib.get_backend()
+#     if backend == 'TkAgg':
+#         f.canvas.manager.window.wm_geometry("+%d+%d" % (x, y))
+#     elif backend == 'WXAgg':
+#         f.canvas.manager.window.SetPosition((x, y))
+#     else:
+#         # This works for QT and GTK
+#         # You can also use window.setGeometry
+#         f.canvas.manager.window.move(x, y)
+
+# binding_id = plt.connect('motion_notify_event', on_move)
+# def on_move(event):
+#     # get the x and y pixel coords
+#     x, y = event.x, event.y
+#     if event.inaxes:
+#         ax = event.inaxes  # the axes instance
+#         print('data coords %f %f' % (event.xdata, event.ydata))

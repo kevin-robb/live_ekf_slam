@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 """
+Command vehicle to pursue path to goal point chosen by clicking the plot.
 Generate the next odom command based on current state estimate.
 """
 
@@ -14,7 +15,7 @@ from math import remainder, tau, atan2
 ############ GLOBAL VARIABLES ###################
 params = {}
 cmd_pub = None
-goal = [0.0, 0.0] # goal x,y point.
+goal = [0.0, 0.0] # target x,y point.
 #################################################
 
 
@@ -52,19 +53,23 @@ def choose_command(state_msg):
     choose and send an odom cmd to the vehicle.
     TODO also get occ grid and do A* on it.
     """
-    odom_msg = Vector3()
+    global goal
+    # check how close veh is to our current goal pt.
+    r = norm([state_msg.x_v, state_msg.y_v], goal)
     # compute vector from veh pos est to goal.
     diff_vec = [goal[0]-state_msg.x_v, goal[1]-state_msg.y_v]
-    # extract range and bearing differences.
-    r = norm([state_msg.x_v, state_msg.y_v], goal)
+    # calculate bearing difference.
     gb = atan2(diff_vec[1], diff_vec[0]) # global bearing.
     beta = remainder(gb - state_msg.yaw_v, tau) # bearing rel to robot
-
-    # turn these into commands.
+    # turn this into a command.
+    odom_msg = Vector3()
     # go faster the more aligned the hdg is.
     odom_msg.x = 0.05 * (1 - abs(beta)/30)**5 + 0.005 if r > 0.05 else 0.0
-    P = 0.03 #if r > 0.1 else 0.1
-    odom_msg.y = beta * P
+    P = 0.03 if r > 0.2 else 0.2
+    odom_msg.y = beta * P if r > 0.05 else 0.0
+    # ensure commands are capped within constraints.
+    odom_msg.x = max(0, min(odom_msg.x, params["ODOM_D_MAX"]))
+    odom_msg.y = max(-params["ODOM_TH_MAX"], min(odom_msg.y, params["ODOM_TH_MAX"]))
     cmd_pub.publish(odom_msg)
 
 
@@ -84,11 +89,12 @@ def get_pf_state(msg):
 def get_goal_pt(msg):
     global goal
     goal = [msg.x, msg.y]
+    rospy.loginfo("Setting goal pt to ("+"{0:.4f}".format(msg.x)+", "+"{0:.4f}".format(msg.y)+")")
 
 
 def main():
-    global cmd_pub, binding_id
-    rospy.init_node('planning_node')
+    global cmd_pub
+    rospy.init_node('goal_pursuit_node')
 
     # find the filepath to this package.
     rospack = rospkg.RosPack()
@@ -106,6 +112,9 @@ def main():
 
     # subscribe to current goal point.
     rospy.Subscriber("/plan/goal", Vector3, get_goal_pt, queue_size=1)
+
+    # instruct the user.
+    rospy.loginfo("Left-click on the plot to set the vehicle's goal position.")
 
     rospy.spin()
 

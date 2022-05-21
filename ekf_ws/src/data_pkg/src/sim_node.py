@@ -97,7 +97,7 @@ def generate_map(map_type:str):
         exit()
 
     # Publish ground truth of map and veh pose for plotter.
-    rospy.loginfo("Waiting to publish ground truth for plotter.")
+    # rospy.loginfo("Waiting to publish ground truth for plotter.")
     # if we send it before the other nodes have initialized, they'll miss their one chance to get it.
     rospy.sleep(1)
     true_map_msg = Float32MultiArray()
