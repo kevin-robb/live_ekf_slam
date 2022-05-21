@@ -2,7 +2,7 @@
 DT = 0.05
 
 # starting veh pose.
-x_0 = 0.0
+x_0 = -10.0
 y_0 = -10.0
 yaw_0 = 0.0
 

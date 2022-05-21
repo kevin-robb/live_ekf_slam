@@ -15,6 +15,9 @@ import numpy as np
 ############ GLOBAL VARIABLES ###################
 params = {}
 cmd_pub = None
+desired = [0.0, 0.0]
+current = [0.0, 0.0]
+conv_rate = 0.01
 #################################################
 
 
@@ -48,14 +51,26 @@ def choose_command(state_msg):
     choose and send an odom cmd to the vehicle.
     TODO also get occ grid and do A* on it.
     """
+    global current
     # for now just make at random.
     odom_msg = Vector3()
     # odom_msg.x = params["ODOM_D_MAX"]*random() # distance.
     # odom_msg.y = 2*params["ODOM_TH_MAX"]*random() - params["ODOM_TH_MAX"] # heading.
-    odom_msg.x = 0.05
-    odom_msg.y = 0.05 * np.sign(state_msg.x_v)
+    # odom_msg.x = 0.05
+    # odom_msg.y = 0.05 * np.sign(state_msg.x_v)
+    odom_msg.x = current[0]*(1-conv_rate) + desired[0]*conv_rate
+    odom_msg.y = current[1]*(1-conv_rate) + desired[1]*conv_rate
+    current = [odom_msg.x, odom_msg.y]
     cmd_pub.publish(odom_msg)
 
+def set_cmd():
+    global desired
+    r = rospy.Rate(1/params["DT"])
+    while not rospy.is_shutdown():
+        inp = input("command: ").split(" ")
+        if inp[0] in ["o", "odom"]: desired[0] = float(inp[1])
+        if inp[0] in ["h", "hdg"]: desired[1] = float(inp[1])
+        r.sleep()
 
 
 def get_ekf_state(msg):
@@ -88,6 +103,9 @@ def main():
 
     # publish odom commands for the vehicle.
     cmd_pub = rospy.Publisher("/odom", Vector3, queue_size=100)
+
+    # ask user for commands.
+    set_cmd()
 
     rospy.spin()
 
