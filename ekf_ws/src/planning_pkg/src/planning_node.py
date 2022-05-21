@@ -11,13 +11,12 @@ from ekf_pkg.msg import EKFState
 from pf_pkg.msg import PFState
 from random import random
 import numpy as np
+from math import remainder, tau, atan2
 
 ############ GLOBAL VARIABLES ###################
 params = {}
 cmd_pub = None
-desired = [0.0, 0.0]
-current = [0.0, 0.0]
-conv_rate = 0.01
+goal = [0.0, 0.0] # goal x,y point.
 #################################################
 
 
@@ -44,6 +43,10 @@ def read_params(pkg_path):
             except:
                 params[key] = (arg == "True")
 
+def norm(l1, l2):
+    # compute the norm of the difference of two lists or tuples.
+    # only use the first two elements.
+    return ((l1[0]-l2[0])**2 + (l1[1]-l2[1])**2)**(1/2) 
 
 def choose_command(state_msg):
     """
@@ -51,25 +54,29 @@ def choose_command(state_msg):
     choose and send an odom cmd to the vehicle.
     TODO also get occ grid and do A* on it.
     """
-    global current
-    # for now just make at random.
     odom_msg = Vector3()
-    # odom_msg.x = params["ODOM_D_MAX"]*random() # distance.
-    # odom_msg.y = 2*params["ODOM_TH_MAX"]*random() - params["ODOM_TH_MAX"] # heading.
-    # odom_msg.x = 0.05
-    # odom_msg.y = 0.05 * np.sign(state_msg.x_v)
-    odom_msg.x = current[0]*(1-conv_rate) + desired[0]*conv_rate
-    odom_msg.y = current[1]*(1-conv_rate) + desired[1]*conv_rate
-    current = [odom_msg.x, odom_msg.y]
+
+    # compute vector from veh pos est to goal.
+    diff_vec = [goal[0]-state_msg.x_v, goal[1]-state_msg.y_v]
+    # extract range and bearing differences.
+    r = norm([state_msg.x_v, state_msg.y_v], goal)
+    gb = atan2(diff_vec[1], diff_vec[0]) # global bearing.
+    beta = remainder(gb - state_msg.yaw_v, tau) # bearing rel to robot
+
+    # turn these into commands.
+    # go faster the more aligned the hdg is.
+    odom_msg.x = 0.05 * (1 - abs(beta)/30)**5 + 0.005 if r > 0.05 else 0.0
+    P = 0.03 #if r > 0.1 else 0.1
+    odom_msg.y = beta * P
+
     cmd_pub.publish(odom_msg)
 
 def set_cmd():
-    global desired
+    global goal
     r = rospy.Rate(1/params["DT"])
     while not rospy.is_shutdown():
-        inp = input("command: ").split(" ")
-        if inp[0] in ["o", "odom"]: desired[0] = float(inp[1])
-        if inp[0] in ["h", "hdg"]: desired[1] = float(inp[1])
+        inp = input("goal pos: ").split(" ")
+        goal = [float(inp[0]), float(inp[1])]
         r.sleep()
 
 
