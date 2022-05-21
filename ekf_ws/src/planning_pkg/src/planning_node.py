@@ -7,16 +7,21 @@ Generate the next odom command based on current state estimate.
 import rospy
 import rospkg
 from geometry_msgs.msg import Vector3
+from std_msgs.msg import Float32MultiArray
 from ekf_pkg.msg import EKFState
 from pf_pkg.msg import PFState
 from random import random
 import numpy as np
 from math import remainder, tau, atan2
+from matplotlib import pyplot as plt
+from matplotlib.backend_bases import MouseButton
+import matplotlib
 
 ############ GLOBAL VARIABLES ###################
 params = {}
 cmd_pub = None
 goal = [0.0, 0.0] # goal x,y point.
+goal_plot = None
 #################################################
 
 
@@ -93,8 +98,54 @@ def get_pf_state(msg):
     # TODO
     pass
     
+
+def on_move(event):
+    # get the x and y pixel coords
+    x, y = event.x, event.y
+    if event.inaxes:
+        ax = event.inaxes  # the axes instance
+        print('data coords %f %f' % (event.xdata, event.ydata))
+
+def on_click(event):
+    global goal, goal_plot
+    if event.button is MouseButton.LEFT:
+        # set clicked point to the new goal.
+        print("Setting goal to ("+str(event.xdata)+", "+str(event.ydata)+")")
+        goal = [event.xdata, event.ydata]
+        # update the plot to show the current goal.
+        if goal_plot is not None:
+            goal_plot.remove()
+        goal_plot = plt.scatter(event.xdata, event.ydata, color="yellow", edgecolors="black", s=30)
+        # print('disconnecting callback')
+        # plt.disconnect(binding_id)
+
+def move_figure(f, x, y):
+# change position that the plot appears.
+# https://stackoverflow.com/questions/7449585/how-do-you-set-the-absolute-position-of-figure-windows-with-matplotlib
+    """Move figure's upper left corner to pixel (x, y)"""
+    backend = matplotlib.get_backend()
+    if backend == 'TkAgg':
+        f.canvas.manager.window.wm_geometry("+%d+%d" % (x, y))
+    elif backend == 'WXAgg':
+        f.canvas.manager.window.SetPosition((x, y))
+    else:
+        # This works for QT and GTK
+        # You can also use window.setGeometry
+        f.canvas.manager.window.move(x, y)
+
+def get_true_map(msg):
+    """
+    Show the user the true map to allow them to select a goal position.
+    NOTE this true map is NOT used by the path planner; it relies only on the EKF state estimate.
+    """
+    # plot the true map to compare to estimates.
+    lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
+    lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
+    true_map = [lm_x, lm_y]
+    plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black")
+
 def main():
-    global cmd_pub
+    global cmd_pub, binding_id
     rospy.init_node('planning_node')
 
     # find the filepath to this package.
@@ -111,8 +162,27 @@ def main():
     # publish odom commands for the vehicle.
     cmd_pub = rospy.Publisher("/odom", Vector3, queue_size=100)
 
+    # subscribe to landmark map for goal choice plot.
+    rospy.Subscriber("/truth/landmarks",Float32MultiArray, get_true_map, queue_size=1)
+
     # ask user for commands.
-    set_cmd()
+    # set_cmd()
+    # make sneaky plot behind the visible one.
+    plt.rcParams["figure.figsize"] = (4,4)
+    fig = plt.figure()
+    move_figure(fig, 1400, 550)
+    # set plot params to be the same as the real one.
+    plt.axis("equal")
+    plt.xlabel("x (m)")
+    plt.ylabel("y (m)")
+    plt.xlim([-1.5*params["MAP_BOUND"],1.5*params["MAP_BOUND"]])
+    plt.ylim([-1.5*params["MAP_BOUND"],1.5*params["MAP_BOUND"]])
+    plt.title("EKF-Estimated Trajectory and Landmarks")
+    # register clicks on the plot.
+    binding_id = plt.connect('motion_notify_event', on_move)
+    plt.connect('button_press_event', on_click)
+    # "show" the plot.
+    plt.show()
 
     rospy.spin()
 

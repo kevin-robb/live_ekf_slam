@@ -210,7 +210,6 @@ def get_true_map(msg):
     lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
     lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
     true_map = [lm_x, lm_y]
-    
 
 def main():
     rospy.init_node('plotting_node')
@@ -236,7 +235,8 @@ def main():
     rospy.Subscriber("/truth/landmarks",Float32MultiArray, get_true_map, queue_size=1)
 
     # startup the plot.
-    plt.ion()
+    # plt.ion()
+    plt.figure()
     plt.show()
 
     rospy.spin()
