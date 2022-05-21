@@ -24,7 +24,7 @@ class PF:
 # RANGE_MAX = 4.0
 # FOV_MIN = -3.141592653589793
 # FOV_MAX = 3.141592653589793
-    def __init__(self, params, DT, map):
+    def __init__(self, params, map):
         """
         Initialize the particles uniformly across the entire map.
         True map is available
@@ -36,7 +36,7 @@ class PF:
         # set process and sensing noise.
         self.V = np.array([[params["V_00"],0.0],[0.0,params["V_11"]]])
         self.W = np.array([[params["W_00"],0.0],[0.0,params["W_11"]]])
-        self.DT = DT
+        self.DT = params["DT"]
         self.MAP = map
         self.MAP_BOUNDS = (-params["MAP_BOUND"], params["MAP_BOUND"])
         # create particle set, x_t.

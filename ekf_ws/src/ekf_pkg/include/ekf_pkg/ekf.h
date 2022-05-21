@@ -48,6 +48,7 @@ class EKF {
     Eigen::MatrixXd p_temp;
 
     EKF();
+    void init(float x_0, float y_0, float yaw_0);
     void update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     ekf_pkg::EKFState getState();
 };

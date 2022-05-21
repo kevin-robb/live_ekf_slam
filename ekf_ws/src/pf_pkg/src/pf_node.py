@@ -15,7 +15,6 @@ import sys
 
 ############ GLOBAL VARIABLES ###################
 params = {}
-DT = 0.05 # timer period used if cmd line param not provided.
 pf = None
 set_pub = None
 # Most recent odom reading and landmark measurements.
@@ -46,8 +45,6 @@ def read_params(pkg_path):
                 params[key] = float(arg)
             except:
                 params[key] = (arg == "True")
-    # get DT from rosparam.
-    params["DT"] = rospy.get_param("/DT")
 
 
 # main PF loop that uses monte carlo localization.
@@ -78,7 +75,7 @@ def get_true_map(msg):
     for id in range(len(lm_x)):
         MAP[id] = (lm_x[id], lm_y[id])
     # initialize the particle set.
-    pf = PF(params, DT, MAP)
+    pf = PF(params, MAP)
 
 def get_odom(msg):
     # get measurement of odometry info.
@@ -92,7 +89,7 @@ def get_landmarks(msg):
     lm_meas_queue.append(msg.data)
 
 def main():
-    global DT, set_pub
+    global set_pub
     rospy.init_node('pf_node')
 
     # find the filepath to data package.

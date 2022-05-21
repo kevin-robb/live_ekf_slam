@@ -48,8 +48,6 @@ def read_params(pkg_path):
                 params[key] = float(arg)
             except:
                 params[key] = (arg == "True")
-    # get DT from rosparam.
-    params["DT"] = rospy.get_param("/DT")
 
 
 def read_rss_data(pkg_path):

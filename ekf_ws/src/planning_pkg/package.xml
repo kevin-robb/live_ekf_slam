@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>data_pkg</name>
-  <version>0.0.1</version>
-  <description>Package to handle creation of map, odometry commands, and measurements to feed the EKF.</description>
+  <name>planning_pkg</name>
+  <version>0.0.0</version>
+  <description>The Path Planning package</description>
 
   <maintainer email="kevin.robb@alumni.ou.edu">Kevin Robb</maintainer>
   <license>MIT</license>

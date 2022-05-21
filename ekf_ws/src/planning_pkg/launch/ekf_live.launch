@@ -1,0 +1,11 @@
+<launch>
+    <arg name="map" default="-1"/>
+
+    <!-- C++ EKF node -->
+    <node pkg="ekf_pkg" type="ekf_node" name="ekf_node"  output="screen" />
+    
+    <!-- Call main sim driver script. -->
+    <include file="$(find data_pkg)/launch/sim_base.launch" >
+        <arg name="map" value="$(arg map)"/>
+    </include>
+</launch>

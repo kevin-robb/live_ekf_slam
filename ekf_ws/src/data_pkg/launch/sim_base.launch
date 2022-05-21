@@ -3,7 +3,9 @@
     <arg name="map" default="-1"/>
 
     <!-- node to send odom and measurements to the ekf -->
-    <node pkg="data_pkg" type="data_fwd_node.py" name="data_fwd_node"  args="$(arg map)" output="screen" />
+    <node pkg="data_pkg" type="sim_node.py" name="sim_node"  args="$(arg map)" output="screen" />
     <!-- plotting node -->
     <node pkg="data_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
+    <!-- path planning node -->
+    <node pkg="planning_pkg" type="planning_node.py" name="planning_node" output="screen" />
 </launch>

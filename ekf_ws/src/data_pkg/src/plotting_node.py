@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 
-from turtle import update
+"""
+Create a live plot of the true and estimated states.
+"""
+
 import rospy
 import rospkg
 from std_msgs.msg import Float32MultiArray
+from geometry_msgs.msg import Vector3
 from ekf_pkg.msg import EKFState
 from pf_pkg.msg import PFState
 from matplotlib import pyplot as plt
@@ -11,17 +15,15 @@ import numpy as np
 import atexit
 from math import cos, sin, pi
 
-def eigsorted(cov):
-    vals, vecs = np.linalg.eigh(cov)
-    order = vals.argsort()[::-1]
-    return vals[order], vecs[:,order]
-
 ############ GLOBAL VARIABLES ###################
 params = {}
 # store all plots objects we want to be able to remove later.
 plots = {"lm_cov_est" : {}}
 # ground truth.
-true_traj = None; true_map = None
+true_pose = None # current true pose as Vector3.
+true_map = None # true landmark map.
+# position to display the timestep number.
+pos_time_display = None
 # output filename prefix.
 fname = ""
 #################################################
@@ -92,15 +94,11 @@ def update_plot(filter:str, msg):
         true_map = None
 
     ################ TRUE TRAJECTORY #####################
-    if params["SHOW_TRUE_TRAJ"] and true_traj is not None:
-        # plot entire trajectory at the beginning.
-        # plt.scatter(true_traj[0::3], true_traj[1::3], s=1, color="blue")
-        # true_traj = None
-
+    if params["SHOW_TRUE_TRAJ"] and true_pose is not None:
         # plot only the current veh pos.
         if "veh_pos_true" in plots.keys():
             plots["veh_pos_true"].remove()
-        plots["veh_pos_true"] = plt.arrow(true_traj[msg.timestep*3], true_traj[msg.timestep*3+1], params["ARROW_LEN"]*cos(true_traj[msg.timestep*3+2]), params["ARROW_LEN"]*sin(true_traj[msg.timestep*3+2]), color="blue", width=0.1)
+        plots["veh_pos_true"] = plt.arrow(true_pose.x, true_pose.y, params["ARROW_LEN"]*cos(true_pose.z), params["ARROW_LEN"]*sin(true_pose.z), color="blue", width=0.1)
 
     ###################### TIMESTEP #####################
     if "timestep" in plots.keys():
@@ -200,10 +198,10 @@ def save_plot(pkg_path):
     if fname != "":
         plt.savefig(pkg_path+"/plots/"+fname+"_demo.png", format='png')
 
-def get_true_traj(msg):
-    # save the true traj to plot it along w cur state.
-    global true_traj
-    true_traj = msg.data
+def get_true_pose(msg):
+    # save the true pose to plot it along w cur state.
+    global true_pose
+    true_pose = msg
 
 def get_true_map(msg):
     rospy.loginfo("Ground truth map received by plotting node.")
@@ -234,7 +232,7 @@ def main():
     rospy.Subscriber("/state/pf", PFState, get_pf_state, queue_size=1)
 
     # subscribe to ground truth.
-    rospy.Subscriber("/truth/veh_pose",Float32MultiArray, get_true_traj, queue_size=1)
+    rospy.Subscriber("/truth/veh_pose",Vector3, get_true_pose, queue_size=1)
     rospy.Subscriber("/truth/landmarks",Float32MultiArray, get_true_map, queue_size=1)
 
     # startup the plot.

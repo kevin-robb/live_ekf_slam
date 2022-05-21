@@ -11,9 +11,9 @@ EKF::EKF() {
     this->V(1,1) = (pi/180) * (pi/180);
     // initialize state distribution.
     this->x_t.resize(3);
-    this->x_t << 0.0 , 0.0, 0.0;
-    this->x_pred.resize(3);
-    this->x_t << 0.0 , 0.0, 0.0;
+    // starting pose will be set later.
+    this->x_t << 0.0 , -10.0, 0.0;
+    this->x_pred.setZero(3);
     this->P_t.setIdentity(3,3);
     this->P_t(0,0) = 0.01 * 0.01;
     this->P_t(1,1) = 0.01 * 0.01;
@@ -24,6 +24,11 @@ EKF::EKF() {
     this->P_pred(2,2) = 0.005 * 0.005;
     // set jacobians that are constant.
     this->H_w.setIdentity(2,2);
+}
+
+void EKF::init(float x_0, float y_0, float yaw_0) {
+    // set starting vehicle pose.
+    this->x_t << x_0, y_0, yaw_0;
 }
 
 // perform a full iteration of the EKF for this timestep.

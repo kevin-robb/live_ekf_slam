@@ -12,8 +12,7 @@ UKF::UKF() {
     // initialize state distribution.
     this->x_t.resize(3);
     this->x_t << 0.0 , 0.0, 0.0;
-    this->x_pred.resize(3);
-    this->x_t << 0.0 , 0.0, 0.0;
+    this->x_pred.setZero(3);
     this->P_t.setIdentity(3,3);
     this->P_t(0,0) = 0.01 * 0.01;
     this->P_t(1,1) = 0.01 * 0.01;

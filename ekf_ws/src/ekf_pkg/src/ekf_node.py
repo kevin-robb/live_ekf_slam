@@ -14,12 +14,10 @@ from math import sin, cos, remainder, tau, atan2
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from ekf_pkg.msg import EKFState
-import sys
 
 ############ GLOBAL VARIABLES ###################
 params = {}
 V = None; W = None
-DT = 0.05 # timer period used if cmd line param not provided.
 state_pub = None
 ############## NEEDED BY EKF ####################
 # Initial vehicle state mean and covariance.
@@ -60,8 +58,6 @@ def read_params(pkg_path):
     # set process and sensing noise.
     V = np.array([[params["V_00"],0.0],[0.0,params["V_11"]]])
     W = np.array([[params["W_00"],0.0],[0.0,params["W_11"]]])
-    # get DT from rosparam.
-    params["DT"] = rospy.get_param("/DT")
 
 
 # main EKF loop that happens every timestep.
