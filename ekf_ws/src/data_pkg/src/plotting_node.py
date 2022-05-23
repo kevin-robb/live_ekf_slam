@@ -9,6 +9,7 @@ import rospkg
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from ekf_pkg.msg import EKFState
+from ukf_pkg.msg import UKFState
 from pf_pkg.msg import PFState
 from matplotlib.backend_bases import MouseButton
 from matplotlib import pyplot as plt
@@ -110,7 +111,8 @@ def update_plot(filter:str, msg):
         plots["timestep"] = plt.text(pos_time_display[0], pos_time_display[1], 't = '+str(msg.timestep), horizontalalignment='center', verticalalignment='bottom')
 
     ####################### EKF SLAM #########################
-    if filter == "ekf":
+    if filter == "ekf" or filter == "ukf":
+        plt.title("EKF-Estimated Trajectory and Landmarks")
         ################ VEH POS #################
         # plot current EKF-estimated veh pos.
         if not params["SHOW_ENTIRE_TRAJ"] and "veh_pos_est" in plots.keys():
@@ -151,6 +153,7 @@ def update_plot(filter:str, msg):
 
     ############## PARTICLE FILTER LOCALIZATION #####################
     elif filter == "pf":
+        plt.title("PF-Estimated Vehicle Pose")
         ########## PARTICLE SET ###############
         if params["PLOT_PARTICLE_ARROWS"]:
             # plot as arrows (slow).
@@ -174,7 +177,6 @@ def update_plot(filter:str, msg):
     plt.ylabel("y (m)")
     plt.xlim([-1.5*params["MAP_BOUND"],1.5*params["MAP_BOUND"]])
     plt.ylim([-1.5*params["MAP_BOUND"],1.5*params["MAP_BOUND"]])
-    plt.title("EKF-Estimated Trajectory and Landmarks")
     plt.draw()
     plt.pause(0.00000000001)
 
@@ -186,6 +188,14 @@ def get_ekf_state(msg):
     fname = "ekf"
     # update the plot.
     update_plot("ekf", msg)
+
+# get the state published by the UKF.
+def get_ukf_state(msg):
+    global fname
+    # set filename for EKF.
+    fname = "ukf"
+    # update the plot.
+    update_plot("ukf", msg)
 
 # get the state published by the PF.
 def get_pf_state(msg):
@@ -246,6 +256,7 @@ def main():
 
     # subscribe to the current state.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)
+    rospy.Subscriber("/state/ukf", UKFState, get_ukf_state, queue_size=1)
     rospy.Subscriber("/state/pf", PFState, get_pf_state, queue_size=1)
 
     # subscribe to ground truth.

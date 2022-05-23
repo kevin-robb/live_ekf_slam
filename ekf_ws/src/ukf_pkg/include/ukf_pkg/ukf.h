@@ -9,6 +9,7 @@
 #include <vector>
 #include <cmath>
 #include <unsupported/Eigen/MatrixFunctions>
+#include <eigen3/Eigen/Eigenvalues>
 
 
 #define pi 3.14159265358979323846
@@ -20,6 +21,11 @@ class UKF {
     // state distribution.
     Eigen::VectorXd x_t;
     Eigen::MatrixXd P_t;
+    // stuff used for P_t approx SPD calculation.
+    Eigen::MatrixXd Y;
+    Eigen::MatrixXd D;
+    Eigen::MatrixXd Qv;
+    Eigen::MatrixXd P_lower_bound;
     Eigen::MatrixXd sqtP; // sqrt of P_t for sigma pts calc.
     // sigma points matrix and weights.
     Eigen::MatrixXd X; // sigma points.
@@ -29,11 +35,14 @@ class UKF {
     Eigen::MatrixXd X_zest; // meas ests for each sigma pt.
     Eigen::VectorXd z_est; // combined z_est.
     Eigen::MatrixXd C; // cross cov b/w x_pred and z_est.
+    Eigen::MatrixXd S; // innov cov.
+    Eigen::MatrixXd K; // kalman gain.
     // current measurement.
     Eigen::VectorXd z = Eigen::VectorXd::Zero(2);
     // predicted state distribution.
     Eigen::VectorXd x_pred;
     Eigen::MatrixXd P_pred;
+    Eigen::MatrixXd p_temp; // temp matrix used for P update.
     // landmark IDs.
     std::vector<int>  lm_IDs;
     // number of landmarks in the state.
@@ -47,23 +56,11 @@ class UKF {
     float w_r = 0;
     float w_b = 0;
     Eigen::MatrixXd W;
-    // jacobians and such.
-    Eigen::MatrixXd F_x; //prediction jacobians
-    Eigen::MatrixXd F_v;
-    Eigen::MatrixXd H_x; //update jacobians
-    Eigen::MatrixXd H_w;
-    Eigen::Vector2d nu; //innovation
-    Eigen::MatrixXd S; //innovation cov
-    Eigen::MatrixXd K; //kalman gain
-    Eigen::MatrixXd G_z;
-    Eigen::MatrixXd G_x;
-    Eigen::MatrixXd Y; //insertion jacobian
-    // intermediary matrix used to update cov.
-    Eigen::MatrixXd p_temp;
 
     UKF();
     void init(float x_0, float y_0, float yaw_0);
     void update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
+    Eigen::MatrixXd nearestSPD();
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
     Eigen::VectorXd sensingModel(Eigen::VectorXd x, int lm_i);
     ukf_pkg::UKFState getState();
