@@ -8,7 +8,7 @@
 #include <eigen3/Eigen/Dense>
 #include <vector>
 #include <cmath>
-// #include <unsupported/Eigen/MatrixFunctions>
+#include <unsupported/Eigen/MatrixFunctions>
 
 
 #define pi 3.14159265358979323846
@@ -62,6 +62,7 @@ class UKF {
     Eigen::MatrixXd p_temp;
 
     UKF();
+    void init(float x_0, float y_0, float yaw_0);
     void update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
     Eigen::VectorXd sensingModel(Eigen::VectorXd x, int lm_i);

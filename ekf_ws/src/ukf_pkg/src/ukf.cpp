@@ -34,10 +34,18 @@ UKF::UKF() {
     this->Q(2,2) = this->V(1,1);
 }
 
+void UKF::init(float x_0, float y_0, float yaw_0) {
+    // set starting vehicle pose.
+    this->x_t << x_0, y_0, yaw_0;
+}
+
 // perform a full iteration of the UKF for this timestep.
 void UKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // update timestep.
     this->timestep += 1;
+
+    // TODO DEBUG
+    std::cout << "timestep=" << this->timestep << std::endl << std::flush;
 
     ////////////// PREDICTION STAGE /////////////////
     // extract odom.
@@ -62,9 +70,13 @@ void UKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
         this->Q(2,2) = this->V(1,1);
     }
     // get sqrt cov term.
-    this->sqtP = this->P_t;
+    // this->sqtP = this->P_t;
     std::cout << "TODO TAKE SQRT OF P_T" << std::endl << std::flush;
-    // this->sqtP = this->P_t.sqrt() * std::sqrt(n/(1-this->W_0));
+    std::cout << "P_t=\n" << this->P_t << std::endl << std::flush;
+    this->sqtP = this->P_t * std::sqrt(n/(1-this->W_0));
+    this->sqtP = this->sqtP.sqrt();
+    std::cout << "sqrtP=\n" << this->sqtP << std::endl << std::flush;
+
     // compute sigma points.
     this->X.col(0) = this->x_t;
     for (int i=1; i<=n; ++i) {
@@ -74,6 +86,10 @@ void UKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
         this->X.col(i+n) = this->x_t - this->sqtP.col(i-1);
     }
     // std::cout << "Computed sigma pts:\n" << this->X << std::endl << std::flush;
+
+    // TODO DEBUG
+    std::cout << "X=\n" << this->X << std::endl << std::flush;
+    std::cout << "Wts=\n" << this->Wts << std::endl << std::flush;
 
     // propagate sigma vectors with motion model f.
     this->X_pred.setZero(n,2*n+1);
@@ -95,6 +111,10 @@ void UKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
         this->P_pred += this->Wts(i) * (this->X_pred.col(i) - this->x_pred) * (this->X_pred.col(i) - this->x_pred).transpose() + this->Q;
     }
     // std::cout << "Predicted state x_pred:\n" << this->x_pred << "\nand P_pred:\n" << this->P_pred << std::endl << std::flush;
+
+    // TODO DEBUG
+    std::cout << "x_pred=\n" << this->x_pred << std::endl << std::flush;
+    std::cout << "P_pred=\n" << this->P_pred << std::endl << std::flush;
 
     ///////////////// UPDATE STAGE //////////////////
     std::vector<float> lm_meas = lmMeasMsg->data;
@@ -209,6 +229,9 @@ void UKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
     // after all landmarks have been processed, update the state.
     this->x_t = this->x_pred;
     this->P_t = this->P_pred;
+    // TODO DEBUG
+    std::cout << "x_t=\n" << this->x_t << std::endl << std::flush;
+    std::cout << "P_t=\n" << this->P_t << std::endl << std::flush;
     /////////////// END OF UKF ITERATION ///////////////////
 }
 
