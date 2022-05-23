@@ -56,9 +56,12 @@ class UKF {
     float w_r = 0;
     float w_b = 0;
     Eigen::MatrixXd W;
+    // true map for localization-only mode.
+    std::vector<float> map;
 
     UKF();
     void init(float x_0, float y_0, float yaw_0);
+    void setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg);
     void update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     Eigen::MatrixXd nearestSPD();
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);

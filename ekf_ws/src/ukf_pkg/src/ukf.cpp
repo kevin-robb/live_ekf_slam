@@ -37,6 +37,12 @@ void UKF::init(float x_0, float y_0, float yaw_0) {
     this->x_t << x_0, y_0, yaw_0;
 }
 
+void UKF::setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg) {
+    // set the true map for localization-only mode.
+    this->map = trueMapMsg->data;    
+}
+
+
 // perform a full iteration of the UKF for this timestep.
 void UKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // update timestep.
@@ -48,21 +54,7 @@ void UKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
     float u_th = odomMsg->y;
 
     // get vector length.
-    int n = this->M*2 + 3;
-    // see if a landmark was been added to the state last iteration.
-    if (this->X.rows() != n) {
-        // expand the size of X matrix.
-        this->X.conservativeResize(n, 1+2*n);
-        // recompute the weights vector.
-        this->Wts.setOnes(1+2*n);
-        this->Wts *= (1-this->W_0)/(2*n);
-        this->Wts(0) = this->W_0;
-        // expand the process noise.
-        this->Q.setZero(n,n);
-        this->Q(0,0) = this->V(0,0) * cos(this->x_t(2));
-        this->Q(1,1) = this->V(0,0) * sin(this->x_t(2));
-        this->Q(2,2) = this->V(1,1);
-    }
+    int n = 3;
 
     // compute the sqrt cov term.
     this->sqtP = nearestSPD().sqrt() * std::sqrt(n/(1-this->W_0));
@@ -109,74 +101,40 @@ void UKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
         int id = (int) lm_meas[l*3];
         float r = lm_meas[l*3+1];
         float b = lm_meas[l*3+2];
-        // check if we have seen this landmark before.
-        int lm_i = -1;
-        for (int j=0; j<M; ++j) {
-            if (this->lm_IDs[j] == id) {
-                lm_i = j;
-                break;
-            }
+        // // get the true landmark position from the known map.
+        // float x_l = this->map[id*3+1];
+        // float y_l = this->map[id*3+2];
+
+        // get meas estimate for all sigma points.
+        this->X_zest.setZero(2,2*n+1);
+        for (int i=0; i<2*n+1; ++i) {
+            this->X_zest.col(i) = sensingModel(this->X_pred.col(i), id);
         }
-        if (lm_i != -1) { // the landmark was found.
-            //////////// LANDMARK UPDATE ///////////
-            // get index of this landmark in the state.
-            lm_i = lm_i*2+3;
-
-            // get meas estimate for all sigma points.
-            this->X_zest.setZero(2,2*n+1);
-            for (int i=0; i<2*n+1; ++i) {
-                this->X_zest.col(i) = sensingModel(this->X_pred.col(i), lm_i);
-            }
-            // compute overall measurement estimate.
-            this->z_est.setZero(2);
-            for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
-                this->z_est += this->Wts(i) * this->X_zest.col(i);
-            }
-            // compute innovation covariance.
-            this->S.setZero(2, 2);
-            for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
-                this->S += this->Wts(i) * (this->X_zest.col(i) - this->z_est) * (this->X_zest.col(i) - this->z_est).transpose();
-            }
-            // add sensing noise cov.
-            this->S += this->W;
-            // compute cross covariance b/w x_pred and z_est.
-            this->C.setZero(n,2);
-            for (int i=0; i<this->Wts.rows(); ++i) { // 2*n+1
-                this->C += this->Wts(i) * (this->X_pred.col(i) - this->x_pred) * (this->X_zest.col(i) - this->z_est).transpose();
-            }
-            // compute kalman gain.
-            this->K = this->C * this->S.inverse();
-
-            // compute the posterior distribution.
-            this->z(0) = r; this->z(1) = b;
-            this->x_pred = this->x_pred + this->K * (this->z - this->z_est);
-            this->P_pred = this->P_pred - this->K * this->S * this->K.transpose();
-
-
-            // TODO UKF landmark insertion.
-        } else { // this is a new landmark.
-            /////////// LANDMARK INSERTION /////////
-            // increment number of landmarks.
-            // resize the state to fit the new landmark.
-            this->x_pred.conservativeResize(n+2);
-            this->x_pred(n) = this->x_pred(0) + r*cos(this->x_pred(2)+b);
-            this->x_pred(n+1) = this->x_pred(1) + r*sin(this->x_pred(2)+b);
-            // add landmark ID to the list.
-            this->lm_IDs.push_back(id);
-
-            // expand X_pred in case there's a re-detection also this timestep.
-            this->X_pred.conservativeResize(n+2,2*n+5);
-            
-            // expand state cov matrix.
-            // fill new space with zeros and W at bottom right.
-            this->p_temp.setIdentity(n+2,n+2);
-            this->p_temp.block(0,0,n,n) = this->P_pred;
-            this->p_temp.block(n,n,2,2) = this->W;
-            this->P_pred = this->p_temp;
-
-            // update state size.
-            this->M += 1; n += 2;
+        // compute overall measurement estimate.
+        this->z_est.setZero(2);
+        for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
+            this->z_est += this->Wts(i) * this->X_zest.col(i);
         }
+        // compute innovation covariance.
+        this->S.setZero(2, 2);
+        for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
+            this->S += this->Wts(i) * (this->X_zest.col(i) - this->z_est) * (this->X_zest.col(i) - this->z_est).transpose();
+        }
+        // add sensing noise cov.
+        this->S += this->W;
+        // compute cross covariance b/w x_pred and z_est.
+        this->C.setZero(n,2);
+        for (int i=0; i<this->Wts.rows(); ++i) { // 2*n+1
+            this->C += this->Wts(i) * (this->X_pred.col(i) - this->x_pred) * (this->X_zest.col(i) - this->z_est).transpose();
+        }
+        // compute kalman gain.
+        this->K = this->C * this->S.inverse();
+
+        // compute the posterior distribution.
+        this->z(0) = r; this->z(1) = b;
+        this->x_pred = this->x_pred + this->K * (this->z - this->z_est);
+        this->P_pred = this->P_pred - this->K * this->S * this->K.transpose();
+
     }
     // after all landmarks have been processed, update the state.
     this->x_t = this->x_pred;
@@ -195,7 +153,7 @@ Eigen::MatrixXd UKF::nearestSPD() {
     this->Qv = es.eigenvectors().real();
     // cap values to be nonnegative.
     // this->P_lower_bound.setZero(this->M*2+3, this->M*2+3);
-    this->P_lower_bound.setOnes(this->M*2+3, this->M*2+3);
+    this->P_lower_bound.setOnes(3, 3);
     this->P_lower_bound *= 0.00000001;
     this->D = (this->D.array().max(this->P_lower_bound.array())).matrix();
     // compute nearest positive semidefinite matrix.
@@ -210,10 +168,13 @@ Eigen::VectorXd UKF::motionModel(Eigen::VectorXd x, float u_d, float u_th) {
     return x_pred;
 }
 
-Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
+Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_id) {
+    // Generate the measurement we'd expect given x, a
+    // current belief of the vehicle pose, and the known
+    // location of the lm_id landmark on the true map.
     Eigen::VectorXd z_est = Eigen::VectorXd::Zero(2);
-    z_est(0) = std::sqrt(std::pow(x(lm_i)-x(0), 2) + std::pow(x(lm_i+1)-x(1), 2)) + this->w_r;
-    z_est(1) = std::atan2(x(lm_i+1)-x(1), x(lm_i)-x(0)) - x(2) + this->w_b;
+    z_est(0) = std::sqrt(std::pow(this->map[lm_id*3+1]-x(0), 2) + std::pow(this->map[lm_id*3+2]-x(1), 2)) + this->w_r;
+    z_est(1) = std::atan2(this->map[lm_id*3+2]-x(1), this->map[lm_id*3+1]-x(0)) - x(2) + this->w_b;
     return z_est;
 }
 
