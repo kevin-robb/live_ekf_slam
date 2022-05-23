@@ -16,6 +16,8 @@ std::queue<std_msgs::Float32MultiArray::ConstPtr> lmMeasQueue;
 ros::Publisher statePub;
 // define UKF object from ukf.cpp class.
 UKF ukf;
+// UKF mode (true for SLAM, false for localization-only).
+bool ukfSlamMode;
 // config vars for params we need.
 float x_0; float y_0; float yaw_0;
 // flag to wait for map to be received.
@@ -45,6 +47,16 @@ float readParams() {
         } else if (token == "yaw_0") {
             line.erase(0, line.find(delimeter)+delimeter.length());
             yaw_0 = std::stof(line);
+        } else if (token == "ukf_mode") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            if (line == "loc") {
+                ukfSlamMode = false;
+            } else if (line == "slam") {
+                ukfSlamMode = true;
+            } else {
+                std::cout << "Invalid ukf_mode in params.txt. Using SLAM mode." << std::endl << std::flush;
+                ukfSlamMode = true;
+            }
         }
     }
     // close file.
@@ -63,7 +75,11 @@ void ekfIterate(const ros::TimerEvent& event) {
     std_msgs::Float32MultiArray::ConstPtr lmMeasMsg = lmMeasQueue.front();
     lmMeasQueue.pop();
     // call the EKF's update function.
-    ukf.update(odomMsg, lmMeasMsg);
+    if (ukfSlamMode) {
+        ukf.slamUpdate(odomMsg, lmMeasMsg);
+    } else {
+        ukf.localizationUpdate(odomMsg, lmMeasMsg);
+    }
     // get the current state estimate.
     ukf_pkg::UKFState stateMsg = ukf.getState();
     // publish it.
