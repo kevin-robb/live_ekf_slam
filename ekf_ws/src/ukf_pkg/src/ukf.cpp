@@ -89,8 +89,10 @@ void UKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
     //compute state covariance prediction.
     this->P_pred.setZero(n, n);
     for (int i=0; i<2*n+1; ++i) {
-        this->P_pred += this->Wts(i) * (this->X_pred.col(i) - this->x_pred) * (this->X_pred.col(i) - this->x_pred).transpose() + this->Q;
+        this->P_pred += this->Wts(i) * (this->X_pred.col(i) - this->x_pred) * (this->X_pred.col(i) - this->x_pred).transpose();
     }
+    // add process noise cov.
+    this->P_pred += this->Q;
 
     ///////////////// UPDATE STAGE //////////////////
     std::vector<float> lm_meas = lmMeasMsg->data;
@@ -133,8 +135,10 @@ void UKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32Mult
             // compute innovation covariance.
             this->S.setZero(2, 2);
             for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
-                this->S += this->Wts(i) * (this->X_zest.col(i) - this->z_est) * (this->X_zest.col(i) - this->z_est).transpose() + this->W;
+                this->S += this->Wts(i) * (this->X_zest.col(i) - this->z_est) * (this->X_zest.col(i) - this->z_est).transpose();
             }
+            // add sensing noise cov.
+            this->S += this->W;
             // compute cross covariance b/w x_pred and z_est.
             this->C.setZero(n,2);
             for (int i=0; i<this->Wts.rows(); ++i) { // 2*n+1
