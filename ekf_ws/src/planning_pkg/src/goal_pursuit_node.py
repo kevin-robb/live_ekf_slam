@@ -8,9 +8,12 @@ Generate the next odom command based on current state estimate.
 import rospy
 import rospkg
 from geometry_msgs.msg import Vector3
+from sensor_msgs.msg import Image
 from ekf_pkg.msg import EKFState
 from pf_pkg.msg import PFState
 from math import remainder, tau, atan2
+import cv2
+from cv_bridge import CvBridge
 
 ############ GLOBAL VARIABLES ###################
 params = {}
@@ -91,6 +94,34 @@ def get_goal_pt(msg):
     goal = [msg.x, msg.y]
     rospy.loginfo("Setting goal pt to ("+"{0:.4f}".format(msg.x)+", "+"{0:.4f}".format(msg.y)+")")
 
+def get_occ_grid_map(msg):
+    global occ_map_img
+    # get the true occupancy grid map image.
+    # unpack the line into a 2D list.
+    # assume it's a square.
+    # row_len = int(len(msg.data)**(1/2))
+    # occ_map = [[msg.data[r*row_len + c] for c in range(row_len)] for r in range(row_len)]
+    # print(msg)
+    bridge = CvBridge()
+    occ_map_img = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+    # cv2.imshow("Thresholded Map", occ_map_img); cv2.waitKey(0); cv2.destroyAllWindows()
+
+# def img_to_dist_tf(occ_map_img):
+#     """
+#     Create a 2D array that tells the distance from each cell to some goal position.
+#     Then from each cell, going to the adjacent cell w/ lowest value will give us
+#     a path from current pos to the goal.
+#     """
+#     pass
+
+# def astar():
+#     pass
+
+def kinodynamic_rrt():
+    """
+    Use RRT taking motion constraints into account to find a path to goal.
+    """
+
 
 def main():
     global cmd_pub
@@ -105,7 +136,8 @@ def main():
     # subscribe to the current state.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)
     rospy.Subscriber("/state/pf", PFState, get_pf_state, queue_size=1)
-    # TODO subscribe to the occupancy grid.
+    # subscribe to the true occupancy grid.
+    rospy.Subscriber("/truth/occ_grid", Image, get_occ_grid_map, queue_size=1)
 
     # publish odom commands for the vehicle.
     cmd_pub = rospy.Publisher("/odom", Vector3, queue_size=1)

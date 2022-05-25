@@ -9,13 +9,15 @@ Receives odom commands and performs them with noise.
 
 import rospy
 import rospkg
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, Int8MultiArray
 from geometry_msgs.msg import Vector3
+from sensor_msgs.msg import Image
 import sys
 from random import random
 from math import atan2, remainder, tau, cos, sin
 import numpy as np
 import cv2
+from cv_bridge import CvBridge
 
 ############ GLOBAL VARIABLES ###################
 params = {}
@@ -30,7 +32,7 @@ demo_map = { 0 : (6.2945, 8.1158), 1 : (-7.4603, 8.2675), 2 : (2.6472, -8.0492),
 # true map and current pose.
 landmarks = None; x_v = [0.0, 0.0, 0.0]
 # true occupancy grid map.
-occ_map = None
+occ_map = None; occ_map_pub = None
 #################################################
 
 
@@ -159,9 +161,8 @@ def get_cmd(msg):
 
 
 def generate_occupany_map(pkg_path):
-    # occ_map = [[False] * 20] * 20
     """
-    Read in the map from the PGM file and convert it to a 2D list occ grid.
+    Read in the map from the image file and convert it to a 2D list occ grid.
     """
     global occ_map
      # read map image and account for possible white = transparency that cv2 will call black.
@@ -171,28 +172,35 @@ def generate_occupany_map(pkg_path):
         a1 = ~img[:,:,3] # extract and invert that alpha
         img = cv2.add(cv2.merge([a1,a1,a1,a1]), img) # add up values (with clipping)
         img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB) # strip alpha channels
-    cv2.imshow('initial map', img); cv2.waitKey(0); cv2.destroyAllWindows()
-    # lower the image resolution.
-    img = cv2.resize(img, (0,0), fx = 0.5, fy = 0.5)
+    # cv2.imshow('initial map', img); cv2.waitKey(0); cv2.destroyAllWindows()
+    # lower the image resolution to have 1 pixel per 0.1x0.1 unit cell in the 20x20 landmark space.
+    # img = cv2.resize(img, (0,0), fx = 0.5, fy = 0.5)
+    img = cv2.resize(img, (200, 200))
 
     # turn this into a grayscale img and then to a binary map.
     occ_map = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)[1]
+    rows = occ_map.shape[0]
+    cols = occ_map.shape[1]
+    # normalize to range [0,1].
+    occ_map = np.divide(occ_map, 255)
+    # binarize to integer 0 or 1.
+    # occ_map = np.round(occ_map.reshape(1, rows * cols))
 
     print("Map read in with shape ", occ_map.shape)
-    cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
+    # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
+    # Flatten map and normalize cell values
     # rows = occ_map.shape[0]
     # cols = occ_map.shape[1]
-    # occ_map = occ_map[1]
-    # Flatten map and normalize cell values
     # flat_map = np.divide(occ_map.reshape(1, rows * cols), 255)
-    # # Get linear index of points where cell is unoccupied
-    # free = np.where(flat_map == 1)
-    # occ_map = flat_map
-    # print("Flattened map:\n"+str(occ_map))
+    # Pack into a ROS message to send for the planning node.
+    # map_msg = Int8MultiArray(data=flat_map[0])
+    bridge = CvBridge()
+    map_msg = bridge.cv2_to_imgmsg(occ_map, encoding="passthrough")
+    occ_map_pub.publish(map_msg)
 
 
 def main():
-    global lm_pub, pkg_path, true_map_pub, true_pose_pub, cmd_pub
+    global lm_pub, pkg_path, true_map_pub, true_pose_pub, cmd_pub, occ_map_pub
     rospy.init_node('sim_node')
 
     # read map type from command line arg.
@@ -208,9 +216,6 @@ def main():
     # read params.
     read_params(pkg_path)
 
-    # generate occupancy grid.
-    generate_occupany_map(pkg_path)
-
     # subscribe to odom commands.
     rospy.Subscriber("/odom", Vector3, get_cmd, queue_size=1)
     # publish first odom cmd to start it all off.
@@ -222,8 +227,12 @@ def main():
     # publish ground truth for the plotter.
     true_pose_pub = rospy.Publisher("/truth/veh_pose",Vector3, queue_size=1)
     true_map_pub = rospy.Publisher("/truth/landmarks",Float32MultiArray, queue_size=1)
+    occ_map_pub = rospy.Publisher("/truth/occ_grid", Image, queue_size=1)
 
-    # create the map.
+    rospy.sleep(1)
+    # generate occupancy grid.
+    generate_occupany_map(pkg_path)
+    # create the landmark map.
     generate_landmarks(map_type)
 
     rospy.spin()
