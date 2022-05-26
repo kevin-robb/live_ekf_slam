@@ -14,6 +14,7 @@ from pf_pkg.msg import PFState
 from math import remainder, tau, atan2
 import cv2
 from cv_bridge import CvBridge
+from pure_pursuit import PurePursuit
 
 ############ GLOBAL VARIABLES ###################
 params = {}
@@ -22,6 +23,8 @@ cmd_pub = None
 goal_queue = [] # queue of goal points to force a certain path.
 cur = [0.0, 0.0] # current estimate of veh pos.
 occ_map = None # cv2 image of true occupancy grid map.
+# init pure pursuit object.
+pp = PurePursuit()
 #################################################
 
 
@@ -59,9 +62,8 @@ def norm(l1, l2):
 
 def choose_command(state_msg):
     """
-    Given the current state estimate,
+    Given the current state estimate and a goal position,
     choose and send an odom cmd to the vehicle.
-    TODO also get occ grid and do A* on it.
     """
     global goal_queue, cur
     cur = [state_msg.x_v, state_msg.y_v]
@@ -79,15 +81,18 @@ def choose_command(state_msg):
     # turn this into a command.
     odom_msg = Vector3()
     # go faster the more aligned the hdg is.
-    odom_msg.x = 0.05 * (1 - abs(beta)/30)**5 + 0.005 if r > 0.05 else 0.0
+    odom_msg.x = 0.05 * (1 - abs(beta)/30)**5 + 0.005 if r > 0.1 else 0.0
     P = 0.03 if r > 0.2 else 0.2
     odom_msg.y = beta * P if r > 0.05 else 0.0
+    # # use pure pursuit to get heading.
+    # hdg = pp_nav()
+    # odom_msg.y = hdg
     # ensure commands are capped within constraints.
     odom_msg.x = max(0, min(odom_msg.x, params["ODOM_D_MAX"]))
     odom_msg.y = max(-params["ODOM_TH_MAX"], min(odom_msg.y, params["ODOM_TH_MAX"]))
     cmd_pub.publish(odom_msg)
     # remove the goal from the queue if we've arrived.
-    if r < 0.05:
+    if r < 0.1:
         goal_queue.pop(0)
         rospy.logwarn("Arrived at current goal!")
 
@@ -128,6 +133,30 @@ def tf_ekf_to_map(component):
     # transform x or y component from ekf coords to occ map indices.
     return component / scale + shift
 
+def pp_nav():
+    """
+    Navigate using pure pursuit.
+    """
+    lookahead = None
+    # start with this search radius.
+    radius = 0.4
+    # look until we find the path at the increasing radius or at the maximum dist.
+    while lookahead is None and radius <= 6: 
+        lookahead = pp.get_lookahead_point(cur[0], cur[1], radius)
+        radius *= 1.25
+    # make sure we actually found the path
+    if lookahead is not None:
+        heading_to_la = remainder(atan2(lookahead[1] - cur[1], lookahead[0] - cur[0]), tau)
+
+        return heading_to_la
+    return None
+
+
+
+
+
+
+
 def interpret_astar_path(path_to_start):
     """
     A* gives a reverse list of index positions to get to goal.
@@ -139,9 +168,9 @@ def interpret_astar_path(path_to_start):
         return
     for i in range(len(path_to_start)-1, -1, -1):
         # convert pt to ekf coords.
-        goal_queue.append((tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1])))
-    print("Found goal path:")
-    print(goal_queue)
+        # goal_queue.append((tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1])))
+        pp.add_point(tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1]))
+    print("Found goal path: "+str(goal_queue))
 
 def astar(goal):
     """
@@ -181,16 +210,18 @@ def astar(goal):
             if occ_map[nbr.i][nbr.j] != 1:
                 rospy.logwarn("Neighbor is occluded.")
                 continue
-            print(str(nbr))
             # skip if already in closed list.
             if any([nbr == c for c in closed_list]): continue
             # skip if already in open list, unless the cost is lower.
             for open_cell in open_list:
-                if nbr == open_cell and nbr.g > open_cell.g:
-                    continue                
+                if nbr == open_cell:
+                    if nbr.g > open_cell.g:
+                        continue
+                    break
             # compute heuristic "cost-to-go". keep squared to save unnecessary computation.
             nbr.set_cost((goal_cell.i - nbr.i)**2 + (goal_cell.j - nbr.j)**2)
             # add cell to open list.
+            print("Added open cell: "+str(nbr))
             open_list.append(nbr)
 
 class Cell:
