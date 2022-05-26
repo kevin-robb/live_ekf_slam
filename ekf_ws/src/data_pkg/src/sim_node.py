@@ -175,7 +175,7 @@ def generate_occupany_map(pkg_path):
     # cv2.imshow('initial map', img); cv2.waitKey(0); cv2.destroyAllWindows()
     # lower the image resolution to have 1 pixel per 0.1x0.1 unit cell in the 20x20 landmark space.
     # img = cv2.resize(img, (0,0), fx = 0.5, fy = 0.5)
-    img = cv2.resize(img, (200, 200))
+    img = cv2.resize(img, (params["OCC_MAP_SIZE"], params["OCC_MAP_SIZE"]))
 
     # turn this into a grayscale img and then to a binary map.
     occ_map = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)[1]

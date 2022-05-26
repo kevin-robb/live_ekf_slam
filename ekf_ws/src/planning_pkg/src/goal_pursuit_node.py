@@ -18,7 +18,10 @@ from cv_bridge import CvBridge
 ############ GLOBAL VARIABLES ###################
 params = {}
 cmd_pub = None
-goal = [0.0, 0.0] # target x,y point.
+# goal = [0.0, 0.0] # target x,y point.
+goal_queue = [] # queue of goal points to force a certain path.
+cur = [0.0, 0.0] # current estimate of veh pos.
+occ_map = None # cv2 image of true occupancy grid map.
 #################################################
 
 
@@ -27,7 +30,7 @@ def read_params(pkg_path):
     Read params from config file.
     @param path to data_pkg.
     """
-    global params
+    global params, shift, scale
     params_file = open(pkg_path+"/config/params.txt", "r")
     params = {}
     lines = params_file.readlines()
@@ -45,6 +48,10 @@ def read_params(pkg_path):
             except:
                 params[key] = (arg == "True")
 
+    # set coord transform params.
+    scale = params["MAP_BOUND"] * 1.5 / (params["OCC_MAP_SIZE"] / 2)
+    shift = params["OCC_MAP_SIZE"] / 2
+
 def norm(l1, l2):
     # compute the norm of the difference of two lists or tuples.
     # only use the first two elements.
@@ -56,7 +63,12 @@ def choose_command(state_msg):
     choose and send an odom cmd to the vehicle.
     TODO also get occ grid and do A* on it.
     """
-    global goal
+    global goal_queue, cur
+    cur = [state_msg.x_v, state_msg.y_v]
+    if len(goal_queue) < 1:
+        cmd_pub.publish(Vector3(x=0, y=0))
+        return
+    goal = goal_queue[0]
     # check how close veh is to our current goal pt.
     r = norm([state_msg.x_v, state_msg.y_v], goal)
     # compute vector from veh pos est to goal.
@@ -74,6 +86,10 @@ def choose_command(state_msg):
     odom_msg.x = max(0, min(odom_msg.x, params["ODOM_D_MAX"]))
     odom_msg.y = max(-params["ODOM_TH_MAX"], min(odom_msg.y, params["ODOM_TH_MAX"]))
     cmd_pub.publish(odom_msg)
+    # remove the goal from the queue if we've arrived.
+    if r < 0.05:
+        goal_queue.pop(0)
+        rospy.logwarn("Arrived at current goal!")
 
 
 def get_ekf_state(msg):
@@ -90,37 +106,110 @@ def get_pf_state(msg):
     pass
     
 def get_goal_pt(msg):
-    global goal
+    # global goal
     goal = [msg.x, msg.y]
     rospy.loginfo("Setting goal pt to ("+"{0:.4f}".format(msg.x)+", "+"{0:.4f}".format(msg.y)+")")
+    # generate path there with A*.
+    path = astar(goal)
+    interpret_astar_path(path)
 
 def get_occ_grid_map(msg):
-    global occ_map_img
+    global occ_map
     # get the true occupancy grid map image.
-    # unpack the line into a 2D list.
-    # assume it's a square.
-    # row_len = int(len(msg.data)**(1/2))
-    # occ_map = [[msg.data[r*row_len + c] for c in range(row_len)] for r in range(row_len)]
-    # print(msg)
     bridge = CvBridge()
-    occ_map_img = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-    # cv2.imshow("Thresholded Map", occ_map_img); cv2.waitKey(0); cv2.destroyAllWindows()
+    occ_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+    # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
 
-# def img_to_dist_tf(occ_map_img):
-#     """
-#     Create a 2D array that tells the distance from each cell to some goal position.
-#     Then from each cell, going to the adjacent cell w/ lowest value will give us
-#     a path from current pos to the goal.
-#     """
-#     pass
+def tf_map_to_ekf(component):
+    # transform x or y component from  occ map indices to ekf coords.
+    return (component - shift) * scale
+    
+def tf_ekf_to_map(component):
+    # transform x or y component from ekf coords to occ map indices.
+    return component / scale + shift
 
-# def astar():
-#     pass
-
-def kinodynamic_rrt():
+def interpret_astar_path(path_to_start):
     """
-    Use RRT taking motion constraints into account to find a path to goal.
+    A* gives a reverse list of index positions to get to goal.
+    Reverse this, convert to EKF coords, and add all to goal_queue.
     """
+    global goal_queue
+    if path_to_start is None:
+        rospy.logerr("No path found by A*.")
+        return
+    for i in range(len(path_to_start)-1, -1, -1):
+        # convert pt to ekf coords.
+        goal_queue.append((tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1])))
+    print("Found goal path:")
+    print(goal_queue)
+
+def astar(goal):
+    """
+    Use A* to generate a path from the current pose to the goal position.
+    1 map grid cell = 0.1x0.1 units in ekf coords.
+    map (0,0) = ekf (-10,10).
+    """
+    # define goal node.
+    goal_cell = Cell(tf_ekf_to_map(goal[0]), tf_ekf_to_map(goal[1]))
+    print("Goal:"+str(goal_cell))
+    # first add starting node to open list.
+    open_list = [Cell(tf_ekf_to_map(cur[0]), tf_ekf_to_map(cur[1]))]
+    print("Start:"+str(open_list[0]))
+    closed_list = []
+    # iterate until reaching the goal or exhausting all cells.
+    while len(open_list) > 0:
+        # move first element of open list to closed list.
+        open_list.sort(key=lambda cell: cell.f)
+        cur_cell = open_list.pop(0)
+        # stop if we've found the goal.
+        if cur_cell == goal_cell:
+            # recurse up thru parents to get reverse of path from start to goal.
+            path_to_start = []
+            while cur_cell.parent is not None:
+                path_to_start.append((cur_cell.i, cur_cell.j))
+                cur_cell = cur_cell.parent
+            return path_to_start
+        # add this node to the closed list.
+        closed_list.append(cur_cell)
+        # add its unoccupied neighbors to the open list.
+        for chg in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+            # check each cell for occlusion and if we've already checked it.
+            nbr = Cell(cur_cell.i+chg[0], cur_cell.j+chg[1], parent=cur_cell)
+            # skip if out of bounds.
+            if nbr.i < 0 or nbr.j < 0 or nbr.i >= params["OCC_MAP_SIZE"] or nbr.j >= params["OCC_MAP_SIZE"]: continue
+            # skip if occluded.
+            if occ_map[nbr.i][nbr.j] != 1:
+                rospy.logwarn("Neighbor is occluded.")
+                continue
+            print(str(nbr))
+            # skip if already in closed list.
+            if any([nbr == c for c in closed_list]): continue
+            # skip if already in open list, unless the cost is lower.
+            for open_cell in open_list:
+                if nbr == open_cell and nbr.g > open_cell.g:
+                    continue                
+            # compute heuristic "cost-to-go". keep squared to save unnecessary computation.
+            nbr.set_cost((goal_cell.i - nbr.i)**2 + (goal_cell.j - nbr.j)**2)
+            # add cell to open list.
+            open_list.append(nbr)
+
+class Cell:
+    def __init__(self, i, j, parent=None):
+        self.i = int(i)
+        self.j = int(j)
+        self.parent = parent
+        self.g = 0 if parent is None else parent.g + 1
+        self.f = 0
+    
+    def set_cost(self, h):
+        self.h = h
+        self.f = self.g + h
+
+    def __eq__(self, other):
+        return self.i == other.i and self.j == other.j
+
+    def __str__(self):
+        return "Cell ("+str(self.i)+","+str(self.j)+") with costs "+str([self.g, self.f])
 
 
 def main():

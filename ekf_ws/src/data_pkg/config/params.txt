@@ -31,6 +31,8 @@ NUM_LANDMARKS = 20
 MIN_SEP = 0.05
 # size of grid to place landmarks.
 GRID_STEP = 4
+# occupancy grid number of pixels per dim.
+OCC_MAP_SIZE = 200
 
 # ----- Trajectory Gen -----
 NUM_TIMESTEPS = 2000

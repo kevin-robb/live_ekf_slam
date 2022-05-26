@@ -8,6 +8,7 @@ import rospy
 import rospkg
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
+from sensor_msgs.msg import Image
 from ekf_pkg.msg import EKFState
 from ukf_pkg.msg import UKFState
 from pf_pkg.msg import PFState
@@ -16,6 +17,8 @@ from matplotlib import pyplot as plt
 import numpy as np
 import atexit
 from math import cos, sin, pi
+import cv2
+from cv_bridge import CvBridge
 
 ############ GLOBAL VARIABLES ###################
 params = {}
@@ -238,6 +241,23 @@ def on_click(event):
         # publish new goal pt for the planner.
         goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
 
+
+def get_occ_grid_map(msg):
+    # get the true occupancy grid map image.
+    bridge = CvBridge()
+    occ_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+    # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
+    # rospy.logwarn(str(occ_map))
+    # reduce from float64 (not supported by cv2) to float32.
+    occ_map = np.float32(occ_map)
+    # convert from BGR to RGB for display.
+    occ_map_rgb = cv2.cvtColor(occ_map, cv2.COLOR_BGR2RGB)
+    # occ_map_rgb = cv2.cvtColor(occ_map, cv2.COLOR_GRAY2RGB)
+    # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
+    edge = params["MAP_BOUND"] * 1.5
+    plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])
+
+
 def main():
     global goal_pub
     rospy.init_node('plotting_node')
@@ -262,6 +282,8 @@ def main():
     # subscribe to ground truth.
     rospy.Subscriber("/truth/veh_pose", Vector3, get_true_pose, queue_size=1)
     rospy.Subscriber("/truth/landmarks", Float32MultiArray, get_true_map, queue_size=1)
+    # subscribe to the true occupancy grid.
+    rospy.Subscriber("/truth/occ_grid", Image, get_occ_grid_map, queue_size=1)
 
     # publish the chosen goal point for the planner.
     goal_pub = rospy.Publisher("/plan/goal", Vector3, queue_size=1)
