@@ -208,7 +208,7 @@ def interpret_astar_path(path_to_start):
         # convert pt to ekf coords.
         goal_queue.append(tf_map_to_ekf(path_to_start[i]))
         # pp.add_point(tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1]))
-    rospy.loginfo("A* found path: "+str(goal_queue))
+    # rospy.loginfo("A* found path: "+str(goal_queue))
     # publish this path for the plotter.
     path_pub.publish(Float32MultiArray(data=sum(goal_queue, [])))
 

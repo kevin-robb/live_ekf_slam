@@ -90,7 +90,7 @@ def cov_to_ellipse(P_v):
 
 def update_plot(filter:str, msg):
     # draw everything for this timestep.
-    global plots, pos_time_display, true_map, true_traj
+    global plots, pos_time_display, true_map
     
     #################### TRUE MAP #######################
     if true_map is not None:
@@ -120,6 +120,7 @@ def update_plot(filter:str, msg):
         # plot current EKF-estimated veh pos.
         if not params["SHOW_ENTIRE_TRAJ"] and "veh_pos_est" in plots.keys():
             plots["veh_pos_est"].remove()
+            del plots["veh_pos_est"]
         # draw a single pt with arrow to represent current veh pose.
         plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, params["ARROW_LEN"]*cos(msg.yaw_v), params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1, zorder=1)
 
@@ -130,6 +131,7 @@ def update_plot(filter:str, msg):
         # remove old ellipses.
         if not params["SHOW_ENTIRE_TRAJ"] and "veh_cov_est" in plots.keys():
             plots["veh_cov_est"].remove()
+            del plots["veh_cov_est"]
         # plot the ellipse.
         plots["veh_cov_est"], = plt.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
 
@@ -139,6 +141,7 @@ def update_plot(filter:str, msg):
         # remove old landmark estimates.
         if "lm_pos_est" in plots.keys():
             plots["lm_pos_est"].remove()
+            del plots["lm_pos_est"]
         # plot new landmark estimates.
         plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=1)
 
@@ -149,6 +152,7 @@ def update_plot(filter:str, msg):
             lm_id = msg.landmarks[i*3] 
             if lm_id in plots["lm_cov_est"].keys():
                 plots["lm_cov_est"][lm_id].remove()
+                del plots["lm_cov_est"][lm_id]
             # extract 2x2 cov for this landmark.
             lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
             # plot its ellipse.
@@ -190,10 +194,7 @@ def get_ekf_state(msg):
     # set filename for EKF.
     fname = "ekf"
     # update the plot.
-    try:
-        update_plot("ekf", msg)
-    except:
-        rospy.logwarn("Draw error.")
+    update_plot("ekf", msg)
 
 # get the state published by the UKF.
 def get_ukf_state(msg):
@@ -240,6 +241,7 @@ def on_click(event):
         # update the plot to show the current goal.
         if "goal_pt" in plots.keys():
             plots["goal_pt"].remove()
+            del plots["goal_pt"]
         plots["goal_pt"] = plt.scatter(event.xdata, event.ydata, color="yellow", edgecolors="black", s=40, zorder=2)
         # publish new goal pt for the planner.
         goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
@@ -258,24 +260,18 @@ def get_occ_grid_map(msg):
     # occ_map_rgb = cv2.cvtColor(occ_map, cv2.COLOR_GRAY2RGB)
     # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
     edge = params["MAP_BOUND"] * 1.5
-    try:
-        plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])
-    except:
-        rospy.logwarn("map img drawing error.")
+    plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])
 
 def get_planned_path(msg):
     global plots
-    try:
-        # get the set of points that A* determined to get to the clicked goal.
-        # remove and update the path if we've drawn it already.
-        if "planned_path" in plots.keys() and plots["planned_path"] is not None:
-            plots["planned_path"].remove()
-            plots["planned_path"] = None
-        # only draw if the path is non-empty.
-        if len(msg.data) > 1:
-            plots["planned_path"] = plt.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
-    except:
-        rospy.logwarn("path drawing error.")
+    # get the set of points that A* determined to get to the clicked goal.
+    # remove and update the path if we've drawn it already.
+    if "planned_path" in plots.keys():
+        plots["planned_path"].remove()
+        del plots["planned_path"]
+    # only draw if the path is non-empty.
+    if len(msg.data) > 1:
+        plots["planned_path"] = plt.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
 
 def main():
     global goal_pub
