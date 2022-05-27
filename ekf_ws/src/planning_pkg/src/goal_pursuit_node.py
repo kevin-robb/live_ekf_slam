@@ -42,7 +42,7 @@ def read_params(pkg_path):
     Read params from config file.
     @param path to data_pkg.
     """
-    global params, shift, scale
+    global params
     params_file = open(pkg_path+"/config/params.txt", "r")
     params = {}
     lines = params_file.readlines()
@@ -61,8 +61,8 @@ def read_params(pkg_path):
                 params[key] = (arg == "True")
 
     # set coord transform params.
-    scale = params["MAP_BOUND"] * 1.5 / (params["OCC_MAP_SIZE"] / 2)
-    shift = params["OCC_MAP_SIZE"] / 2
+    params["SCALE"] = params["MAP_BOUND"] * 1.5 / (params["OCC_MAP_SIZE"] / 2)
+    params["SHIFT"] = params["OCC_MAP_SIZE"] / 2
 
 def norm(l1, l2):
     # compute the norm of the difference of two lists or tuples.
@@ -76,7 +76,7 @@ def choose_command(state_msg):
     """
     global goal_queue, cur
     cur = [state_msg.x_v, state_msg.y_v]
-    if len(goal_queue) < 1:
+    if len(goal_queue) < 1: # if there's no path yet, just wait.
         cmd_pub.publish(Vector3(x=0, y=0))
         return
     goal = goal_queue[0]
@@ -90,9 +90,9 @@ def choose_command(state_msg):
     # turn this into a command.
     odom_msg = Vector3()
     # go faster the more aligned the hdg is.
-    odom_msg.x = 0.1 * (1 - abs(beta)/params["ODOM_TH_MAX"])**5 + 0.05 if r > 0.1 else 0.0
+    odom_msg.x = 1 * (1 - abs(beta)/params["ODOM_TH_MAX"])**3 + 0.05 if r > 0.1 else 0.0
     P = 0.03 if r > 0.2 else 0.2
-    odom_msg.y = beta * P if r > 0.05 else 0.0
+    odom_msg.y = beta #* P if r > 0.05 else 0.0
     # # use pure pursuit to get heading.
     # hdg = pp_nav()
     # odom_msg.y = hdg
@@ -106,7 +106,6 @@ def choose_command(state_msg):
         # rospy.logwarn("Arrived at current goal!")
         # publish updated path for the plotter.
         path_pub.publish(Float32MultiArray(data=sum(goal_queue, [])))
-
 
 def get_ekf_state(msg):
     """
@@ -125,24 +124,57 @@ def get_goal_pt(msg):
     # global goal
     goal = [msg.x, msg.y]
     rospy.loginfo("Setting goal pt to ("+"{0:.4f}".format(msg.x)+", "+"{0:.4f}".format(msg.y)+")")
+    # DEBUG
+    # rospy.logwarn("Goal pt interpreted in map coords as "+str(tf_ekf_to_map(goal)))
+    # rospy.logwarn("Which transforms back into ekf coords as "+str(tf_map_to_ekf(tf_ekf_to_map(goal))))
     # generate path there with A*.
     path = astar(goal)
     interpret_astar_path(path)
+
+def cap(ind):
+    # cap a map index within 0, max.
+    return max(0, min(ind, params["OCC_MAP_SIZE"]-1))
 
 def get_occ_grid_map(msg):
     global occ_map
     # get the true occupancy grid map image.
     bridge = CvBridge()
-    occ_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+    occ_map_img = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
     # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
+    # create matrix from map, and flip its x-axis to align with ekf coords better.
+    occ_map = []
+    for i in range(len(occ_map_img)):
+        row = []
+        for j in range(len(occ_map_img[0])):
+            row.append(int(occ_map_img[i][j])) #len(occ_map_img[0])-1-
+        occ_map.append(row)
+    # print("raw map:\n",occ_map)
+    # expand all occluded cells outwards.
+    for i in range(len(occ_map)):
+        for j in range(len(occ_map[0])):
+            if occ_map_img[i][j] < 0.5: # occluded.
+                # mark all neighbors as occluded.
+                for chg in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                    occ_map[cap(i+chg[0])][cap(j+chg[1])] = 0
+    # print("inflated map:\n",occ_map)
 
-def tf_map_to_ekf(component):
-    # transform x or y component from  occ map indices to ekf coords.
-    return (component - shift) * scale
+    # DEBUG show set of values appearing in occ_map.
+    freqs = [0, 0]
+    for i in range(len(occ_map)):
+        for j in range(len(occ_map[0])):
+            if occ_map[i][j] == 0:
+                freqs[0] += 1
+            else:
+                freqs[1] += 1
+    print(CYAN+"Occ map value frequencies: "+str(freqs[1])+" free, "+str(freqs[0])+" occluded."+ANSI_RESET)
+
+def tf_map_to_ekf(pt):
+    # transform x,y from occ map indices to ekf coords.
+    return [(pt[1] - params["SHIFT"]) * params["SCALE"], -(pt[0] - params["SHIFT"]) * params["SCALE"]]
     
-def tf_ekf_to_map(component):
-    # transform x or y component from ekf coords to occ map indices.
-    return component / scale + shift
+def tf_ekf_to_map(pt):
+    # transform x,y from ekf coords to occ map indices.
+    return [int(params["SHIFT"] - pt[1] / params["SCALE"]), int(params["SHIFT"] + pt[0] / params["SCALE"])]
 
 # def pp_nav():
 #     """
@@ -174,9 +206,9 @@ def interpret_astar_path(path_to_start):
         return
     for i in range(len(path_to_start)-1, -1, -1):
         # convert pt to ekf coords.
-        goal_queue.append([tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1])])
+        goal_queue.append(tf_map_to_ekf(path_to_start[i]))
         # pp.add_point(tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1]))
-    print("Found goal path: "+str(goal_queue))
+    rospy.loginfo("A* found path: "+str(goal_queue))
     # publish this path for the plotter.
     path_pub.publish(Float32MultiArray(data=sum(goal_queue, [])))
 
@@ -187,16 +219,16 @@ def astar(goal):
     map (0,0) = ekf (-10,10).
     """
     # define goal node.
-    goal_cell = Cell(tf_ekf_to_map(goal[0]), tf_ekf_to_map(goal[1]))
-    print("Goal:"+str(goal_cell))
-    rospy.logwarn("Map val at goal: "+str(occ_map[goal_cell.i][goal_cell.j]))
+    goal_cell = Cell(tf_ekf_to_map(goal))
+    # print("Goal: "+str(goal_cell))
+    # rospy.logwarn("Map val at goal: "+str(occ_map[goal_cell.i][goal_cell.j]))
     # first add starting node to open list.
     if len(goal_queue) > 0: # use end of prev segment as start if there is one.
-        start_cell = Cell(tf_ekf_to_map(goal_queue[-1][0]), tf_ekf_to_map(goal_queue[-1][1]))
+        start_cell = Cell(tf_ekf_to_map(goal_queue[-1]))
     else: # otherwise use the current position estimate.
-        start_cell = Cell(tf_ekf_to_map(cur[0]), tf_ekf_to_map(cur[1]))
+        start_cell = Cell(tf_ekf_to_map(cur))
     open_list = [start_cell]
-    print("Start:"+str(open_list[0]))
+    # print("Start: "+str(open_list[0]))
     closed_list = []
     # iterate until reaching the goal or exhausting all cells.
     while len(open_list) > 0:
@@ -216,11 +248,11 @@ def astar(goal):
         # add its unoccupied neighbors to the open list.
         for chg in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
             # check each cell for occlusion and if we've already checked it.
-            nbr = Cell(cur_cell.i+chg[0], cur_cell.j+chg[1], parent=cur_cell)
+            nbr = Cell([cur_cell.i+chg[0], cur_cell.j+chg[1]], parent=cur_cell)
             # skip if out of bounds.
             if nbr.i < 0 or nbr.j < 0 or nbr.i >= params["OCC_MAP_SIZE"] or nbr.j >= params["OCC_MAP_SIZE"]: continue
             # skip if occluded.
-            if occ_map[nbr.i][nbr.j] != 1:
+            if occ_map[nbr.i][nbr.j] == 0:
                 # rospy.logwarn("Neighbor is occluded.")
                 continue
             # skip if already in closed list.
@@ -234,13 +266,13 @@ def astar(goal):
             # compute heuristic "cost-to-go". keep squared to save unnecessary computation.
             nbr.set_cost((goal_cell.i - nbr.i)**2 + (goal_cell.j - nbr.j)**2)
             # add cell to open list.
-            print("Added open cell: "+str(nbr))
+            # print("Added open cell: "+str(nbr))
             open_list.append(nbr)
 
 class Cell:
-    def __init__(self, i, j, parent=None):
-        self.i = int(i)
-        self.j = int(j)
+    def __init__(self, pos, parent=None):
+        self.i = int(pos[0])
+        self.j = int(pos[1])
         self.parent = parent
         self.g = 0 if parent is None else parent.g + 1
         self.f = 0

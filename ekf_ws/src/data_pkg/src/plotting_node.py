@@ -190,7 +190,10 @@ def get_ekf_state(msg):
     # set filename for EKF.
     fname = "ekf"
     # update the plot.
-    update_plot("ekf", msg)
+    try:
+        update_plot("ekf", msg)
+    except:
+        rospy.logwarn("Draw error.")
 
 # get the state published by the UKF.
 def get_ukf_state(msg):
@@ -255,19 +258,24 @@ def get_occ_grid_map(msg):
     # occ_map_rgb = cv2.cvtColor(occ_map, cv2.COLOR_GRAY2RGB)
     # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
     edge = params["MAP_BOUND"] * 1.5
-    plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])
+    try:
+        plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])
+    except:
+        rospy.logwarn("map img drawing error.")
 
 def get_planned_path(msg):
     global plots
-    # get the set of points that A* determined to get to the clicked goal.
-    # remove and update the path if we've drawn it already.
-    if "planned_path" in plots.keys() and plots["planned_path"] is not None:
-        plots["planned_path"].remove()
-        plots["planned_path"] = None
-    # only draw if the path is non-empty.
-    if len(msg.data) > 1:
-        plots["planned_path"] = plt.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
-
+    try:
+        # get the set of points that A* determined to get to the clicked goal.
+        # remove and update the path if we've drawn it already.
+        if "planned_path" in plots.keys() and plots["planned_path"] is not None:
+            plots["planned_path"].remove()
+            plots["planned_path"] = None
+        # only draw if the path is non-empty.
+        if len(msg.data) > 1:
+            plots["planned_path"] = plt.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
+    except:
+        rospy.logwarn("path drawing error.")
 
 def main():
     global goal_pub
