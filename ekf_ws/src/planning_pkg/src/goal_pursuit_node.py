@@ -8,6 +8,7 @@ Generate the next odom command based on current state estimate.
 import rospy
 import rospkg
 from geometry_msgs.msg import Vector3
+from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import Image
 from ekf_pkg.msg import EKFState
 from pf_pkg.msg import PFState
@@ -18,13 +19,21 @@ from pure_pursuit import PurePursuit
 
 ############ GLOBAL VARIABLES ###################
 params = {}
-cmd_pub = None
+cmd_pub = None; path_pub = None
 # goal = [0.0, 0.0] # target x,y point.
 goal_queue = [] # queue of goal points to force a certain path.
 cur = [0.0, 0.0] # current estimate of veh pos.
 occ_map = None # cv2 image of true occupancy grid map.
 # init pure pursuit object.
-pp = PurePursuit()
+# pp = PurePursuit()
+#################################################
+# Color codes for console output.
+ANSI_RESET = "\u001B[0m"
+GREEN = "\u001B[32m"
+YELLOW = "\u001B[33m"
+BLUE = "\u001B[34m"
+PURPLE = "\u001B[35m"
+CYAN = "\u001B[36m"
 #################################################
 
 
@@ -81,7 +90,7 @@ def choose_command(state_msg):
     # turn this into a command.
     odom_msg = Vector3()
     # go faster the more aligned the hdg is.
-    odom_msg.x = 0.05 * (1 - abs(beta)/30)**5 + 0.005 if r > 0.1 else 0.0
+    odom_msg.x = 0.1 * (1 - abs(beta)/params["ODOM_TH_MAX"])**5 + 0.05 if r > 0.1 else 0.0
     P = 0.03 if r > 0.2 else 0.2
     odom_msg.y = beta * P if r > 0.05 else 0.0
     # # use pure pursuit to get heading.
@@ -92,9 +101,11 @@ def choose_command(state_msg):
     odom_msg.y = max(-params["ODOM_TH_MAX"], min(odom_msg.y, params["ODOM_TH_MAX"]))
     cmd_pub.publish(odom_msg)
     # remove the goal from the queue if we've arrived.
-    if r < 0.1:
+    if r < 0.15:
         goal_queue.pop(0)
-        rospy.logwarn("Arrived at current goal!")
+        # rospy.logwarn("Arrived at current goal!")
+        # publish updated path for the plotter.
+        path_pub.publish(Float32MultiArray(data=sum(goal_queue, [])))
 
 
 def get_ekf_state(msg):
@@ -133,28 +144,23 @@ def tf_ekf_to_map(component):
     # transform x or y component from ekf coords to occ map indices.
     return component / scale + shift
 
-def pp_nav():
-    """
-    Navigate using pure pursuit.
-    """
-    lookahead = None
-    # start with this search radius.
-    radius = 0.4
-    # look until we find the path at the increasing radius or at the maximum dist.
-    while lookahead is None and radius <= 6: 
-        lookahead = pp.get_lookahead_point(cur[0], cur[1], radius)
-        radius *= 1.25
-    # make sure we actually found the path
-    if lookahead is not None:
-        heading_to_la = remainder(atan2(lookahead[1] - cur[1], lookahead[0] - cur[0]), tau)
+# def pp_nav():
+#     """
+#     Navigate using pure pursuit.
+#     """
+#     lookahead = None
+#     # start with this search radius.
+#     radius = 0.4
+#     # look until we find the path at the increasing radius or at the maximum dist.
+#     while lookahead is None and radius <= 6: 
+#         lookahead = pp.get_lookahead_point(cur[0], cur[1], radius)
+#         radius *= 1.25
+#     # make sure we actually found the path
+#     if lookahead is not None:
+#         heading_to_la = remainder(atan2(lookahead[1] - cur[1], lookahead[0] - cur[0]), tau)
 
-        return heading_to_la
-    return None
-
-
-
-
-
+#         return heading_to_la
+#     return None
 
 
 def interpret_astar_path(path_to_start):
@@ -168,9 +174,11 @@ def interpret_astar_path(path_to_start):
         return
     for i in range(len(path_to_start)-1, -1, -1):
         # convert pt to ekf coords.
-        # goal_queue.append((tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1])))
-        pp.add_point(tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1]))
+        goal_queue.append([tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1])])
+        # pp.add_point(tf_map_to_ekf(path_to_start[i][0]), tf_map_to_ekf(path_to_start[i][1]))
     print("Found goal path: "+str(goal_queue))
+    # publish this path for the plotter.
+    path_pub.publish(Float32MultiArray(data=sum(goal_queue, [])))
 
 def astar(goal):
     """
@@ -181,8 +189,13 @@ def astar(goal):
     # define goal node.
     goal_cell = Cell(tf_ekf_to_map(goal[0]), tf_ekf_to_map(goal[1]))
     print("Goal:"+str(goal_cell))
+    rospy.logwarn("Map val at goal: "+str(occ_map[goal_cell.i][goal_cell.j]))
     # first add starting node to open list.
-    open_list = [Cell(tf_ekf_to_map(cur[0]), tf_ekf_to_map(cur[1]))]
+    if len(goal_queue) > 0: # use end of prev segment as start if there is one.
+        start_cell = Cell(tf_ekf_to_map(goal_queue[-1][0]), tf_ekf_to_map(goal_queue[-1][1]))
+    else: # otherwise use the current position estimate.
+        start_cell = Cell(tf_ekf_to_map(cur[0]), tf_ekf_to_map(cur[1]))
+    open_list = [start_cell]
     print("Start:"+str(open_list[0]))
     closed_list = []
     # iterate until reaching the goal or exhausting all cells.
@@ -208,7 +221,7 @@ def astar(goal):
             if nbr.i < 0 or nbr.j < 0 or nbr.i >= params["OCC_MAP_SIZE"] or nbr.j >= params["OCC_MAP_SIZE"]: continue
             # skip if occluded.
             if occ_map[nbr.i][nbr.j] != 1:
-                rospy.logwarn("Neighbor is occluded.")
+                # rospy.logwarn("Neighbor is occluded.")
                 continue
             # skip if already in closed list.
             if any([nbr == c for c in closed_list]): continue
@@ -244,7 +257,7 @@ class Cell:
 
 
 def main():
-    global cmd_pub
+    global cmd_pub, path_pub
     rospy.init_node('goal_pursuit_node')
 
     # find the filepath to this package.
@@ -264,6 +277,9 @@ def main():
 
     # subscribe to current goal point.
     rospy.Subscriber("/plan/goal", Vector3, get_goal_pt, queue_size=1)
+    # publish planned path to the goal.
+    path_pub = rospy.Publisher("/plan/path", Float32MultiArray, queue_size=1)
+
 
     # instruct the user.
     rospy.loginfo("Left-click on the plot to set the vehicle's goal position.")

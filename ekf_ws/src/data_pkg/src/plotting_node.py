@@ -94,7 +94,7 @@ def update_plot(filter:str, msg):
     
     #################### TRUE MAP #######################
     if true_map is not None:
-        plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black")
+        plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black", zorder=1)
         # make sure the time text will be on screen but not blocking a lm.
         pos_time_display = (min(true_map[0]), max(true_map[1])+2)
         # this should only run once to avoid wasting time.
@@ -105,13 +105,13 @@ def update_plot(filter:str, msg):
         # plot only the current veh pos.
         if "veh_pos_true" in plots.keys():
             plots["veh_pos_true"].remove()
-        plots["veh_pos_true"] = plt.arrow(true_pose.x, true_pose.y, params["ARROW_LEN"]*cos(true_pose.z), params["ARROW_LEN"]*sin(true_pose.z), color="blue", width=0.1)
+        plots["veh_pos_true"] = plt.arrow(true_pose.x, true_pose.y, params["ARROW_LEN"]*cos(true_pose.z), params["ARROW_LEN"]*sin(true_pose.z), color="blue", width=0.1, zorder=1)
 
     ###################### TIMESTEP #####################
     if "timestep" in plots.keys():
         plots["timestep"].remove()
     if pos_time_display is not None:
-        plots["timestep"] = plt.text(pos_time_display[0], pos_time_display[1], 't = '+str(msg.timestep), horizontalalignment='center', verticalalignment='bottom')
+        plots["timestep"] = plt.text(pos_time_display[0], pos_time_display[1], 't = '+str(msg.timestep), horizontalalignment='center', verticalalignment='bottom', zorder=2)
 
     ####################### EKF SLAM #########################
     if filter == "ekf" or filter == "ukf":
@@ -121,7 +121,7 @@ def update_plot(filter:str, msg):
         if not params["SHOW_ENTIRE_TRAJ"] and "veh_pos_est" in plots.keys():
             plots["veh_pos_est"].remove()
         # draw a single pt with arrow to represent current veh pose.
-        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, params["ARROW_LEN"]*cos(msg.yaw_v), params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1)
+        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, params["ARROW_LEN"]*cos(msg.yaw_v), params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1, zorder=1)
 
         ################ VEH COV ##################
         n = int(len(msg.P)**(1/2)) # length of state n = 3+2M
@@ -131,7 +131,7 @@ def update_plot(filter:str, msg):
         if not params["SHOW_ENTIRE_TRAJ"] and "veh_cov_est" in plots.keys():
             plots["veh_cov_est"].remove()
         # plot the ellipse.
-        plots["veh_cov_est"], = plt.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey')
+        plots["veh_cov_est"], = plt.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
 
         ############## LANDMARK EST ##################
         lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
@@ -140,7 +140,7 @@ def update_plot(filter:str, msg):
         if "lm_pos_est" in plots.keys():
             plots["lm_pos_est"].remove()
         # plot new landmark estimates.
-        plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black")
+        plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=1)
 
         ############## LANDMARK COV ###################
         # plot new landmark covariances.
@@ -152,7 +152,7 @@ def update_plot(filter:str, msg):
             # extract 2x2 cov for this landmark.
             lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
             # plot its ellipse.
-            plots["lm_cov_est"][lm_id], = plt.plot(lm_x[i]+lm_ell[0,:] , lm_y[i]+lm_ell[1,:],'orange')
+            plots["lm_cov_est"][lm_id], = plt.plot(lm_x[i]+lm_ell[0,:] , lm_y[i]+lm_ell[1,:],'orange', zorder=1)
 
     ############## PARTICLE FILTER LOCALIZATION #####################
     elif filter == "pf":
@@ -237,7 +237,7 @@ def on_click(event):
         # update the plot to show the current goal.
         if "goal_pt" in plots.keys():
             plots["goal_pt"].remove()
-        plots["goal_pt"] = plt.scatter(event.xdata, event.ydata, color="yellow", edgecolors="black", s=40)
+        plots["goal_pt"] = plt.scatter(event.xdata, event.ydata, color="yellow", edgecolors="black", s=40, zorder=2)
         # publish new goal pt for the planner.
         goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
 
@@ -256,6 +256,17 @@ def get_occ_grid_map(msg):
     # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
     edge = params["MAP_BOUND"] * 1.5
     plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])
+
+def get_planned_path(msg):
+    global plots
+    # get the set of points that A* determined to get to the clicked goal.
+    # remove and update the path if we've drawn it already.
+    if "planned_path" in plots.keys() and plots["planned_path"] is not None:
+        plots["planned_path"].remove()
+        plots["planned_path"] = None
+    # only draw if the path is non-empty.
+    if len(msg.data) > 1:
+        plots["planned_path"] = plt.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
 
 
 def main():
@@ -287,6 +298,9 @@ def main():
 
     # publish the chosen goal point for the planner.
     goal_pub = rospy.Publisher("/plan/goal", Vector3, queue_size=1)
+    # subscribe to planned path to the goal.
+    rospy.Subscriber("/plan/path", Float32MultiArray, get_planned_path, queue_size=1)
+
 
     # startup the plot.
     # plt.ion()
