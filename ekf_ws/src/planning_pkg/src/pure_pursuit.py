@@ -6,8 +6,8 @@ class PurePursuit:
     def __init__(self):
         self.path = []
     
-    def add_point(self, x, y):
-        self.path.append((x,y))
+    def add_point(self, pt):
+        self.path.append(pt)
 
     def set_points(self, pts):
         self.path = pts

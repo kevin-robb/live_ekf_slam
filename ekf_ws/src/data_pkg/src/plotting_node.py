@@ -252,12 +252,10 @@ def get_occ_grid_map(msg):
     bridge = CvBridge()
     occ_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
     # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
-    # rospy.logwarn(str(occ_map))
     # reduce from float64 (not supported by cv2) to float32.
     occ_map = np.float32(occ_map)
     # convert from BGR to RGB for display.
     occ_map_rgb = cv2.cvtColor(occ_map, cv2.COLOR_BGR2RGB)
-    # occ_map_rgb = cv2.cvtColor(occ_map, cv2.COLOR_GRAY2RGB)
     # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
     edge = params["MAP_BOUND"] * 1.5
     plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])

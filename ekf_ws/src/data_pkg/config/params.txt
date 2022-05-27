@@ -6,9 +6,6 @@ x_0 = -10.0
 y_0 = -10.0
 yaw_0 = 0.0
 
-# UKF mode ("loc"~localization or "slam"~SLAM)
-ukf_mode = loc
-
 # ----- EKF/UKF -----
 # process noise mean.
 v_d = 0.0
@@ -22,6 +19,9 @@ w_b = 0.0
 # sensing noise cov.
 W_00 = 0.01
 W_11 = 0.00030461741978670857
+
+# UKF mode ("loc"~localization or "slam"~SLAM)
+ukf_mode = loc
 
 # ----- Map Gen -----
 # all lm will be w/in +- params["MAP_BOUND"] in both x/y.
@@ -62,3 +62,7 @@ PLOT_PARTICLE_ARROWS = False
 
 # ----- PF -----
 NUM_PARTICLES = 500
+
+# ----- Path Planner / Nav -----
+# nav function to use ("pp"~pure pursuit or "direct"~pursue all goal pts directly)
+NAV_METHOD = direct
