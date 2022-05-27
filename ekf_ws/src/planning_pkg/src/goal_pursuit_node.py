@@ -26,6 +26,10 @@ cur = [0.0, 0.0] # current estimate of veh pos.
 occ_map = None # cv2 image of true occupancy grid map.
 # init pure pursuit object.
 pp = PurePursuit()
+# PID global vars.
+integ = 0
+err_prev = 0.0
+# we're synched to the EKF's "clock", so all time increments are 1 time unit, DT.
 #################################################
 # Color codes for console output.
 ANSI_RESET = "\u001B[0m"
@@ -82,7 +86,7 @@ def pp_nav(state_msg):
     """
     Navigate using pure pursuit.
     """
-    global goal_queue, cur
+    global goal_queue, cur, integ, err_prev
     cur = [state_msg.x_v, state_msg.y_v]
     odom_msg = Vector3(x=0, y=0)
     if len(goal_queue) < 1: # if there's no path yet, just wait.
@@ -91,18 +95,29 @@ def pp_nav(state_msg):
 
     # define lookahead point.
     lookahead = None
-    radius = 0.1 # starting search radius.
+    radius = 0.2 # starting search radius.
     # look until we find the path at the increasing radius or at the maximum dist.
-    while lookahead is None and radius <= 6: 
+    while lookahead is None and radius <= 3: 
         lookahead = pp.get_lookahead_point(cur[0], cur[1], radius)
         radius *= 1.25
-    # make sure we actually found the path
+    # make sure we actually found the path.
     if lookahead is not None:
-        heading_to_la = remainder(atan2(lookahead[1] - cur[1], lookahead[0] - cur[0]), tau)
+        heading_to_la = atan2(lookahead[1] - cur[1], lookahead[0] - cur[0])
+        beta = remainder(heading_to_la - state_msg.yaw_v, tau) # hdg relative to veh pose.
 
-    if heading_to_la is not None:
-        odom_msg.y = heading_to_la * 0.5
-        odom_msg.x = 0.1 * (1 - abs(heading_to_la)/pi)**5 + 0.05
+        # update global integral term.
+        integ += beta * params["DT"]
+
+        P = 0.08 * beta # proportional to hdg error.
+        I = 0.009 * integ # integral to correct systematic error.
+        D = 0.01 * (beta - err_prev) / params["DT"] # slope
+
+        # set forward and turning commands.
+        odom_msg.x = (1 - abs(beta / pi))**5 + 0.05
+        odom_msg.y = P + I + D
+
+        err_prev = beta
+
     # ensure commands are capped within constraints.
     odom_msg.x = max(0, min(odom_msg.x, params["ODOM_D_MAX"]))
     odom_msg.y = max(-params["ODOM_TH_MAX"], min(odom_msg.y, params["ODOM_TH_MAX"]))
@@ -184,16 +199,22 @@ def get_occ_grid_map(msg):
             row.append(int(occ_map_img[i][j]))
         occ_map.append(row)
     # print("raw map:\n",occ_map)
+    # determine index pairs to select all neighbors when ballooning obstacles.
+    nbrs = []
+    for i in range(-params["OCC_MAP_BALLOON_AMT"], params["OCC_MAP_BALLOON_AMT"]+1):
+        for j in range(-params["OCC_MAP_BALLOON_AMT"], params["OCC_MAP_BALLOON_AMT"]+1):
+            nbrs.append((i, j))
+    # remove 0,0 which is just the parent cell.
+    nbrs.remove((0,0))
     # expand all occluded cells outwards.
     for i in range(len(occ_map)):
         for j in range(len(occ_map[0])):
             if occ_map_img[i][j] < 0.5: # occluded.
                 # mark all neighbors as occluded.
-                for chg in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                for chg in nbrs:
                     occ_map[cap(i+chg[0])][cap(j+chg[1])] = 0
     # print("inflated map:\n",occ_map)
-
-    # show set of values appearing in occ_map.
+    # show value distribution in occ_map.
     freqs = [0, 0]
     for i in range(len(occ_map)):
         for j in range(len(occ_map[0])):
@@ -224,7 +245,6 @@ def interpret_astar_path(path_to_start):
         # convert pt to ekf coords.
         goal_queue.append(tf_map_to_ekf(path_to_start[i]))
         pp.add_point(tf_map_to_ekf(path_to_start[i]))
-    # rospy.loginfo("A* found path: "+str(goal_queue))
     # publish this path for the plotter.
     path_pub.publish(Float32MultiArray(data=sum(goal_queue, [])))
 
@@ -273,13 +293,21 @@ def astar(goal):
             # skip if already in closed list.
             if any([nbr == c for c in closed_list]): continue
             # skip if already in open list, unless the cost is lower.
-            for open_cell in open_list:
-                if nbr == open_cell:
-                    if nbr.g > open_cell.g:
-                        continue
-                    break
+            seen = [nbr == open_cell for open_cell in open_list]
+            try:
+                match_i = seen.index(True)
+                # this cell has been added to the open list already.
+                # check if the new or existing route here is better.
+                if nbr.g < open_list[match_i].g: 
+                    # the cell has a shorter path this new way, so update its cost and parent.
+                    open_list[match_i].set_cost(g=nbr.g)
+                    open_list[match_i].parent = nbr.parent
+                continue
+            except:
+                # there's no match, so proceed.
+                pass
             # compute heuristic "cost-to-go". keep squared to save unnecessary computation.
-            nbr.set_cost((goal_cell.i - nbr.i)**2 + (goal_cell.j - nbr.j)**2)
+            nbr.set_cost(h=(goal_cell.i - nbr.i)**2 + (goal_cell.j - nbr.j)**2)
             # add cell to open list.
             open_list.append(nbr)
 
@@ -291,9 +319,14 @@ class Cell:
         self.g = 0 if parent is None else parent.g + 1
         self.f = 0
     
-    def set_cost(self, h):
-        self.h = h
-        self.f = self.g + h
+    def set_cost(self, h=None, g=None):
+        # set/update either g or h and recompute the cost, f.
+        if h is not None:
+            self.h = h
+        if g is not None:
+            self.g = g
+        # update the cost.
+        self.f = self.g + self.h
 
     def __eq__(self, other):
         return self.i == other.i and self.j == other.j

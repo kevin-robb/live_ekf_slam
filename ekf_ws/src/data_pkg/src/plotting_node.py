@@ -146,17 +146,18 @@ def update_plot(filter:str, msg):
         plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=1)
 
         ############## LANDMARK COV ###################
-        # plot new landmark covariances.
-        for i in range(len(msg.landmarks) // 3):
-            # replace previous if it's been plotted before.
-            lm_id = msg.landmarks[i*3] 
-            if lm_id in plots["lm_cov_est"].keys():
-                plots["lm_cov_est"][lm_id].remove()
-                del plots["lm_cov_est"][lm_id]
-            # extract 2x2 cov for this landmark.
-            lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
-            # plot its ellipse.
-            plots["lm_cov_est"][lm_id], = plt.plot(lm_x[i]+lm_ell[0,:] , lm_y[i]+lm_ell[1,:],'orange', zorder=1)
+        if params["SHOW_LM_ELLIPSES"]:
+            # plot new landmark covariances.
+            for i in range(len(msg.landmarks) // 3):
+                # replace previous if it's been plotted before.
+                lm_id = msg.landmarks[i*3] 
+                if lm_id in plots["lm_cov_est"].keys():
+                    plots["lm_cov_est"][lm_id].remove()
+                    del plots["lm_cov_est"][lm_id]
+                # extract 2x2 cov for this landmark.
+                lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
+                # plot its ellipse.
+                plots["lm_cov_est"][lm_id], = plt.plot(lm_x[i]+lm_ell[0,:] , lm_y[i]+lm_ell[1,:],'orange', zorder=1)
 
     ############## PARTICLE FILTER LOCALIZATION #####################
     elif filter == "pf":

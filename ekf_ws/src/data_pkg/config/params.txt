@@ -23,7 +23,7 @@ W_11 = 0.00030461741978670857
 # UKF mode ("loc"~localization or "slam"~SLAM)
 ukf_mode = loc
 
-# ----- Map Gen -----
+# ----- Landmark Map Gen -----
 # all lm will be w/in +- params["MAP_BOUND"] in both x/y.
 MAP_BOUND = 10.0
 NUM_LANDMARKS = 20
@@ -31,8 +31,6 @@ NUM_LANDMARKS = 20
 MIN_SEP = 0.05
 # size of grid to place landmarks.
 GRID_STEP = 4
-# occupancy grid number of pixels per dim.
-OCC_MAP_SIZE = 100
 
 # ----- Trajectory Gen -----
 NUM_TIMESTEPS = 2000
@@ -53,16 +51,24 @@ FOV_MAX = 3.141592653589793
 # ----- Plotter -----
 SHOW_ENTIRE_TRAJ = False
 SHOW_TRUE_TRAJ = True
+SHOW_LM_ELLIPSES = False
 # length of pose arrow.
 ARROW_LEN = 0.1
 # number of std dev to include in cov ellipse.
 COV_STD_DEV = 1
-# show individual heading for all particles.
+# show individual heading for all PF particles.
 PLOT_PARTICLE_ARROWS = False
 
 # ----- PF -----
 NUM_PARTICLES = 500
 
+# ----- Occupancy Grid -----
+# number of cells per dim (square image).
+OCC_MAP_SIZE = 100
+# number of cells to balloon each occluded cell by (to reduce collisions).
+OCC_MAP_BALLOON_AMT = 2
+
 # ----- Path Planner / Nav -----
 # nav function to use ("pp"~pure pursuit or "direct"~pursue all goal pts directly)
-NAV_METHOD = direct
+NAV_METHOD = pp
+# 
