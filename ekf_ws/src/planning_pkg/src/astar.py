@@ -4,8 +4,6 @@
 Set of static functions to perform A* path planning.
 """
 
-from std_msgs.msg import Float32MultiArray
-
 class Astar:
     # Always use the same map.
     occ_map = None

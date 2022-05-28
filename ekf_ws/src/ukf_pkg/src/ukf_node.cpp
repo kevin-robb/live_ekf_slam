@@ -10,7 +10,7 @@
 #include "ukf_pkg/ukf.h"
 
 // define queues for messages.
-std::queue<geometry_msgs::Vector3::ConstPtr> odomQueue;
+std::queue<data_pkg::Command::ConstPtr> cmdQueue;
 std::queue<std_msgs::Float32MultiArray::ConstPtr> lmMeasQueue;
 // define state publisher.
 ros::Publisher statePub;
@@ -66,12 +66,12 @@ float readParams() {
 
 void ekfIterate(const ros::TimerEvent& event) {
     // perform an iteration of the EKF for this timestep.
-    if (!loadedTrueMap || odomQueue.empty() || lmMeasQueue.empty()) {
+    if (!loadedTrueMap || cmdQueue.empty() || lmMeasQueue.empty()) {
         return;
     }
     // get the next timestep's messages from the queues.
-    geometry_msgs::Vector3::ConstPtr odomMsg = odomQueue.front();
-    odomQueue.pop();
+    data_pkg::Command::ConstPtr odomMsg = cmdQueue.front();
+    cmdQueue.pop();
     std_msgs::Float32MultiArray::ConstPtr lmMeasMsg = lmMeasQueue.front();
     lmMeasQueue.pop();
     // call the EKF's update function.
@@ -86,9 +86,9 @@ void ekfIterate(const ros::TimerEvent& event) {
     statePub.publish(stateMsg);
 }
 
-void odomCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
+void cmdCallback(const data_pkg::Command::ConstPtr& msg) {
     // receive an odom command and add to the queue.
-    odomQueue.push(msg);
+    cmdQueue.push(msg);
 }
 
 void lmMeasCallback(const std_msgs::Float32MultiArray::ConstPtr& msg) {
@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
     ukf.init(x_0, y_0, yaw_0);
 
     // subscribe to inputs.
-    ros::Subscriber odomSub = node.subscribe("/odom", 100, odomCallback);
+    ros::Subscriber cmdSub = node.subscribe("/command", 100, cmdCallback);
     ros::Subscriber lmMeasSub = node.subscribe("/landmark", 100, lmMeasCallback);
     ros::Subscriber trueMapSub = node.subscribe("/truth/landmarks", 1, trueMapCallback);
     // publish state.

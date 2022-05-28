@@ -5,6 +5,7 @@
 #include "geometry_msgs/Vector3.h"
 #include "std_msgs/Float32MultiArray.h"
 #include "ukf_pkg/UKFState.h"
+#include "data_pkg/Command.h"
 #include <eigen3/Eigen/Dense>
 #include <vector>
 #include <cmath>
@@ -62,8 +63,8 @@ class UKF {
     UKF();
     void init(float x_0, float y_0, float yaw_0);
     void setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg);
-    void slamUpdate(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
-    void localizationUpdate(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
+    void slamUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
+    void localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     Eigen::MatrixXd nearestSPD();
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
     Eigen::VectorXd slamSensingModel(Eigen::VectorXd x, int lm_i);

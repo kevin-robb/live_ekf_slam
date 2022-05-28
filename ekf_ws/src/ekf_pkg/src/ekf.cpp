@@ -32,14 +32,14 @@ void EKF::init(float x_0, float y_0, float yaw_0) {
 }
 
 // perform a full iteration of the EKF for this timestep.
-void EKF::update(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
+void EKF::update(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // update timestep.
     this->timestep += 1;
 
     ////////////// PREDICTION STAGE /////////////////
-    // extract odom.
-    float d_d = odomMsg->x;
-    float d_th = odomMsg->y;
+    // extract odom command.
+    float d_d = cmdMsg->fwd;
+    float d_th = cmdMsg->ang;
 
     // compute jacobians
     this->F_x.setIdentity(3+2*this->M, 3+2*this->M);

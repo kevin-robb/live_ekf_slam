@@ -108,15 +108,15 @@ Eigen::VectorXd UKF::localizationSensingModel(Eigen::VectorXd x, int lm_id) {
     return z_est;
 }
 
-void UKF::localizationUpdate(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
+void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // perform a full iteration of UKF-Localization for this timestep.
     // update timestep.
     this->timestep += 1;
 
     ////////////// PREDICTION STAGE /////////////////
     // extract odom.
-    float u_d = odomMsg->x;
-    float u_th = odomMsg->y;
+    float u_d = cmdMsg->fwd;
+    float u_th = cmdMsg->ang;
 
     // get vector length.
     int n = 3;
@@ -216,15 +216,15 @@ Eigen::VectorXd UKF::slamSensingModel(Eigen::VectorXd x, int lm_i) {
     return z_est;
 }
 
-void UKF::slamUpdate(geometry_msgs::Vector3::ConstPtr odomMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
+void UKF::slamUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // perform a full iteration of UKF-SLAM for this timestep.
     // update timestep.
     this->timestep += 1;
 
     ////////////// PREDICTION STAGE /////////////////
     // extract odom.
-    float u_d = odomMsg->x;
-    float u_th = odomMsg->y;
+    float u_d = cmdMsg->fwd;
+    float u_th = cmdMsg->ang;
 
     // get vector length.
     int n = this->M*2 + 3;

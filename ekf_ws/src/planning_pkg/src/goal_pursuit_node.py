@@ -7,6 +7,7 @@ Generate the next odom command based on current state estimate.
 
 import rospy
 import rospkg
+from data_pkg.msg import Command
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import Image
@@ -176,7 +177,7 @@ def main():
     rospy.Subscriber("/truth/occ_grid", Image, get_occ_grid_map, queue_size=1)
 
     # publish odom commands for the vehicle.
-    cmd_pub = rospy.Publisher("/odom", Vector3, queue_size=1)
+    cmd_pub = rospy.Publisher("/command", Command, queue_size=1)
 
     # subscribe to current goal point.
     rospy.Subscriber("/plan/goal", Vector3, get_goal_pt, queue_size=1)

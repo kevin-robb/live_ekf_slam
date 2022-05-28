@@ -9,7 +9,8 @@ Receives odom commands and performs them with noise.
 
 import rospy
 import rospkg
-from std_msgs.msg import Float32MultiArray, Int8MultiArray
+from data_pkg.msg import Command
+from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from sensor_msgs.msg import Image
 import sys
@@ -110,7 +111,7 @@ def generate_landmarks(map_type:str):
     true_map_pub.publish(true_map_msg)
 
     # send the first odom command and meas to kick off the EKF.
-    cmd_pub.publish(Vector3(x=0, y=0))
+    cmd_pub.publish(Command(fwd=0, ang=0))
     # lm_pub.publish(Float32MultiArray(data=[]))
     
 
@@ -121,8 +122,8 @@ def get_cmd(msg):
     """
     global x_v
     # add noise to command.
-    d = msg.x + 2*params["V_00"]*random()-params["V_00"]
-    hdg = msg.y + 2*params["V_11"]*random()-params["V_11"]
+    d = msg.fwd + 2*params["V_00"]*random()-params["V_00"]
+    hdg = msg.ang + 2*params["V_11"]*random()-params["V_11"]
     # cap cmds within odom constraints.
     d = max(0, min(d, params["ODOM_D_MAX"]))
     hdg = max(-params["ODOM_TH_MAX"], min(hdg, params["ODOM_TH_MAX"]))
@@ -217,9 +218,9 @@ def main():
     read_params(pkg_path)
 
     # subscribe to odom commands.
-    rospy.Subscriber("/odom", Vector3, get_cmd, queue_size=1)
+    rospy.Subscriber("/command", Command, get_cmd, queue_size=1)
     # publish first odom cmd to start it all off.
-    cmd_pub = rospy.Publisher("/odom", Vector3, queue_size=1)
+    cmd_pub = rospy.Publisher("/command", Command, queue_size=1)
 
     # publish landmark detections: [id1,r1,b1,...idN,rN,bN]
     lm_pub = rospy.Publisher("/landmark", Float32MultiArray, queue_size=1)

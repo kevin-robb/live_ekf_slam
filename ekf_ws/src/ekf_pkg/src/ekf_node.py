@@ -11,6 +11,7 @@ import rospy
 import rospkg
 import numpy as np
 from math import sin, cos, remainder, tau, atan2
+from data_pkg.msg import Command
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from ekf_pkg.msg import EKFState
@@ -187,8 +188,7 @@ def send_state():
 # get measurement of odometry info.
 def get_odom(msg):
     global odom_queue
-    # format: x = distance, y = heading.
-    odom_queue.append([msg.x, msg.y])
+    odom_queue.append([msg.fwd, msg.ang])
 
 # get measurement of landmarks.
 def get_landmarks(msg):
@@ -209,7 +209,7 @@ def main():
     # subscribe to landmark detections: [id1,r1,b1,...idN,rN,bN]
     rospy.Subscriber("/landmark", Float32MultiArray, get_landmarks, queue_size=1)
     # subscribe to odom commands/measurements.
-    rospy.Subscriber("/odom", Vector3, get_odom, queue_size=1)
+    rospy.Subscriber("/command", Command, get_odom, queue_size=1)
 
     # create publisher for the current state.
     state_pub = rospy.Publisher("/state/ekf", EKFState, queue_size=1)

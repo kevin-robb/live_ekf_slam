@@ -51,7 +51,7 @@ FOV_MAX = 3.141592653589793
 # ----- Plotter -----
 SHOW_ENTIRE_TRAJ = False
 SHOW_TRUE_TRAJ = True
-SHOW_LM_ELLIPSES = False
+SHOW_LM_ELLIPSES = True
 # length of pose arrow.
 ARROW_LEN = 0.1
 # number of std dev to include in cov ellipse.

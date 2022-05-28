@@ -7,6 +7,7 @@ to the EKF node for verification and demonstration.
 
 import rospy
 import rospkg
+from data_pkg.msg import Command
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 import sys
@@ -17,7 +18,7 @@ import numpy as np
 ############ GLOBAL VARIABLES ###################
 params = {}
 # publishers
-odom_pub = None; lm_pub = None; true_map_pub = None; true_pose_pub = None
+cmd_pub = None; lm_pub = None; true_map_pub = None; true_pose_pub = None
 # Default map from RSS demo:
 demo_map = { 0 : (6.2945, 8.1158), 1 : (-7.4603, 8.2675), 2 : (2.6472, -8.0492), 
         3 : (-4.4300, 0.9376), 4 : (9.1501, 9.2978), 5 : (-6.8477, 9.4119), 6 : (9.1433, -0.2925),
@@ -84,14 +85,10 @@ def read_rss_data(pkg_path):
     r = rospy.Rate(1/params["DT"]) # freq in Hz
     while not rospy.is_shutdown():
         if i == len(z_id): return
-    
-        odom_msg = Vector3()
-        odom_msg.x = odom_dist[i]
-        odom_msg.y = odom_hdg[i]
-        odom_pub.publish(odom_msg)
 
-        lm_msg = Float32MultiArray()
-        lm_msg.data = []
+        cmd_pub.publish(Command(fwd=odom_dist[i], ang=odom_hdg[i]))
+
+        lm_msg = Float32MultiArray(data=[])
         if z_id[i] != 0:
             lm_msg.data = [z_id[i]-1, z_range[i_z], z_bearing[i_z]]
             i_z += 1
@@ -284,8 +281,8 @@ def generate_data(map_type:str, pkg_path):
     r = rospy.Rate(1/params["DT"]) # freq in Hz
     while not rospy.is_shutdown():
         if t == params["NUM_TIMESTEPS"]: return
-        # send odom as x,y components of a vector3.
-        odom_pub.publish(Vector3(x=odom_dist[t], y=odom_hdg[t]))
+        # send odom command and true pose for plotting.
+        cmd_pub.publish(Command(fwd=odom_dist[t], ang=odom_hdg[t]))
         true_pose_pub.publish(Vector3(x=pos_true[t][0], y=pos_true[t][1], z=pos_true[t][2]))
         # always send a measurement. empty list if no detection.
         lm_pub.publish(data=z[t])
@@ -296,7 +293,7 @@ def generate_data(map_type:str, pkg_path):
     
 
 def main():
-    global lm_pub, odom_pub, pkg_path, true_map_pub, true_pose_pub
+    global lm_pub, cmd_pub, pkg_path, true_map_pub, true_pose_pub
     rospy.init_node('data_fwd_node')
 
     # read map type from command line arg.
@@ -315,7 +312,7 @@ def main():
     # publish landmark detections: [id1,r1,b1,...idN,rN,bN]
     lm_pub = rospy.Publisher("/landmark", Float32MultiArray, queue_size=1)
     # publish odom commands/measurements.
-    odom_pub = rospy.Publisher("/odom", Vector3, queue_size=1)
+    cmd_pub = rospy.Publisher("/command", Command, queue_size=1)
 
     # publish ground truth for the plotter.
     true_pose_pub = rospy.Publisher("/truth/veh_pose",Vector3, queue_size=1)

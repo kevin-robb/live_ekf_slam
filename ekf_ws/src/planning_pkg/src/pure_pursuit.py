@@ -4,7 +4,7 @@
 Set of static functions to perform pure pursuit navigation.
 """
 
-from geometry_msgs.msg import Vector3
+from data_pkg.msg import Command
 from math import remainder, tau, pi, atan2, sqrt
 
 class PurePursuit:
@@ -23,7 +23,7 @@ class PurePursuit:
         # pare the path up to current veh pos.
         PurePursuit.pare_path(cur)
 
-        cmd_msg = Vector3(x=0, y=0)
+        cmd_msg = Command(fwd=0, ang=0)
         if len(PurePursuit.goal_queue) < 1: 
             # if there's no path yet, just wait. (send 0 cmd)
             return cmd_msg
@@ -50,14 +50,14 @@ class PurePursuit:
             D = 0.01 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
 
             # set forward and turning commands.
-            cmd_msg.x = (1 - abs(beta / pi))**5 + 0.05
-            cmd_msg.y = P + I + D
+            cmd_msg.fwd = (1 - abs(beta / pi))**5 + 0.05
+            cmd_msg.ang = P + I + D
 
             PurePursuit.err_prev = beta
 
         # ensure commands are capped within constraints.
-        cmd_msg.x = max(0, min(cmd_msg.x, PurePursuit.params["ODOM_D_MAX"]))
-        cmd_msg.y = max(-PurePursuit.params["ODOM_TH_MAX"], min(cmd_msg.y, PurePursuit.params["ODOM_TH_MAX"]))
+        cmd_msg.fwd= max(0, min(cmd_msg.fwd, PurePursuit.params["ODOM_D_MAX"]))
+        cmd_msg.ang = max(-PurePursuit.params["ODOM_TH_MAX"], min(cmd_msg.ang, PurePursuit.params["ODOM_TH_MAX"]))
         return cmd_msg
 
 
@@ -116,7 +116,7 @@ class PurePursuit:
         """
         Navigate directly point-to-point without using pure pursuit.
         """
-        cmd_msg = Vector3(x=0, y=0)
+        cmd_msg = Command(fwd=0, ang=0)
         if len(PurePursuit.goal_queue) < 1: # if there's no path yet, just wait.
             return cmd_msg
         goal = PurePursuit.goal_queue[0]
@@ -129,12 +129,12 @@ class PurePursuit:
         beta = remainder(gb - cur[2], tau) # bearing rel to robot
 
         # go faster the more aligned the hdg is.
-        cmd_msg.x = 1 * (1 - abs(beta)/PurePursuit.params["ODOM_TH_MAX"])**3 + 0.05 if r > 0.1 else 0.0
+        cmd_msg.fwd= 1 * (1 - abs(beta)/PurePursuit.params["ODOM_TH_MAX"])**3 + 0.05 if r > 0.1 else 0.0
         P = 0.03 if r > 0.2 else 0.2
-        cmd_msg.y = beta #* P if r > 0.05 else 0.0
+        cmd_msg.ang = beta #* P if r > 0.05 else 0.0
         # ensure commands are capped within constraints.
-        cmd_msg.x = max(0, min(cmd_msg.x, PurePursuit.params["ODOM_D_MAX"]))
-        cmd_msg.y = max(-PurePursuit.params["ODOM_TH_MAX"], min(cmd_msg.y, PurePursuit.params["ODOM_TH_MAX"]))
+        cmd_msg.fwd= max(0, min(cmd_msg.fwd, PurePursuit.params["ODOM_D_MAX"]))
+        cmd_msg.ang = max(-PurePursuit.params["ODOM_TH_MAX"], min(cmd_msg.ang, PurePursuit.params["ODOM_TH_MAX"]))
         # remove the goal from the queue if we've arrived.
         if r < 0.15:
             PurePursuit.goal_queue.pop(0)
