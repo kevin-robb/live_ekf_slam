@@ -20,6 +20,9 @@ class PurePursuit:
         """
         Determine odom command to stay on the path.
         """
+        # pare the path up to current veh pos.
+        PurePursuit.pare_path(cur)
+
         cmd_msg = Vector3(x=0, y=0)
         if len(PurePursuit.goal_queue) < 1: 
             # if there's no path yet, just wait. (send 0 cmd)
@@ -27,12 +30,11 @@ class PurePursuit:
 
         # define lookahead point.
         lookahead_pt = None
-        radius = 0.2 # starting search radius.
-        # look until we find the path at the increasing radius or at the maximum dist.
-        while lookahead_pt is None and radius <= 3: 
-            # TODO make functions to actually do the pure pursuit thing.
-            lookahead_pt = PurePursuit.get_lookahead_point(cur[0], cur[1], radius)
-            radius *= 1.25
+        lookahead_dist = PurePursuit.params["LOOKAHEAD_DIST_INITIAL"] # starting search radius.
+        # look until we find the path, or give up at the maximum dist.
+        while lookahead_pt is None and lookahead_dist <= PurePursuit.params["LOOKAHEAD_DIST_MAX"]: 
+            lookahead_pt = PurePursuit.choose_lookahead_pt(cur, lookahead_dist)
+            lookahead_dist *= 1.25
         # make sure we actually found the path.
         if lookahead_pt is not None:
             # compute global heading to lookahead_pt
@@ -57,6 +59,57 @@ class PurePursuit:
         cmd_msg.x = max(0, min(cmd_msg.x, PurePursuit.params["ODOM_D_MAX"]))
         cmd_msg.y = max(-PurePursuit.params["ODOM_TH_MAX"], min(cmd_msg.y, PurePursuit.params["ODOM_TH_MAX"]))
         return cmd_msg
+
+
+    @staticmethod
+    def pare_path(cur):
+        """
+        If the vehicle is near a path pt, cut the path off up to this pt.
+        """
+        for i in range(len(PurePursuit.goal_queue)):
+            r = ((cur[0]-PurePursuit.goal_queue[i][0])**2 + (cur[1]-PurePursuit.goal_queue[i][1])**2)**(1/2)
+            if r < 0.15:
+                # remove whole path up to this pt.
+                del PurePursuit.goal_queue[0:i+1]
+                return
+
+
+    @staticmethod
+    def choose_lookahead_pt(cur, lookahead_dist):
+        """
+        Find the point on the path at the specified radius from the current veh pos.
+        """
+        # if there's only one path point, go straight to it.
+        if len(PurePursuit.goal_queue) == 1:
+            return PurePursuit.goal_queue[0]
+        lookahead_pt = None
+        # check the line segments between each pair of path points.
+        for i in range(1, len(PurePursuit.goal_queue)):
+            # get vector between path pts.
+            diff = [PurePursuit.goal_queue[i][0]-PurePursuit.goal_queue[i-1][0], PurePursuit.goal_queue[i][1]-PurePursuit.goal_queue[i-1][1]]
+            # get vector from veh to first path pt.
+            v1 = [PurePursuit.goal_queue[i-1][0]-cur[0], PurePursuit.goal_queue[i-1][1]-cur[1]]
+            # compute coefficients for quadratic eqn to solve.
+            a = diff[0]**2 + diff[1]**2
+            b = 2*(v1[0]*diff[0] + v1[1]*diff[1])
+            c = v1[0]**2 + v1[1]**2 - lookahead_dist**2
+            try:
+                discr = sqrt(b**2 - 4*a*c)
+            except:
+                # discriminant is negative, so there are no real roots.
+                # (line segment is too far away)
+                continue
+            # compute solutions to the quadratic.
+            # these will tell us what point along the 'diff' line segment is a solution.
+            q = [(-b-discr)/(2*a), (-b+discr)/(2*a)]
+            # check validity of solutions.
+            valid = [q[i] >= 0 and q[i] <= 1 for i in range(2)]
+            # compute the intersection pt. it's the first seg pt + q percent along diff vector.
+            if valid[0]: lookahead_pt = [PurePursuit.goal_queue[i-1][0]+q[0]*diff[0], PurePursuit.goal_queue[i-1][1]+q[0]*diff[1]]
+            elif valid[1]: lookahead_pt = [PurePursuit.goal_queue[i-1][0]+q[1]*diff[0], PurePursuit.goal_queue[i-1][1]+q[1]*diff[1]]
+            else: continue # no intersection pt in the allowable range.
+        return lookahead_pt
+
 
     @staticmethod
     def direct_nav(cur):
@@ -87,88 +140,3 @@ class PurePursuit:
             PurePursuit.goal_queue.pop(0)
         return cmd_msg
 
-
-# this stuff taken from pure_pursuit.py from the nrc_software 2020 repo
-
-    # def __init__(self):
-    #     PurePursuit.goal_queue = []
-    
-    # def add_point(self, pt):
-    #     PurePursuit.goal_queue.append(pt)
-
-    # def set_points(self, pts):
-    #     PurePursuit.goal_queue = pts
-
-    @staticmethod
-    def get_lookahead_point(x, y, r):
-        # create a counter that will stop searching after counter_max checks after finding a valid lookahead
-        # this should prevent seeing the start and end of the path simultaneously and going backwards
-        counter = 0
-        counter_max = 50
-        counter_started = False
-
-        lookahead = None
-
-        for i in range(len(PurePursuit.goal_queue)-1):
-            # increment counter if at least one valid lookahead point has been found
-            if counter_started:
-                counter += 1
-            # stop searching for a lookahead if the counter_max has been hit
-            if counter >= counter_max:
-                #break
-                return lookahead
-
-            segStart = PurePursuit.goal_queue[i]
-            segEnd = PurePursuit.goal_queue[i+1]
-
-            p1 = (segStart[0] - x, segStart[1] - y)
-            p2 = (segEnd[0] - x, segEnd[1] - y)
-
-            dx = p2[0] - p1[0]
-            dy = p2[1] - p1[1]
-
-            d = sqrt(dx * dx + dy * dy)
-            D = p1[0] * p2[1] - p2[0] * p1[1]
-
-            discriminant = r * r * d * d - D * D
-            if discriminant < 0 or p1 == p2:
-                continue
-
-            sign = lambda x: (1, -1)[x < 0]
-
-            x1 = (D * dy + sign(dy) * dx * sqrt(discriminant)) / (d * d)
-            x2 = (D * dy - sign(dy) * dx * sqrt(discriminant)) / (d * d)
-
-            y1 = (-D * dx + abs(dy) * sqrt(discriminant)) / (d * d)
-            y2 = (-D * dx - abs(dy) * sqrt(discriminant)) / (d * d)
-
-            validIntersection1 = min(p1[0], p2[0]) < x1 and x1 < max(p1[0], p2[0]) or min(p1[1], p2[1]) < y1 and y1 < max(p1[1], p2[1])
-            validIntersection2 = min(p1[0], p2[0]) < x2 and x2 < max(p1[0], p2[0]) or min(p1[1], p2[1]) < y2 and y2 < max(p1[1], p2[1])
-
-            if validIntersection1 or validIntersection2:
-                # we are within counter_max, so reset the counter if it has been started, or start it if not
-                if counter_started:
-                    counter = 0
-                else:
-                    counter_started = True
-                    counter = 0
-
-                lookahead = None
-
-            if validIntersection1:
-                lookahead = (x1 + x, y1 + y)
-
-            if validIntersection2:
-                if lookahead == None or abs(x1 - p2[0]) > abs(x2 - p2[0]) or abs(y1 - p2[1]) > abs(y2 - p2[1]):
-                    lookahead = (x2 + x, y2 + y)
-
-        if len(PurePursuit.goal_queue) > 0:
-            lastPoint = PurePursuit.goal_queue[len(PurePursuit.goal_queue) - 1]
-
-            endX = lastPoint[0]
-            endY = lastPoint[1]
-
-            if sqrt((endX - x) * (endX - x) + (endY - y) * (endY - y)) <= r:
-                return (endX, endY)
-
-        return lookahead

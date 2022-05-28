@@ -12,7 +12,6 @@ from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import Image
 from ekf_pkg.msg import EKFState
 from pf_pkg.msg import PFState
-from math import remainder, tau, atan2, pi
 from cv_bridge import CvBridge
 from pure_pursuit import PurePursuit
 from astar import Astar
@@ -87,6 +86,9 @@ def get_ekf_state(msg):
     elif params["NAV_METHOD"] == "direct":
         # directly go to each point.
         cmd_pub.publish(PurePursuit.direct_nav(cur))
+    else:
+        rospy.logerr("Invalid NAV_METHOD choice.")
+        exit()
     # if the path length has changed (by a point being reached), update the plot.
     if len(PurePursuit.goal_queue) != path_len:
         path_pub.publish(Float32MultiArray(data=sum(PurePursuit.goal_queue, [])))
@@ -115,9 +117,6 @@ def get_goal_pt(msg):
     # publish this path for the plotter to display.
     path_pub.publish(Float32MultiArray(data=sum(PurePursuit.goal_queue, [])))
 
-def cap(ind):
-    # cap a map index within 0, max.
-    return max(0, min(ind, params["OCC_MAP_SIZE"]-1))
 
 def get_occ_grid_map(msg):
     global occ_map
@@ -145,7 +144,7 @@ def get_occ_grid_map(msg):
             if occ_map_img[i][j] < 0.5: # occluded.
                 # mark all neighbors as occluded.
                 for chg in nbrs:
-                    occ_map[cap(i+chg[0])][cap(j+chg[1])] = 0
+                    occ_map[max(0, min(i+chg[0], params["OCC_MAP_SIZE"]-1))][max(0, min(j+chg[1], params["OCC_MAP_SIZE"]-1))] = 0
     # print("inflated map:\n",occ_map)
     # show value distribution in occ_map.
     freqs = [0, 0]

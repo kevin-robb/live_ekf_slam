@@ -71,4 +71,6 @@ OCC_MAP_BALLOON_AMT = 2
 # ----- Path Planner / Nav -----
 # nav function to use ("pp"~pure pursuit or "direct"~pursue all goal pts directly)
 NAV_METHOD = pp
-# 
+# pure pursuit params.
+LOOKAHEAD_DIST_INITIAL = 0.2
+LOOKAHEAD_DIST_MAX = 3
