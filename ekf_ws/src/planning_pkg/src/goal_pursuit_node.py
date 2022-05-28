@@ -21,23 +21,16 @@ from astar import Astar
 params = {}
 cmd_pub = None; path_pub = None
 # goal = [0.0, 0.0] # target x,y point.
-goal_queue = [] # queue of goal points to force a certain path.
 cur = [0.0, 0.0] # current estimate of veh pos.
 occ_map = None # cv2 image of true occupancy grid map.
-# init pure pursuit object.
-pp = PurePursuit()
-# PID global vars.
-integ = 0
-err_prev = 0.0
-# we're synched to the EKF's "clock", so all time increments are 1 time unit, DT.
 #################################################
 # Color codes for console output.
 ANSI_RESET = "\u001B[0m"
-GREEN = "\u001B[32m"
-YELLOW = "\u001B[33m"
-BLUE = "\u001B[34m"
-PURPLE = "\u001B[35m"
-CYAN = "\u001B[36m"
+ANSI_GREEN = "\u001B[32m"
+ANSI_YELLOW = "\u001B[33m"
+ANSI_BLUE = "\u001B[34m"
+ANSI_PURPLE = "\u001B[35m"
+ANSI_CYAN = "\u001B[36m"
 #################################################
 
 
@@ -46,10 +39,6 @@ def read_params(pkg_path):
     Read params from config file.
     @param path to data_pkg.
     """
-    # options for navigation functions to use.
-    nav_functions = {"pp" : pp_nav,
-                     "direct": direct_nav}
-
     global params
     params_file = open(pkg_path+"/config/params.txt", "r")
     params = {}
@@ -62,7 +51,7 @@ def read_params(pkg_path):
         arg = p_line[1].strip()
         # set nav function (string key).
         if key == "NAV_METHOD":
-            params["NAV_FUNCTION"] = nav_functions[arg]
+            params["NAV_METHOD"] = arg
             continue
         # set all other params.
         try:
@@ -77,106 +66,41 @@ def read_params(pkg_path):
     params["SCALE"] = params["MAP_BOUND"] * 1.5 / (params["OCC_MAP_SIZE"] / 2)
     params["SHIFT"] = params["OCC_MAP_SIZE"] / 2
 
-    # set params for A* to access too.
+    # set params for other functions to access too.
     Astar.params = params
+    PurePursuit.params = params
 
-def norm(l1, l2):
-    # compute the norm of the difference of two lists or tuples.
-    # only use the first two elements.
-    return ((l1[0]-l2[0])**2 + (l1[1]-l2[1])**2)**(1/2) 
-
-def pp_nav(state_msg):
-    """
-    Navigate using pure pursuit.
-    """
-    global goal_queue, cur, integ, err_prev
-    cur = [state_msg.x_v, state_msg.y_v]
-    odom_msg = Vector3(x=0, y=0)
-    if len(goal_queue) < 1: # if there's no path yet, just wait.
-        cmd_pub.publish(odom_msg)
-        return
-
-    # define lookahead point.
-    lookahead = None
-    radius = 0.2 # starting search radius.
-    # look until we find the path at the increasing radius or at the maximum dist.
-    while lookahead is None and radius <= 3: 
-        lookahead = pp.get_lookahead_point(cur[0], cur[1], radius)
-        radius *= 1.25
-    # make sure we actually found the path.
-    if lookahead is not None:
-        heading_to_la = atan2(lookahead[1] - cur[1], lookahead[0] - cur[0])
-        beta = remainder(heading_to_la - state_msg.yaw_v, tau) # hdg relative to veh pose.
-
-        # update global integral term.
-        integ += beta * params["DT"]
-
-        P = 0.08 * beta # proportional to hdg error.
-        I = 0.009 * integ # integral to correct systematic error.
-        D = 0.01 * (beta - err_prev) / params["DT"] # slope
-
-        # set forward and turning commands.
-        odom_msg.x = (1 - abs(beta / pi))**5 + 0.05
-        odom_msg.y = P + I + D
-
-        err_prev = beta
-
-    # ensure commands are capped within constraints.
-    odom_msg.x = max(0, min(odom_msg.x, params["ODOM_D_MAX"]))
-    odom_msg.y = max(-params["ODOM_TH_MAX"], min(odom_msg.y, params["ODOM_TH_MAX"]))
-    cmd_pub.publish(odom_msg)
-
-
-def direct_nav(state_msg):
-    """
-    Navigate directly point-to-point.
-    """
-    global goal_queue, cur
-    cur = [state_msg.x_v, state_msg.y_v]
-    if len(goal_queue) < 1: # if there's no path yet, just wait.
-        cmd_pub.publish(Vector3(x=0, y=0))
-        return
-    goal = goal_queue[0]
-    # check how close veh is to our current goal pt.
-    r = norm([state_msg.x_v, state_msg.y_v], goal)
-    # compute vector from veh pos est to goal.
-    diff_vec = [goal[0]-state_msg.x_v, goal[1]-state_msg.y_v]
-    # calculate bearing difference.
-    gb = atan2(diff_vec[1], diff_vec[0]) # global bearing.
-    beta = remainder(gb - state_msg.yaw_v, tau) # bearing rel to robot
-    # turn this into a command.
-    odom_msg = Vector3(x=0, y=0)
-    # go faster the more aligned the hdg is.
-    odom_msg.x = 1 * (1 - abs(beta)/params["ODOM_TH_MAX"])**3 + 0.05 if r > 0.1 else 0.0
-    P = 0.03 if r > 0.2 else 0.2
-    odom_msg.y = beta #* P if r > 0.05 else 0.0
-    # ensure commands are capped within constraints.
-    odom_msg.x = max(0, min(odom_msg.x, params["ODOM_D_MAX"]))
-    odom_msg.y = max(-params["ODOM_TH_MAX"], min(odom_msg.y, params["ODOM_TH_MAX"]))
-    cmd_pub.publish(odom_msg)
-    # remove the goal from the queue if we've arrived.
-    if r < 0.15:
-        goal_queue.pop(0)
-        # publish updated path for the plotter.
-        path_pub.publish(Float32MultiArray(data=sum(goal_queue, [])))
 
 def get_ekf_state(msg):
     """
     Get the state published by the EKF.
-    Call the desired navigation function.
     """
-    params["NAV_FUNCTION"](msg)
+    # update current position.
+    global cur
+    cur = [msg.x_v, msg.y_v, msg.yaw_v]
+    # check size of path.
+    path_len = len(PurePursuit.goal_queue)
+    # call the desired navigation function.
+    if params["NAV_METHOD"] == "pp":
+        # use pure pursuit.
+        cmd_pub.publish(PurePursuit.get_next_cmd(cur))
+    elif params["NAV_METHOD"] == "direct":
+        # directly go to each point.
+        cmd_pub.publish(PurePursuit.direct_nav(cur))
+    # if the path length has changed (by a point being reached), update the plot.
+    if len(PurePursuit.goal_queue) != path_len:
+        path_pub.publish(Float32MultiArray(data=sum(PurePursuit.goal_queue, [])))
+
 
 def get_goal_pt(msg):
-    global goal_queue
     # verify chosen pt is not in collision.
     if occ_map[Astar.tf_ekf_to_map((msg.x,msg.y))[0]][Astar.tf_ekf_to_map((msg.x,msg.y))[1]] == 0:
         rospy.logerr("Invalid goal point (in collision).")
         return
     rospy.loginfo("Setting goal pt to ("+"{0:.4f}".format(msg.x)+", "+"{0:.4f}".format(msg.y)+")")
     # determine starting pos for path.
-    if len(goal_queue) > 0: # use end of prev segment as start if there is one.
-        start = goal_queue[-1]
+    if len(PurePursuit.goal_queue) > 0: # use end of prev segment as start if there is one.
+        start = PurePursuit.goal_queue[-1]
     else: # otherwise use the current position estimate.
         start = cur
     # generate path with A*.
@@ -184,10 +108,12 @@ def get_goal_pt(msg):
     if path is None:
         rospy.logerr("No path found by A*.")
         return
-    # turn this path into a list of positions in goal_queue.
-    path_msg = Astar.interpret_astar_path(path, goal_queue, pp)
-    # publish this path for the plotter.
-    path_pub.publish(path_msg)
+    # turn this path into a list of positions for goal_queue.
+    new_path_segment = Astar.interpret_astar_path(path)
+    # add these to the pure pursuit path.
+    PurePursuit.goal_queue += new_path_segment
+    # publish this path for the plotter to display.
+    path_pub.publish(Float32MultiArray(data=sum(PurePursuit.goal_queue, [])))
 
 def cap(ind):
     # cap a map index within 0, max.
@@ -229,7 +155,7 @@ def get_occ_grid_map(msg):
                 freqs[0] += 1
             else:
                 freqs[1] += 1
-    print(CYAN+"Occ map value frequencies: "+str(freqs[1])+" free, "+str(freqs[0])+" occluded."+ANSI_RESET)
+    print(ANSI_CYAN+"Occ map value frequencies: "+str(freqs[1])+" free, "+str(freqs[0])+" occluded."+ANSI_RESET)
     # set map for A* to use.
     Astar.occ_map = occ_map
 

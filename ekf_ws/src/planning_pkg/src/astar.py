@@ -82,19 +82,19 @@ class Astar:
 
 
     @staticmethod
-    def interpret_astar_path(path_to_start, goal_queue, pp):
+    def interpret_astar_path(path_to_start):
         """
         A* gives a reverse list of index positions to get to goal.
         Reverse this, convert to EKF coords, and add all to goal_queue.
         """
         if path_to_start is None:
             return
+        goal_queue = []
         for i in range(len(path_to_start)-1, -1, -1):
-            # convert pt to ekf coords.
+            # convert pt to ekf coords and add to path.
             goal_queue.append(Astar.tf_map_to_ekf(path_to_start[i]))
-            pp.add_point(Astar.tf_map_to_ekf(path_to_start[i]))
-        # publish this path for the plotter.
-        return Float32MultiArray(data=sum(goal_queue, []))
+            # pp.add_point(Astar.tf_map_to_ekf(path_to_start[i]))
+        return goal_queue
 
 
 
