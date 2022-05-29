@@ -10,8 +10,6 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
 )
 
-catkin_python_setup()
-
 add_message_files(
   FILES
   Command.msg
@@ -30,16 +28,3 @@ include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
 )
-
-
-# trying to get import params to work.
-
-# file(GLOB python_scripts_DIR
-#     "scripts/*.py"
-# )
-
-# install(DIRECTORY launch
-#     DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
-
-# catkin_install_python(PROGRAMS ${python_scripts_DIR}
-#                       DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

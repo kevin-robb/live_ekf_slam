@@ -8,57 +8,37 @@ and the rest are the positions of M landmarks.
 """
 
 import rospy
-import rospkg
 import numpy as np
 from math import sin, cos, remainder, tau, atan2
 from data_pkg.msg import Command
 from std_msgs.msg import Float32MultiArray
-from geometry_msgs.msg import Vector3
 from ekf_pkg.msg import EKFState
 
+# import params script.
+import rospkg
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("module.name", rospkg.RosPack().get_path('data_pkg')+"/src/import_params.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules["module.name"] = module
+spec.loader.exec_module(module)
+params = module.Config.params
+
 ############ GLOBAL VARIABLES ###################
-params = {}
-V = None; W = None
 state_pub = None
 ############## NEEDED BY EKF ####################
+# Process and sensing noise covariances.
+V = np.array([[params["V_00"],0.0],[0.0,params["V_11"]]])
+W = np.array([[params["W_00"],0.0],[0.0,params["W_11"]]])
 # Initial vehicle state mean and covariance.
-x0 = np.array([[0.0],[0.0],[0.0]])
-P0 = np.array([[0.01**2,0.0,0.0],[0.0,0.01**2,0.0],[0.0,0.0,0.005**2]])
+x_t = np.array([[params["x_0"]],[params["y_0"]],[params["yaw_0"]]])
+P_t = np.array([[0.01**2,0.0,0.0],[0.0,0.01**2,0.0],[0.0,0.0,0.005**2]])
 # Most recent odom reading and landmark measurements.
 odom_queue = []; lm_meas_queue = []
-# Current state mean and covariance.
-x_t = x0; P_t = P0
 # IDs of seen landmarks. Order corresponds to ind in state.
 lm_IDs = []
-# timestep number for debugging.
+# current timestep number.
 timestep = 0
 #################################################
-
-def read_params(pkg_path):
-    """
-    Read params from config file.
-    @param path to data_pkg.
-    """
-    global params, V, W
-    params_file = open(pkg_path+"/config/params.txt", "r")
-    params = {}
-    lines = params_file.readlines()
-    for line in lines:
-        if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
-            continue
-        p_line = line.split("=")
-        key = p_line[0].strip()
-        arg = p_line[1].strip()
-        try:
-            params[key] = int(arg)
-        except:
-            try:
-                params[key] = float(arg)
-            except:
-                params[key] = (arg == "True")
-    # set process and sensing noise.
-    V = np.array([[params["V_00"],0.0],[0.0,params["V_11"]]])
-    W = np.array([[params["W_00"],0.0],[0.0,params["W_11"]]])
 
 
 # main EKF loop that happens every timestep.
@@ -199,12 +179,6 @@ def get_landmarks(msg):
 def main():
     global state_pub
     rospy.init_node('ekf_node')
-
-    # find the filepath to data package.
-    rospack = rospkg.RosPack()
-    pkg_path = rospack.get_path('data_pkg')
-    # read params.
-    read_params(pkg_path)
 
     # subscribe to landmark detections: [id1,r1,b1,...idN,rN,bN]
     rospy.Subscriber("/landmark", Float32MultiArray, get_landmarks, queue_size=1)
