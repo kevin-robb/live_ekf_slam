@@ -19,6 +19,7 @@ from math import atan2, remainder, tau, cos, sin
 import numpy as np
 import cv2
 from cv_bridge import CvBridge
+from import_params import read_params
 
 ############ GLOBAL VARIABLES ###################
 params = {}
@@ -37,29 +38,37 @@ occ_map = None; occ_map_pub = None
 #################################################
 
 
-def read_params(pkg_path):
-    """
-    Read params from config file.
-    @param path to data_pkg.
-    """
-    global params, x_v
-    params_file = open(pkg_path+"/config/params.txt", "r")
-    lines = params_file.readlines()
-    for line in lines:
-        if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
-            continue
-        p_line = line.split("=")
-        key = p_line[0].strip()
-        arg = p_line[1].strip()
-        try:
-            params[key] = int(arg)
-        except:
-            try:
-                params[key] = float(arg)
-            except:
-                params[key] = (arg == "True")
-    # init vehicle pose.
-    x_v = [params["x_0"], params["y_0"], params["yaw_0"]]
+# def read_params(pkg_path):
+#     """
+#     Read params from config file.
+#     @param path to data_pkg.
+#     """
+#     global params, x_v
+#     params_file = open(pkg_path+"/config/params.txt", "r")
+#     lines = params_file.readlines()
+#     for line in lines:
+#         if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
+#             continue
+#         p_line = line.split("=")
+#         key = p_line[0].strip()
+#         arg = p_line[1].strip()
+#         # # set occ map image path (string key).
+#         # if key == "OCC_MAP_IMAGE":
+#         #     params["OCC_MAP_IMAGE"] = arg
+#         #     continue
+#         try:
+#             params[key] = int(arg)
+#         except:
+#             try:
+#                 params[key] = float(arg)
+#             except:
+#                 # check if bool or str.
+#                 if arg.lower() in ["true", "false"]:
+#                     params[key] = (arg.lower() == "true")
+#                 else:
+#                     params[key] = arg
+#     # init vehicle pose.
+#     x_v = [params["x_0"], params["y_0"], params["yaw_0"]]
 
 
 def norm(l1, l2):
@@ -168,7 +177,7 @@ def generate_occupany_map(pkg_path):
     global occ_map
      # read map image and account for possible white = transparency that cv2 will call black.
     # https://stackoverflow.com/questions/31656366/cv2-imread-and-cv2-imshow-return-all-zeros-and-black-image/62985765#62985765
-    img = cv2.imread(pkg_path+'/config/example_occ_map.png', cv2.IMREAD_UNCHANGED)
+    img = cv2.imread(pkg_path+'/config/maps/'+params["OCC_MAP_IMAGE"], cv2.IMREAD_UNCHANGED)
     if img.shape[2] == 4: # we have an alpha channel
         a1 = ~img[:,:,3] # extract and invert that alpha
         img = cv2.add(cv2.merge([a1,a1,a1,a1]), img) # add up values (with clipping)
@@ -201,7 +210,7 @@ def generate_occupany_map(pkg_path):
 
 
 def main():
-    global lm_pub, pkg_path, true_map_pub, true_pose_pub, cmd_pub, occ_map_pub
+    global lm_pub, pkg_path, true_map_pub, true_pose_pub, cmd_pub, occ_map_pub, x_v, params
     rospy.init_node('sim_node')
 
     # read map type from command line arg.
@@ -215,7 +224,9 @@ def main():
     rospack = rospkg.RosPack()
     pkg_path = rospack.get_path('data_pkg')
     # read params.
-    read_params(pkg_path)
+    params = read_params()
+    # init vehicle pose.
+    x_v = [params["x_0"], params["y_0"], params["yaw_0"]]
 
     # subscribe to odom commands.
     rospy.Subscriber("/command", Command, get_cmd, queue_size=1)

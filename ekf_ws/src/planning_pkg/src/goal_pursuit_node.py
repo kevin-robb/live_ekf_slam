@@ -16,6 +16,7 @@ from pf_pkg.msg import PFState
 from cv_bridge import CvBridge
 from pure_pursuit import PurePursuit
 from astar import Astar
+from import_params import read_params
 
 ############ GLOBAL VARIABLES ###################
 params = {}
@@ -34,41 +35,41 @@ ANSI_CYAN = "\u001B[36m"
 #################################################
 
 
-def read_params(pkg_path):
-    """
-    Read params from config file.
-    @param path to data_pkg.
-    """
-    global params
-    params_file = open(pkg_path+"/config/params.txt", "r")
-    params = {}
-    lines = params_file.readlines()
-    for line in lines:
-        if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
-            continue
-        p_line = line.split("=")
-        key = p_line[0].strip()
-        arg = p_line[1].strip()
-        # set nav function (string key).
-        if key == "NAV_METHOD":
-            params["NAV_METHOD"] = arg
-            continue
-        # set all other params.
-        try:
-            params[key] = int(arg)
-        except:
-            try:
-                params[key] = float(arg)
-            except:
-                params[key] = (arg == "True")
+# def read_params(pkg_path):
+#     """
+#     Read params from config file.
+#     @param path to data_pkg.
+#     """
+#     global params
+#     params_file = open(pkg_path+"/config/params.txt", "r")
+#     params = {}
+#     lines = params_file.readlines()
+#     for line in lines:
+#         if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
+#             continue
+#         p_line = line.split("=")
+#         key = p_line[0].strip()
+#         arg = p_line[1].strip()
+#         # set nav function (string key).
+#         if key == "NAV_METHOD":
+#             params["NAV_METHOD"] = arg
+#             continue
+#         # set all other params.
+#         try:
+#             params[key] = int(arg)
+#         except:
+#             try:
+#                 params[key] = float(arg)
+#             except:
+#                 params[key] = (arg == "True")
 
-    # set coord transform params.
-    params["SCALE"] = params["MAP_BOUND"] * 1.5 / (params["OCC_MAP_SIZE"] / 2)
-    params["SHIFT"] = params["OCC_MAP_SIZE"] / 2
+#     # set coord transform params.
+#     params["SCALE"] = params["MAP_BOUND"] * 1.5 / (params["OCC_MAP_SIZE"] / 2)
+#     params["SHIFT"] = params["OCC_MAP_SIZE"] / 2
 
-    # set params for other functions to access too.
-    Astar.params = params
-    PurePursuit.params = params
+#     # set params for other functions to access too.
+#     Astar.params = params
+#     PurePursuit.params = params
 
 
 def get_ekf_state(msg):
@@ -84,7 +85,7 @@ def get_ekf_state(msg):
     if params["NAV_METHOD"] == "pp":
         # use pure pursuit.
         cmd_pub.publish(PurePursuit.get_next_cmd(cur))
-    elif params["NAV_METHOD"] == "direct":
+    elif params["NAV_METHOD"] in ["direct", "simple"]:
         # directly go to each point.
         cmd_pub.publish(PurePursuit.direct_nav(cur))
     else:
@@ -101,6 +102,10 @@ def get_goal_pt(msg):
         rospy.logerr("Invalid goal point (in collision).")
         return
     rospy.loginfo("Setting goal pt to ("+"{0:.4f}".format(msg.x)+", "+"{0:.4f}".format(msg.y)+")")
+    # if running in "simple" mode, only add goal point rather than path planning.
+    if params["NAV_METHOD"] == "simple":
+        PurePursuit.goal_queue.append([msg.x, msg.y])
+        return
     # determine starting pos for path.
     if len(PurePursuit.goal_queue) > 0: # use end of prev segment as start if there is one.
         start = PurePursuit.goal_queue[-1]
@@ -161,14 +166,20 @@ def get_occ_grid_map(msg):
 
 
 def main():
-    global cmd_pub, path_pub
+    global cmd_pub, path_pub, params
     rospy.init_node('goal_pursuit_node')
 
     # find the filepath to this package.
     rospack = rospkg.RosPack()
     pkg_path = rospack.get_path('data_pkg')
     # read params.
-    read_params(pkg_path)
+    params = read_params()
+    # set coord transform params.
+    params["SCALE"] = params["MAP_BOUND"] * 1.5 / (params["OCC_MAP_SIZE"] / 2)
+    params["SHIFT"] = params["OCC_MAP_SIZE"] / 2
+    # set params for other functions to access too.
+    Astar.params = params
+    PurePursuit.params = params
 
     # subscribe to the current state.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)

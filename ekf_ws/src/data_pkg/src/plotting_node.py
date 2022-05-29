@@ -249,6 +249,7 @@ def on_click(event):
 
 
 def get_occ_grid_map(msg):
+    if not params["SHOW_OCC_MAP"]: return
     # get the true occupancy grid map image.
     bridge = CvBridge()
     occ_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
