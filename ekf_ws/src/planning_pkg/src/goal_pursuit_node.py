@@ -4,9 +4,7 @@
 Command vehicle to pursue path to goal point chosen by clicking the plot.
 Generate the next odom command based on current state estimate.
 """
-
 import rospy
-import rospkg
 from data_pkg.msg import Command
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float32MultiArray
@@ -16,12 +14,21 @@ from pf_pkg.msg import PFState
 from cv_bridge import CvBridge
 from pure_pursuit import PurePursuit
 from astar import Astar
-from import_params import read_params
+
+# import params script.
+import rospkg
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("module.name", rospkg.RosPack().get_path('data_pkg')+"/src/import_params.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules["module.name"] = module
+spec.loader.exec_module(module)
+params = module.Config.params
+# set params in sub-scripts.
+PurePursuit.params = params
+Astar.params = params
 
 ############ GLOBAL VARIABLES ###################
-params = {}
 cmd_pub = None; path_pub = None
-# goal = [0.0, 0.0] # target x,y point.
 cur = [0.0, 0.0] # current estimate of veh pos.
 occ_map = None # cv2 image of true occupancy grid map.
 #################################################
@@ -33,44 +40,6 @@ ANSI_BLUE = "\u001B[34m"
 ANSI_PURPLE = "\u001B[35m"
 ANSI_CYAN = "\u001B[36m"
 #################################################
-
-
-# def read_params(pkg_path):
-#     """
-#     Read params from config file.
-#     @param path to data_pkg.
-#     """
-#     global params
-#     params_file = open(pkg_path+"/config/params.txt", "r")
-#     params = {}
-#     lines = params_file.readlines()
-#     for line in lines:
-#         if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
-#             continue
-#         p_line = line.split("=")
-#         key = p_line[0].strip()
-#         arg = p_line[1].strip()
-#         # set nav function (string key).
-#         if key == "NAV_METHOD":
-#             params["NAV_METHOD"] = arg
-#             continue
-#         # set all other params.
-#         try:
-#             params[key] = int(arg)
-#         except:
-#             try:
-#                 params[key] = float(arg)
-#             except:
-#                 params[key] = (arg == "True")
-
-#     # set coord transform params.
-#     params["SCALE"] = params["MAP_BOUND"] * 1.5 / (params["OCC_MAP_SIZE"] / 2)
-#     params["SHIFT"] = params["OCC_MAP_SIZE"] / 2
-
-#     # set params for other functions to access too.
-#     Astar.params = params
-#     PurePursuit.params = params
-
 
 def get_ekf_state(msg):
     """
@@ -166,20 +135,8 @@ def get_occ_grid_map(msg):
 
 
 def main():
-    global cmd_pub, path_pub, params
+    global cmd_pub, path_pub
     rospy.init_node('goal_pursuit_node')
-
-    # find the filepath to this package.
-    rospack = rospkg.RosPack()
-    pkg_path = rospack.get_path('data_pkg')
-    # read params.
-    params = read_params()
-    # set coord transform params.
-    params["SCALE"] = params["MAP_BOUND"] * 1.5 / (params["OCC_MAP_SIZE"] / 2)
-    params["SHIFT"] = params["OCC_MAP_SIZE"] / 2
-    # set params for other functions to access too.
-    Astar.params = params
-    PurePursuit.params = params
 
     # subscribe to the current state.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)

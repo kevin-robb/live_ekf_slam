@@ -7,8 +7,6 @@ Set of static functions to perform A* path planning.
 class Astar:
     # Always use the same map.
     occ_map = None
-    # Use same params as node.
-    params = None
 
     @staticmethod
     def astar(start, goal):

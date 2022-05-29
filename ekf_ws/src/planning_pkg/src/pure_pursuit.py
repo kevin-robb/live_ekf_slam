@@ -8,7 +8,6 @@ from data_pkg.msg import Command
 from math import remainder, tau, pi, atan2, sqrt
 
 class PurePursuit:
-    params = None
     goal_queue = []
     # PID vars.
     integ = 0

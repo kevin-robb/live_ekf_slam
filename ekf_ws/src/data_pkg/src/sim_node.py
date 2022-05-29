@@ -19,10 +19,10 @@ from math import atan2, remainder, tau, cos, sin
 import numpy as np
 import cv2
 from cv_bridge import CvBridge
-from import_params import read_params
+from import_params import Config
+
 
 ############ GLOBAL VARIABLES ###################
-params = {}
 # publishers
 lm_pub = None; true_map_pub = None; true_pose_pub = None; cmd_pub = None
 # Default map from RSS demo:
@@ -37,40 +37,6 @@ landmarks = None; x_v = [0.0, 0.0, 0.0]
 occ_map = None; occ_map_pub = None
 #################################################
 
-
-# def read_params(pkg_path):
-#     """
-#     Read params from config file.
-#     @param path to data_pkg.
-#     """
-#     global params, x_v
-#     params_file = open(pkg_path+"/config/params.txt", "r")
-#     lines = params_file.readlines()
-#     for line in lines:
-#         if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
-#             continue
-#         p_line = line.split("=")
-#         key = p_line[0].strip()
-#         arg = p_line[1].strip()
-#         # # set occ map image path (string key).
-#         # if key == "OCC_MAP_IMAGE":
-#         #     params["OCC_MAP_IMAGE"] = arg
-#         #     continue
-#         try:
-#             params[key] = int(arg)
-#         except:
-#             try:
-#                 params[key] = float(arg)
-#             except:
-#                 # check if bool or str.
-#                 if arg.lower() in ["true", "false"]:
-#                     params[key] = (arg.lower() == "true")
-#                 else:
-#                     params[key] = arg
-#     # init vehicle pose.
-#     x_v = [params["x_0"], params["y_0"], params["yaw_0"]]
-
-
 def norm(l1, l2):
     # compute the norm of the difference of two lists or tuples.
     # only use the first two elements.
@@ -81,32 +47,32 @@ def generate_landmarks(map_type:str):
     """
     Create a set of 20 landmarks forming the map.
     """
-    global params, landmarks
+    global landmarks
     # key = integer ID. value = (x,y) position.
     landmarks = {}
 
     if map_type in ["demo", "demo_map"]:
         # force number of landmarks to match.
-        params["NUM_LANDMARKS"] = len(demo_map.keys()) 
+        Config.params["NUM_LANDMARKS"] = len(demo_map.keys()) 
         landmarks = demo_map
     elif map_type in ["random", "rand"]:
         id = 0
         # randomly spread landmarks across the map.
-        while len(landmarks.keys()) < params["NUM_LANDMARKS"]:
-            pos = (2*params["MAP_BOUND"]*random() - params["MAP_BOUND"], 2*params["MAP_BOUND"]*random() - params["MAP_BOUND"])
-            dists = [ norm(lm_pos, pos) < params["MIN_SEP"] for lm_pos in landmarks.values()]
+        while len(landmarks.keys()) < Config.params["NUM_LANDMARKS"]:
+            pos = (2*Config.params["MAP_BOUND"]*random() - Config.params["MAP_BOUND"], 2*Config.params["MAP_BOUND"]*random() - Config.params["MAP_BOUND"])
+            dists = [ norm(lm_pos, pos) < Config.params["MIN_SEP"] for lm_pos in landmarks.values()]
             if True not in dists:
                 landmarks[id] = pos
                 id += 1
     elif map_type == "grid":
         # place landmarks on a grid filling the bounds.
         id = 0
-        for r in np.arange(-params["MAP_BOUND"], params["MAP_BOUND"], params["GRID_STEP"]):
-            for c in np.arange(-params["MAP_BOUND"], params["MAP_BOUND"], params["GRID_STEP"]):
+        for r in np.arange(-Config.params["MAP_BOUND"], Config.params["MAP_BOUND"], Config.params["GRID_STEP"]):
+            for c in np.arange(-Config.params["MAP_BOUND"], Config.params["MAP_BOUND"], Config.params["GRID_STEP"]):
                 landmarks[id] = (r, c)
                 id += 1
         # update number of landmarks used.
-        params["NUM_LANDMARKS"] = id
+        Config.params["NUM_LANDMARKS"] = id
     else:
         rospy.logerr("Invalid map_type provided.")
         exit()
@@ -131,11 +97,11 @@ def get_cmd(msg):
     """
     global x_v
     # add noise to command.
-    d = msg.fwd + 2*params["V_00"]*random()-params["V_00"]
-    hdg = msg.ang + 2*params["V_11"]*random()-params["V_11"]
+    d = msg.fwd + 2*Config.params["V_00"]*random()-Config.params["V_00"]
+    hdg = msg.ang + 2*Config.params["V_11"]*random()-Config.params["V_11"]
     # cap cmds within odom constraints.
-    d = max(0, min(d, params["ODOM_D_MAX"]))
-    hdg = max(-params["ODOM_TH_MAX"], min(hdg, params["ODOM_TH_MAX"]))
+    d = max(0, min(d, Config.params["ODOM_D_MAX"]))
+    hdg = max(-Config.params["ODOM_TH_MAX"], min(hdg, Config.params["ODOM_TH_MAX"]))
     # update true veh position given this odom cmd.
     x_v = [x_v[0] + d*cos(x_v[2]), x_v[1] + d*sin(x_v[2]), x_v[2] + hdg]
 
@@ -146,7 +112,7 @@ def get_cmd(msg):
     # generate measurements given this new veh position.
     # determine which landmarks are visible.
     visible_landmarks = []
-    for id in range(params["NUM_LANDMARKS"]):
+    for id in range(Config.params["NUM_LANDMARKS"]):
         # compute vector from veh pos to lm.
         diff_vec = [landmarks[id][i] - x_v[i] for i in range(2)]
         # extract range and bearing.
@@ -154,16 +120,16 @@ def get_cmd(msg):
         gb = atan2(diff_vec[1], diff_vec[0]) # global bearing.
         beta = remainder(gb - x_v[2], tau) # bearing rel to robot
         # check if this is visible to the robot.
-        if r > params["RANGE_MAX"]:
+        if r > Config.params["RANGE_MAX"]:
             continue
-        elif beta > params["FOV_MIN"] and beta < params["FOV_MAX"]:
+        elif beta > Config.params["FOV_MIN"] and beta < Config.params["FOV_MAX"]:
             # within range and fov.
             visible_landmarks.append([id, r, beta])
     # add noise to all detections and publish measurement.
     lm_msg = Float32MultiArray()
     lm_msg.data = (sum([[visible_landmarks[i][0], 
-                    visible_landmarks[i][1]+2*params["W_00"]*random()-params["W_00"], 
-                    visible_landmarks[i][2]+2*params["W_11"]*random()-params["W_11"]] 
+                    visible_landmarks[i][1]+2*Config.params["W_00"]*random()-Config.params["W_00"], 
+                    visible_landmarks[i][2]+2*Config.params["W_11"]*random()-Config.params["W_11"]] 
                     for i in range(len(visible_landmarks))], []))
     lm_pub.publish(lm_msg)
 
@@ -177,7 +143,7 @@ def generate_occupany_map(pkg_path):
     global occ_map
      # read map image and account for possible white = transparency that cv2 will call black.
     # https://stackoverflow.com/questions/31656366/cv2-imread-and-cv2-imshow-return-all-zeros-and-black-image/62985765#62985765
-    img = cv2.imread(pkg_path+'/config/maps/'+params["OCC_MAP_IMAGE"], cv2.IMREAD_UNCHANGED)
+    img = cv2.imread(pkg_path+'/config/maps/'+Config.params["OCC_MAP_IMAGE"], cv2.IMREAD_UNCHANGED)
     if img.shape[2] == 4: # we have an alpha channel
         a1 = ~img[:,:,3] # extract and invert that alpha
         img = cv2.add(cv2.merge([a1,a1,a1,a1]), img) # add up values (with clipping)
@@ -185,7 +151,7 @@ def generate_occupany_map(pkg_path):
     # cv2.imshow('initial map', img); cv2.waitKey(0); cv2.destroyAllWindows()
     # lower the image resolution to have 1 pixel per 0.1x0.1 unit cell in the 20x20 landmark space.
     # img = cv2.resize(img, (0,0), fx = 0.5, fy = 0.5)
-    img = cv2.resize(img, (params["OCC_MAP_SIZE"], params["OCC_MAP_SIZE"]))
+    img = cv2.resize(img, (Config.params["OCC_MAP_SIZE"], Config.params["OCC_MAP_SIZE"]))
 
     # turn this into a grayscale img and then to a binary map.
     occ_map = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)[1]
@@ -210,7 +176,7 @@ def generate_occupany_map(pkg_path):
 
 
 def main():
-    global lm_pub, pkg_path, true_map_pub, true_pose_pub, cmd_pub, occ_map_pub, x_v, params
+    global lm_pub, pkg_path, true_map_pub, true_pose_pub, cmd_pub, occ_map_pub, x_v
     rospy.init_node('sim_node')
 
     # read map type from command line arg.
@@ -223,10 +189,8 @@ def main():
     # find the filepath to this package.
     rospack = rospkg.RosPack()
     pkg_path = rospack.get_path('data_pkg')
-    # read params.
-    params = read_params()
-    # init vehicle pose.
-    x_v = [params["x_0"], params["y_0"], params["yaw_0"]]
+    # init vehicle pose from config params.
+    x_v = [Config.params["x_0"], Config.params["y_0"], Config.params["yaw_0"]]
 
     # subscribe to odom commands.
     rospy.Subscriber("/command", Command, get_cmd, queue_size=1)

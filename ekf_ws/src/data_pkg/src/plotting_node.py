@@ -19,9 +19,9 @@ import atexit
 from math import cos, sin, pi
 import cv2
 from cv_bridge import CvBridge
+from import_params import Config
 
 ############ GLOBAL VARIABLES ###################
-params = {}
 # store all plots objects we want to be able to remove later.
 plots = {"lm_cov_est" : {}}
 # ground truth.
@@ -34,30 +34,6 @@ fname = ""
 # publish clicked point on map for planner.
 goal_pub = None
 #################################################
-
-
-def read_params(pkg_path):
-    """
-    Read params from config file.
-    @param path to data_pkg.
-    """
-    global params
-    params_file = open(pkg_path+"/config/params.txt", "r")
-    params = {}
-    lines = params_file.readlines()
-    for line in lines:
-        if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
-            continue
-        p_line = line.split("=")
-        key = p_line[0].strip()
-        arg = p_line[1].strip()
-        try:
-            params[key] = int(arg)
-        except:
-            try:
-                params[key] = float(arg)
-            except:
-                params[key] = (arg == "True")
 
 
 def cov_to_ellipse(P_v):
@@ -75,7 +51,7 @@ def cov_to_ellipse(P_v):
     vals = [abs(v) for v in vals]
     # get rotation angle.
     theta = np.arctan2(*vecs[:,0][::-1])
-    w, h = params["COV_STD_DEV"] * 2 * np.sqrt(vals)
+    w, h = Config.params["COV_STD_DEV"] * 2 * np.sqrt(vals)
     # create parametric ellipse.
     t = np.linspace(0, 2*pi, 100)
     ell = np.array([w*np.cos(t) , h*np.sin(t)])
@@ -101,11 +77,11 @@ def update_plot(filter:str, msg):
         true_map = None
 
     ################ TRUE TRAJECTORY #####################
-    if params["SHOW_TRUE_TRAJ"] and true_pose is not None:
+    if Config.params["SHOW_TRUE_TRAJ"] and true_pose is not None:
         # plot only the current veh pos.
         if "veh_pos_true" in plots.keys():
             plots["veh_pos_true"].remove()
-        plots["veh_pos_true"] = plt.arrow(true_pose.x, true_pose.y, params["ARROW_LEN"]*cos(true_pose.z), params["ARROW_LEN"]*sin(true_pose.z), color="blue", width=0.1, zorder=1)
+        plots["veh_pos_true"] = plt.arrow(true_pose.x, true_pose.y, Config.params["ARROW_LEN"]*cos(true_pose.z), Config.params["ARROW_LEN"]*sin(true_pose.z), color="blue", width=0.1, zorder=1)
 
     ###################### TIMESTEP #####################
     if "timestep" in plots.keys():
@@ -118,18 +94,18 @@ def update_plot(filter:str, msg):
         plt.title("EKF-Estimated Trajectory and Landmarks")
         ################ VEH POS #################
         # plot current EKF-estimated veh pos.
-        if not params["SHOW_ENTIRE_TRAJ"] and "veh_pos_est" in plots.keys():
+        if not Config.params["SHOW_ENTIRE_TRAJ"] and "veh_pos_est" in plots.keys():
             plots["veh_pos_est"].remove()
             del plots["veh_pos_est"]
         # draw a single pt with arrow to represent current veh pose.
-        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, params["ARROW_LEN"]*cos(msg.yaw_v), params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1, zorder=1)
+        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, Config.params["ARROW_LEN"]*cos(msg.yaw_v), Config.params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1, zorder=1)
 
         ################ VEH COV ##################
         n = int(len(msg.P)**(1/2)) # length of state n = 3+2M
         # compute parametric ellipse for veh covariance.
         veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
         # remove old ellipses.
-        if not params["SHOW_ENTIRE_TRAJ"] and "veh_cov_est" in plots.keys():
+        if not Config.params["SHOW_ENTIRE_TRAJ"] and "veh_cov_est" in plots.keys():
             plots["veh_cov_est"].remove()
             del plots["veh_cov_est"]
         # plot the ellipse.
@@ -146,7 +122,7 @@ def update_plot(filter:str, msg):
         plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=1)
 
         ############## LANDMARK COV ###################
-        if params["SHOW_LM_ELLIPSES"]:
+        if Config.params["SHOW_LM_ELLIPSES"]:
             # plot new landmark covariances.
             for i in range(len(msg.landmarks) // 3):
                 # replace previous if it's been plotted before.
@@ -163,7 +139,7 @@ def update_plot(filter:str, msg):
     elif filter == "pf":
         plt.title("PF-Estimated Vehicle Pose")
         ########## PARTICLE SET ###############
-        if params["PLOT_PARTICLE_ARROWS"]:
+        if Config.params["PLOT_PARTICLE_ARROWS"]:
             # plot as arrows (slow).
             if "particle_set" in plots.keys() and len(plots["particle_set"].keys()) > 0:
                 for i in plots["particle_set"].keys():
@@ -171,7 +147,7 @@ def update_plot(filter:str, msg):
             plots["particle_set"] = {}
             # draw a pt with arrow for all particles.
             for i in range(len(msg.x)):
-                plots["particle_set"][i] = plt.arrow(msg.x[i], msg.y[i], params["ARROW_LEN"]*cos(msg.yaw[i]), params["ARROW_LEN"]*sin(msg.yaw[i]), color="red", width=0.1)
+                plots["particle_set"][i] = plt.arrow(msg.x[i], msg.y[i], Config.params["ARROW_LEN"]*cos(msg.yaw[i]), Config.params["ARROW_LEN"]*sin(msg.yaw[i]), color="red", width=0.1)
         else:
             # plot as points (faster).
             if "particle_set" in plots.keys():
@@ -183,8 +159,8 @@ def update_plot(filter:str, msg):
     plt.axis("equal")
     plt.xlabel("x (m)")
     plt.ylabel("y (m)")
-    plt.xlim([-1.5*params["MAP_BOUND"],1.5*params["MAP_BOUND"]])
-    plt.ylim([-1.5*params["MAP_BOUND"],1.5*params["MAP_BOUND"]])
+    plt.xlim([-1.5*Config.params["MAP_BOUND"],1.5*Config.params["MAP_BOUND"]])
+    plt.ylim([-1.5*Config.params["MAP_BOUND"],1.5*Config.params["MAP_BOUND"]])
     plt.draw()
     plt.pause(0.00000000001)
 
@@ -249,7 +225,7 @@ def on_click(event):
 
 
 def get_occ_grid_map(msg):
-    if not params["SHOW_OCC_MAP"]: return
+    if not Config.params["SHOW_OCC_MAP"]: return
     # get the true occupancy grid map image.
     bridge = CvBridge()
     occ_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
@@ -259,7 +235,7 @@ def get_occ_grid_map(msg):
     # convert from BGR to RGB for display.
     occ_map_rgb = cv2.cvtColor(occ_map, cv2.COLOR_BGR2RGB)
     # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
-    edge = params["MAP_BOUND"] * 1.5
+    edge = Config.params["MAP_BOUND"] * 1.5
     plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])
 
 def get_planned_path(msg):
@@ -283,8 +259,6 @@ def main():
     # find the filepath to this package.
     rospack = rospkg.RosPack()
     pkg_path = rospack.get_path('data_pkg')
-    # read params.
-    read_params(pkg_path)
 
     # when the node exits, make the plot.
     atexit.register(save_plot, pkg_path)
