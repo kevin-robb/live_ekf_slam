@@ -157,27 +157,16 @@ def generate_occupany_map(pkg_path):
         img = cv2.add(cv2.merge([a1,a1,a1,a1]), img) # add up values (with clipping)
         img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB) # strip alpha channels
     # cv2.imshow('initial map', img); cv2.waitKey(0); cv2.destroyAllWindows()
-    # lower the image resolution to have 1 pixel per 0.1x0.1 unit cell in the 20x20 landmark space.
-    # img = cv2.resize(img, (0,0), fx = 0.5, fy = 0.5)
+    # lower the image resolution to the desired grid size.
     img = cv2.resize(img, (Config.params["OCC_MAP_SIZE"], Config.params["OCC_MAP_SIZE"]))
 
     # turn this into a grayscale img and then to a binary map.
     occ_map = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)[1]
-    rows = occ_map.shape[0]
-    cols = occ_map.shape[1]
     # normalize to range [0,1].
     occ_map = np.divide(occ_map, 255)
-    # binarize to integer 0 or 1.
-    # occ_map = np.round(occ_map.reshape(1, rows * cols))
 
-    print("Map read in with shape ", occ_map.shape)
+    rospy.loginfo("Map read in with shape "+str(occ_map.shape))
     # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
-    # Flatten map and normalize cell values
-    # rows = occ_map.shape[0]
-    # cols = occ_map.shape[1]
-    # flat_map = np.divide(occ_map.reshape(1, rows * cols), 255)
-    # Pack into a ROS message to send for the planning node.
-    # map_msg = Int8MultiArray(data=flat_map[0])
     bridge = CvBridge()
     map_msg = bridge.cv2_to_imgmsg(occ_map, encoding="passthrough")
     occ_map_pub.publish(map_msg)

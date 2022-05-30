@@ -60,7 +60,7 @@ COV_STD_DEV = 1
 # show individual heading for all PF particles.
 PLOT_PARTICLE_ARROWS = False
 # amount to multiply MAP_BOUND by to get the display region.
-DISPLAY_REGION = 1.2
+DISPLAY_REGION_MULT = 1.0
 
 # ----- PF -----
 NUM_PARTICLES = 500
@@ -71,7 +71,7 @@ OCC_MAP_IMAGE = map2.png
 # number of cells per dim (square image).
 OCC_MAP_SIZE = 150
 # number of cells to balloon each occluded cell by (to reduce collisions).
-OCC_MAP_BALLOON_AMT = 3
+OCC_MAP_BALLOON_AMT = 2
 
 # ----- Path Planner / Nav -----
 # nav function to use ("pp", "direct", or "simple")

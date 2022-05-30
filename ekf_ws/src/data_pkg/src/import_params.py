@@ -40,11 +40,10 @@ class Config:
                         Config.params[key] = arg
         # Compute any other params that are needed.
         # occ map <-> lm coords transform params.
-        Config.params["SCALE"] = Config.params["MAP_BOUND"] / (Config.params["OCC_MAP_SIZE"] / 2) #* 1.5
+        Config.params["SCALE"] = Config.params["MAP_BOUND"] / (Config.params["OCC_MAP_SIZE"] / 2)
         Config.params["SHIFT"] = Config.params["OCC_MAP_SIZE"] / 2
         # size of region plotter will display.
-        Config.params["DISPLAY_REGION"] = Config.params["DISPLAY_REGION"] * Config.params["MAP_BOUND"]
-        Config.params["DISPLAY_REGION"] = [-Config.params["DISPLAY_REGION"], Config.params["DISPLAY_REGION"]]
+        Config.params["DISPLAY_REGION"] = [Config.params["MAP_BOUND"] * Config.params["DISPLAY_REGION_MULT"] * sign for sign in (-1, 1)]
 
 # automatically read in the params as soon as this is loaded.
 Config.read_params()
