@@ -26,7 +26,7 @@ ukf_mode = loc
 # ----- Landmark Map Gen -----
 # all lm will be w/in +- params["MAP_BOUND"] in both x/y.
 MAP_BOUND = 10.0
-NUM_LANDMARKS = 50
+NUM_LANDMARKS = 20
 # min dist between landmarks.
 MIN_SEP = 0.05
 # size of grid to place landmarks.
@@ -60,18 +60,18 @@ COV_STD_DEV = 1
 # show individual heading for all PF particles.
 PLOT_PARTICLE_ARROWS = False
 # amount to multiply MAP_BOUND by to get the display region.
-DISPLAY_REGION = 1.2
+DISPLAY_REGION_BUFFER = 1.2
 
 # ----- PF -----
 NUM_PARTICLES = 500
 
 # ----- Occupancy Grid -----
 # file in config/maps to use.
-OCC_MAP_IMAGE = map2.png
+OCC_MAP_IMAGE = map0.png
 # number of cells per dim (square image).
-OCC_MAP_SIZE = 150
+OCC_MAP_SIZE = 100
 # number of cells to balloon each occluded cell by (to reduce collisions).
-OCC_MAP_BALLOON_AMT = 3
+OCC_MAP_BALLOON_AMT = 1
 
 # ----- Path Planner / Nav -----
 # nav function to use ("pp", "direct", or "simple")

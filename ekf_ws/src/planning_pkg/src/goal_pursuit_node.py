@@ -30,6 +30,7 @@ Astar.params = params
 ############ GLOBAL VARIABLES ###################
 cmd_pub = None; path_pub = None
 cur = [0.0, 0.0] # current estimate of veh pos.
+lm_estimates = [] # current estimate of all landmark positions.
 occ_map = None # cv2 image of true occupancy grid map.
 #################################################
 # Color codes for console output.
@@ -41,13 +42,16 @@ ANSI_PURPLE = "\u001B[35m"
 ANSI_CYAN = "\u001B[36m"
 #################################################
 
+
+
 def get_ekf_state(msg):
     """
     Get the state published by the EKF.
     """
-    # update current position.
-    global cur
+    # update current position estimates.
+    global cur, lm_estimates
     cur = [msg.x_v, msg.y_v, msg.yaw_v]
+    lm_estimates = msg.landmarks
     # check size of path.
     path_len = len(PurePursuit.goal_queue)
     # call the desired navigation function.
@@ -66,6 +70,9 @@ def get_ekf_state(msg):
 
 
 def get_goal_pt(msg):
+    # update the map's landmark occ mask to influence path planning.
+    # Astar.update_lm_mask(lm_estimates)
+
     # verify chosen pt is on the map and not in collision.
     try:
         if occ_map[Astar.tf_ekf_to_map((msg.x,msg.y))[0]][Astar.tf_ekf_to_map((msg.x,msg.y))[1]] == 0:
@@ -103,29 +110,35 @@ def get_occ_grid_map(msg):
     # get the true occupancy grid map image.
     bridge = CvBridge()
     occ_map_img = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-    # create matrix from map, converting cells to int 0 or 1.
-    occ_map = []
-    for i in range(len(occ_map_img)):
-        row = []
-        for j in range(len(occ_map_img[0])):
-            row.append(int(occ_map_img[i][j]))
-        occ_map.append(row)
-    # print("raw map:\n",occ_map)
+    # create matrix from map, converting cells to int 0 (occluded) or 1 (free).
+    # also expand the size of the map to fill the whole plot with a buffer of free space.
+    num_buffer_rows = int(params["DISPLAY_REGION_BUFFER"] * params["OCC_MAP_SIZE"])
+    occ_map = [[1] * num_buffer_rows] * num_buffer_rows
+    offset = (num_buffer_rows - params["OCC_MAP_SIZE"]) // 2
+    rospy.logwarn("num_rows, buffer, offset: "+str(len(occ_map_img[0]))+", "+str(num_buffer_rows)+", "+str(offset))
+    # for i in range(len(occ_map_img)):
+    #     for j in range(len(occ_map_img[0])):
+    #         occ_map[offset+i][offset+j] = int(occ_map_img[i][j])
+    # print(ANSI_YELLOW+"raw map:\n"+str(occ_map)+ANSI_RESET)
+
     # determine index pairs to select all neighbors when ballooning obstacles.
     nbrs = []
     for i in range(-params["OCC_MAP_BALLOON_AMT"], params["OCC_MAP_BALLOON_AMT"]+1):
         for j in range(-params["OCC_MAP_BALLOON_AMT"], params["OCC_MAP_BALLOON_AMT"]+1):
             nbrs.append((i, j))
-    # remove 0,0 which is just the parent cell.
+    # set this to be used by A* for landmark avoidance.
+    Astar.nbr_indexes = nbrs
+    # remove 0,0 here which is just the parent cell.
     nbrs.remove((0,0))
     # expand all occluded cells outwards.
-    for i in range(len(occ_map)):
-        for j in range(len(occ_map[0])):
+    for i in range(len(occ_map_img)):
+        for j in range(len(occ_map_img[0])):
+            # check original map for occlusion.
             if occ_map_img[i][j] < 0.5: # occluded.
                 # mark all neighbors as occluded.
                 for chg in nbrs:
-                    occ_map[max(0, min(i+chg[0], params["OCC_MAP_SIZE"]-1))][max(0, min(j+chg[1], params["OCC_MAP_SIZE"]-1))] = 0
-    # print("inflated map:\n",occ_map)
+                    occ_map[max(0, min(offset+i+chg[0], params["OCC_MAP_SIZE"]-1))][max(0, min(offset+j+chg[1], params["OCC_MAP_SIZE"]-1))] = 0
+    # print(ANSI_BLUE+"inflated map:\n"+str(occ_map)+ANSI_RESET)
     # show value distribution in occ_map.
     freqs = [0, 0]
     for i in range(len(occ_map)):
@@ -137,6 +150,8 @@ def get_occ_grid_map(msg):
     print(ANSI_CYAN+"Occ map value frequencies: "+str(freqs[1])+" free, "+str(freqs[0])+" occluded."+ANSI_RESET)
     # set map for A* to use.
     Astar.occ_map = occ_map
+    # create blank landmark occupancy mask at the right size.
+    Astar.lm_mask = [[1] * len(occ_map)] * len(occ_map)
 
 
 def main():

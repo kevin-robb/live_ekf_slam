@@ -5,8 +5,39 @@ Set of static functions to perform A* path planning.
 """
 
 class Astar:
-    # Always use the same map.
+    # Always use the same map for the occupancy grid.
     occ_map = None
+    # Update the mask for estimated landmark positions every timestep.
+    lm_mask = None
+    lm_inds = []
+    # precompute list of relative neighbor indexes.
+    nbr_indexes = []
+
+    @staticmethod
+    def update_lm_mask(lm_estimates):
+        """
+        Update the landmark occ mask to avoid path planning through
+        where the ekf believes landmarks are located.
+        """
+        # first reset the grid by setting all cells to 1 (free).
+        Astar.lm_mask = [[1] * len(Astar.occ_map)] * len(Astar.occ_map)
+        # for lm in Astar.lm_inds:
+        #     Astar.lm_mask[lm[0]][lm[1]] = 1
+        Astar.lm_inds = []
+        print(str(Astar.nbr_indexes))
+        print()
+        for i in range(1, len(lm_estimates), 3):
+            # convert landmark position to map indexes.
+            lm_i = Astar.tf_ekf_to_map(lm_estimates[i:i+2])
+            # mark a region around the landmark as occupied.
+            for chg in Astar.nbr_indexes:
+                lm_i = [max(0, min(lm_i[0]+chg[0], Astar.params["OCC_MAP_SIZE"]-1)),
+                        max(0, min(lm_i[1]+chg[1], Astar.params["OCC_MAP_SIZE"]-1))]
+                Astar.lm_mask[lm_i[0]][lm_i[1]] = 0
+                Astar.lm_inds.append(lm_i)
+
+        print(str(Astar.lm_mask))
+
 
     @staticmethod
     def astar(start, goal):
@@ -43,6 +74,7 @@ class Astar:
                 if nbr.i < 0 or nbr.j < 0 or nbr.i >= Astar.params["OCC_MAP_SIZE"] or nbr.j >= Astar.params["OCC_MAP_SIZE"]: continue
                 # skip if occluded.
                 if Astar.occ_map[nbr.i][nbr.j] == 0: continue
+                # if Astar.lm_mask[nbr.i][nbr.j] == 0: continue
                 # skip if already in closed list.
                 if any([nbr == c for c in closed_list]): continue
                 # skip if already in open list, unless the cost is lower.
@@ -68,13 +100,13 @@ class Astar:
     @staticmethod
     def tf_map_to_ekf(pt):
         # transform x,y from occ map indices to ekf coords.
-        return [(pt[1] - Astar.params["SHIFT"]) * Astar.params["SCALE"], -(pt[0] - Astar.params["SHIFT"]) * Astar.params["SCALE"]]
+        return [(pt[1] - Astar.params["DISPLAY_REGION_BUFFER"] * Astar.params["SHIFT"]) * Astar.params["SCALE"], -(pt[0] - Astar.params["DISPLAY_REGION_BUFFER"] * Astar.params["SHIFT"]) * Astar.params["SCALE"]]
         
 
     @staticmethod
     def tf_ekf_to_map(pt):
         # transform x,y from ekf coords to occ map indices.
-        return [int(Astar.params["SHIFT"] - pt[1] / Astar.params["SCALE"]), int(Astar.params["SHIFT"] + pt[0] / Astar.params["SCALE"])]
+        return [int(Astar.params["DISPLAY_REGION_BUFFER"] * Astar.params["SHIFT"] - pt[1] / Astar.params["SCALE"]), int(Astar.params["DISPLAY_REGION_BUFFER"] * Astar.params["SHIFT"] + pt[0] / Astar.params["SCALE"])]
 
 
     @staticmethod

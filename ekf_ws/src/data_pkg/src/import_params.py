@@ -43,8 +43,8 @@ class Config:
         Config.params["SCALE"] = Config.params["MAP_BOUND"] / (Config.params["OCC_MAP_SIZE"] / 2) #* 1.5
         Config.params["SHIFT"] = Config.params["OCC_MAP_SIZE"] / 2
         # size of region plotter will display.
-        Config.params["DISPLAY_REGION"] = Config.params["DISPLAY_REGION"] * Config.params["MAP_BOUND"]
-        Config.params["DISPLAY_REGION"] = [-Config.params["DISPLAY_REGION"], Config.params["DISPLAY_REGION"]]
+        Config.params["DISPLAY_REGION"] = [-Config.params["DISPLAY_REGION_BUFFER"] * Config.params["MAP_BOUND"],
+                                           Config.params["DISPLAY_REGION_BUFFER"] * Config.params["MAP_BOUND"]]
 
 # automatically read in the params as soon as this is loaded.
 Config.read_params()
