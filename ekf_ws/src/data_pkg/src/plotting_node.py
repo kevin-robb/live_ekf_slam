@@ -72,7 +72,7 @@ def update_plot(filter:str, msg):
     if true_map is not None:
         plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black", zorder=1)
         # make sure the time text will be on screen but not blocking a lm.
-        pos_time_display = (min(true_map[0]), max(true_map[1])+2)
+        pos_time_display = (min(true_map[0]), max(true_map[1])+1)
         # this should only run once to avoid wasting time.
         true_map = None
 
@@ -155,12 +155,10 @@ def update_plot(filter:str, msg):
             # draw entire particle set at once.
             plots["particle_set"] = plt.scatter([msg.x[i] for i in range(len(msg.x))], [msg.y[i] for i in range(len(msg.y))], s=8, color="red")
 
+    # force desired window region.
+    plt.xlim(Config.params["DISPLAY_REGION"])
+    plt.ylim(Config.params["DISPLAY_REGION"])
     # do the plotting.
-    plt.axis("equal")
-    plt.xlabel("x (m)")
-    plt.ylabel("y (m)")
-    plt.xlim([-1.5*Config.params["MAP_BOUND"],1.5*Config.params["MAP_BOUND"]])
-    plt.ylim([-1.5*Config.params["MAP_BOUND"],1.5*Config.params["MAP_BOUND"]])
     plt.draw()
     plt.pause(0.00000000001)
 
@@ -235,7 +233,7 @@ def get_occ_grid_map(msg):
     # convert from BGR to RGB for display.
     occ_map_rgb = cv2.cvtColor(occ_map, cv2.COLOR_BGR2RGB)
     # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
-    edge = Config.params["MAP_BOUND"] * 1.5
+    edge = Config.params["MAP_BOUND"] #* 1.5
     plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])
 
 def get_planned_path(msg):
@@ -285,6 +283,11 @@ def main():
     plt.figure()
     plt.connect('button_press_event', on_click)
     plt.show()
+
+    # set constant plot params.
+    plt.axis("equal")
+    plt.xlabel("x (m)")
+    plt.ylabel("y (m)")
 
     rospy.spin()
 

@@ -66,10 +66,15 @@ def get_ekf_state(msg):
 
 
 def get_goal_pt(msg):
-    # verify chosen pt is not in collision.
-    if occ_map[Astar.tf_ekf_to_map((msg.x,msg.y))[0]][Astar.tf_ekf_to_map((msg.x,msg.y))[1]] == 0:
-        rospy.logerr("Invalid goal point (in collision).")
+    # verify chosen pt is on the map and not in collision.
+    try:
+        if occ_map[Astar.tf_ekf_to_map((msg.x,msg.y))[0]][Astar.tf_ekf_to_map((msg.x,msg.y))[1]] == 0:
+            rospy.logerr("Invalid goal point (in collision).")
+            return
+    except:
+        rospy.logerr("Selected point is outside map bounds.")
         return
+
     rospy.loginfo("Setting goal pt to ("+"{0:.4f}".format(msg.x)+", "+"{0:.4f}".format(msg.y)+")")
     # if running in "simple" mode, only add goal point rather than path planning.
     if params["NAV_METHOD"] == "simple":
@@ -98,7 +103,7 @@ def get_occ_grid_map(msg):
     # get the true occupancy grid map image.
     bridge = CvBridge()
     occ_map_img = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-    # create matrix from map, and flip its x-axis to align with ekf coords better.
+    # create matrix from map, converting cells to int 0 or 1.
     occ_map = []
     for i in range(len(occ_map_img)):
         row = []

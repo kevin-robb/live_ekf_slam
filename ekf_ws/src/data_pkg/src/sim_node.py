@@ -43,6 +43,11 @@ def norm(l1, l2):
     return ((l1[0]-l2[0])**2 + (l1[1]-l2[1])**2)**(1/2) 
 
 
+def tf_ekf_to_map(pt):
+        # transform x,y from ekf coords to occ map indices.
+        return [int(Config.params["SHIFT"] - pt[1] / Config.params["SCALE"]), int(Config.params["SHIFT"] + pt[0] / Config.params["SCALE"])]
+
+
 def generate_landmarks(map_type:str):
     """
     Create a set of 20 landmarks forming the map.
@@ -55,15 +60,6 @@ def generate_landmarks(map_type:str):
         # force number of landmarks to match.
         Config.params["NUM_LANDMARKS"] = len(demo_map.keys()) 
         landmarks = demo_map
-    elif map_type in ["random", "rand"]:
-        id = 0
-        # randomly spread landmarks across the map.
-        while len(landmarks.keys()) < Config.params["NUM_LANDMARKS"]:
-            pos = (2*Config.params["MAP_BOUND"]*random() - Config.params["MAP_BOUND"], 2*Config.params["MAP_BOUND"]*random() - Config.params["MAP_BOUND"])
-            dists = [ norm(lm_pos, pos) < Config.params["MIN_SEP"] for lm_pos in landmarks.values()]
-            if True not in dists:
-                landmarks[id] = pos
-                id += 1
     elif map_type == "grid":
         # place landmarks on a grid filling the bounds.
         id = 0
@@ -73,6 +69,18 @@ def generate_landmarks(map_type:str):
                 id += 1
         # update number of landmarks used.
         Config.params["NUM_LANDMARKS"] = id
+    elif map_type in ["random", "rand"]:
+        id = 0
+        # randomly spread landmarks across the map.
+        while len(landmarks.keys()) < Config.params["NUM_LANDMARKS"]:
+            pos = (2*Config.params["MAP_BOUND"]*random() - Config.params["MAP_BOUND"], 2*Config.params["MAP_BOUND"]*random() - Config.params["MAP_BOUND"])
+            # check that it's not colliding with an obstacle.
+            if occ_map[tf_ekf_to_map(pos)[0]][tf_ekf_to_map(pos)[1]] < 0.5: continue
+            # check that it's not too close to any existing landmarks.
+            if any([ norm(lm_pos, pos) < Config.params["MIN_SEP"] for lm_pos in landmarks.values()]): continue
+            # add the landmark.
+            landmarks[id] = pos
+            id += 1
     else:
         rospy.logerr("Invalid map_type provided.")
         exit()

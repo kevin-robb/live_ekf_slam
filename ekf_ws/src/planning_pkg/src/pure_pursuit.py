@@ -44,9 +44,9 @@ class PurePursuit:
             # update global integral term.
             PurePursuit.integ += beta * PurePursuit.params["DT"]
 
-            P = 0.08 * beta # proportional to hdg error.
+            P = 0.15 * beta # proportional to hdg error.
             I = 0.009 * PurePursuit.integ # integral to correct systematic error.
-            D = 0.01 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
+            D = 0.012 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
 
             # set forward and turning commands.
             cmd_msg.fwd = (1 - abs(beta / pi))**5 + 0.05
