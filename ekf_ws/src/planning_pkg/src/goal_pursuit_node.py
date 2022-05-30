@@ -5,7 +5,6 @@ Command vehicle to pursue path to goal point chosen by clicking the plot.
 Generate the next odom command based on current state estimate.
 """
 import rospy
-import numpy as np
 from data_pkg.msg import Command
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float32MultiArray
@@ -15,7 +14,6 @@ from pf_pkg.msg import PFState
 from cv_bridge import CvBridge
 from pure_pursuit import PurePursuit
 from astar import Astar
-import cv2
 
 # import params script.
 import rospkg
@@ -33,15 +31,8 @@ Astar.nbrs = [(0, -1), (0, 1), (-1, 0), (1, 0)] + [(-1, -1), (-1, 1), (1, -1), (
 
 ############ GLOBAL VARIABLES ###################
 cmd_pub = None; path_pub = None
-cur = [0.0, 0.0] # current estimate of veh pos.
-#################################################
-# Color codes for console output.
-ANSI_RESET = "\u001B[0m"
-ANSI_GREEN = "\u001B[32m"
-ANSI_YELLOW = "\u001B[33m"
-ANSI_BLUE = "\u001B[34m"
-ANSI_PURPLE = "\u001B[35m"
-ANSI_CYAN = "\u001B[36m"
+# current estimate of veh pos.
+cur = [params["x_0"], params["y_0"], params["yaw_0"]]
 #################################################
 
 def get_ekf_state(msg):
@@ -106,9 +97,6 @@ def get_occ_map(msg):
     # get the true occupancy grid map image.
     bridge = CvBridge()
     occ_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-    cv2.imshow("Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
-    # convert to int (0 or 1).
-    # occ_map = np.int0(occ_map)
     # set map for A* to use.
     Astar.occ_map = occ_map
 

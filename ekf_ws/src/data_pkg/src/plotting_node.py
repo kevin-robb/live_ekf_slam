@@ -17,18 +17,12 @@ from matplotlib import pyplot as plt
 import numpy as np
 import atexit
 from math import cos, sin, pi
-import cv2
 from cv_bridge import CvBridge
 from import_params import Config
 
 ############ GLOBAL VARIABLES ###################
 # store all plots objects we want to be able to remove later.
 plots = {"lm_cov_est" : {}}
-# ground truth.
-true_pose = None # current true pose as Vector3.
-true_map = None # true landmark map.
-# position to display the timestep number.
-pos_time_display = None
 # output filename prefix.
 fname = ""
 # publish clicked point on map for planner.
@@ -66,28 +60,12 @@ def cov_to_ellipse(P_v):
 
 def update_plot(filter:str, msg):
     # draw everything for this timestep.
-    global plots, pos_time_display, true_map
+    global plots
     
-    #################### TRUE MAP #######################
-    if true_map is not None:
-        plt.scatter(true_map[0], true_map[1], s=30, color="white", edgecolors="black", zorder=1)
-        # make sure the time text will be on screen but not blocking a lm.
-        pos_time_display = (min(true_map[0]), max(true_map[1])+1)
-        # this should only run once to avoid wasting time.
-        true_map = None
-
-    ################ TRUE TRAJECTORY #####################
-    if Config.params["SHOW_TRUE_TRAJ"] and true_pose is not None:
-        # plot only the current veh pos.
-        if "veh_pos_true" in plots.keys():
-            plots["veh_pos_true"].remove()
-        plots["veh_pos_true"] = plt.arrow(true_pose.x, true_pose.y, Config.params["ARROW_LEN"]*cos(true_pose.z), Config.params["ARROW_LEN"]*sin(true_pose.z), color="blue", width=0.1, zorder=1)
-
     ###################### TIMESTEP #####################
     if "timestep" in plots.keys():
         plots["timestep"].remove()
-    if pos_time_display is not None:
-        plots["timestep"] = plt.text(pos_time_display[0], pos_time_display[1], 't = '+str(msg.timestep), horizontalalignment='center', verticalalignment='bottom', zorder=2)
+    plots["timestep"] = plt.text(-Config.params["MAP_BOUND"], Config.params["MAP_BOUND"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
 
     ####################### EKF SLAM #########################
     if filter == "ekf" or filter == "ukf":
@@ -190,21 +168,23 @@ def get_pf_state(msg):
 def save_plot(pkg_path):
     # save plot we've been building upon exit.
     # save to a file in pkg/plots directory.
-    if fname != "":
+    if fname != "" and Config.params["SAVE_FINAL_MAP"]:
         plt.savefig(pkg_path+"/plots/"+fname+"_demo.png", format='png')
 
 def get_true_pose(msg):
-    # save the true pose to plot it along w cur state.
-    global true_pose
-    true_pose = msg
+    if not Config.params["SHOW_TRUE_TRAJ"]: return
+    global plots
+    # plot the current veh pos, & remove previous.
+    if "veh_pos_true" in plots.keys():
+        plots["veh_pos_true"].remove()
+    plots["veh_pos_true"] = plt.arrow(msg.x, msg.y, Config.params["ARROW_LEN"]*cos(msg.z), Config.params["ARROW_LEN"]*sin(msg.z), color="blue", width=0.1, zorder=1)
 
-def get_true_map(msg):
+def get_true_landmark_map(msg):
     # rospy.loginfo("Ground truth map received by plotting node.")
-    # plot the true map to compare to estimates.
-    global true_map
     lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
     lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
-    true_map = [lm_x, lm_y]
+    # plot the true landmark positions to compare to estimates.
+    plt.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=1)
 
 def on_click(event):
     global plots
@@ -263,7 +243,7 @@ def main():
     rospy.Subscriber("/state/pf", PFState, get_pf_state, queue_size=1)
     # subscribe to ground truth.
     rospy.Subscriber("/truth/veh_pose", Vector3, get_true_pose, queue_size=1)
-    rospy.Subscriber("/truth/landmarks", Float32MultiArray, get_true_map, queue_size=1)
+    rospy.Subscriber("/truth/landmarks", Float32MultiArray, get_true_landmark_map, queue_size=1)
     # subscribe to the color map.
     rospy.Subscriber("/truth/color_map", Image, get_color_map, queue_size=1)
 

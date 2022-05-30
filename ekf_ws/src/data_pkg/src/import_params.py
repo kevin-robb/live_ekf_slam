@@ -71,19 +71,11 @@ class Config:
 
         # turn this into a grayscale img and then to a binary map.
         occ_map_img = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 200, 255, cv2.THRESH_BINARY)[1]
-        # cv2.imshow("Grayscale Map", occ_map_img); cv2.waitKey(0); cv2.destroyAllWindows()
         # normalize to range [0,1].
         occ_map_img = np.divide(occ_map_img, 255)
         # cv2.imshow("Thresholded Map", occ_map_img); cv2.waitKey(0); cv2.destroyAllWindows()
 
-        # create matrix from map, converting cells to int 0 or 1.
         # anything not completely white (1) is considered occluded (0).
-        # occ_map = []
-        # for i in range(len(occ_map_img)):
-        #     row = []
-        #     for j in range(len(occ_map_img[0])):
-        #         row.append(np.int(occ_map_img[i][j]))
-        #     occ_map.append(row)
         occ_map = np.floor(occ_map_img)
         # print("raw occupancy grid:\n",occ_map)
         # determine index pairs to select all neighbors when ballooning obstacles.

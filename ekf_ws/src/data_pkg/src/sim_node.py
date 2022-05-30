@@ -85,7 +85,7 @@ def generate_landmarks(map_type:str):
     # Publish ground truth of map and veh pose for plotter.
     # rospy.loginfo("Waiting to publish ground truth for plotter.")
     # if we send it before the other nodes have initialized, they'll miss their one chance to get it.
-    rospy.sleep(1)
+    # rospy.sleep(1)
     true_map_msg = Float32MultiArray()
     true_map_msg.data = sum([[id, landmarks[id][0], landmarks[id][1]] for id in landmarks.keys()], [])
     true_map_pub.publish(true_map_msg)
