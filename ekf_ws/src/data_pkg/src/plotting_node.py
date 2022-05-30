@@ -222,19 +222,19 @@ def on_click(event):
         goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
 
 
-def get_occ_grid_map(msg):
-    if not Config.params["SHOW_OCC_MAP"]: return
-    # get the true occupancy grid map image.
-    bridge = CvBridge()
-    occ_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-    # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
-    # reduce from float64 (not supported by cv2) to float32.
-    occ_map = np.float32(occ_map)
-    # convert from BGR to RGB for display.
-    occ_map_rgb = cv2.cvtColor(occ_map, cv2.COLOR_BGR2RGB)
-    # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
-    edge = Config.params["MAP_BOUND"] #* 1.5
-    plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])
+# def get_occ_grid_map(msg):
+#     if not Config.params["SHOW_OCC_MAP"]: return
+#     # get the true occupancy grid map image.
+#     bridge = CvBridge()
+#     occ_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+#     # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
+#     # reduce from float64 (not supported by cv2) to float32.
+#     occ_map = np.float32(occ_map)
+#     # convert from BGR to RGB for display.
+#     occ_map_rgb = cv2.cvtColor(occ_map, cv2.COLOR_BGR2RGB)
+#     # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
+#     edge = Config.params["MAP_BOUND"] #* 1.5
+#     plt.imshow(occ_map_rgb, zorder=0, extent=[-edge, edge, -edge, edge])
 
 def get_planned_path(msg):
     global plots
@@ -270,7 +270,7 @@ def main():
     rospy.Subscriber("/truth/veh_pose", Vector3, get_true_pose, queue_size=1)
     rospy.Subscriber("/truth/landmarks", Float32MultiArray, get_true_map, queue_size=1)
     # subscribe to the true occupancy grid.
-    rospy.Subscriber("/truth/occ_grid", Image, get_occ_grid_map, queue_size=1)
+    # rospy.Subscriber("/truth/occ_grid", Image, get_occ_grid_map, queue_size=1)
 
     # publish the chosen goal point for the planner.
     goal_pub = rospy.Publisher("/plan/goal", Vector3, queue_size=1)
@@ -281,13 +281,21 @@ def main():
     # startup the plot.
     # plt.ion()
     plt.figure()
-    plt.connect('button_press_event', on_click)
-    plt.show()
 
     # set constant plot params.
     plt.axis("equal")
     plt.xlabel("x (m)")
     plt.ylabel("y (m)")
+
+    # show the color map in the background.
+    if Config.params["SHOW_OCC_MAP"]: 
+        edge = Config.params["MAP_BOUND"] #* 1.5
+        plt.imshow(Config.color_map, zorder=0, extent=[-edge, edge, -edge, edge])
+
+    plt.connect('button_press_event', on_click)
+    plt.show()
+
+    
 
     rospy.spin()
 

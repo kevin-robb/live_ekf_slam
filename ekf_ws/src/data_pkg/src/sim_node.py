@@ -21,7 +21,6 @@ import cv2
 from cv_bridge import CvBridge
 from import_params import Config
 
-
 ############ GLOBAL VARIABLES ###################
 # publishers
 lm_pub = None; true_map_pub = None; true_pose_pub = None; cmd_pub = None
@@ -31,10 +30,8 @@ demo_map = { 0 : (6.2945, 8.1158), 1 : (-7.4603, 8.2675), 2 : (2.6472, -8.0492),
         7 : (6.0056, -7.1623), 8 : (-1.5648, 8.3147), 9 : (5.8441, 9.1898), 10: (3.1148, -9.2858),
         11: (6.9826, 8.6799), 12: (3.5747, 5.1548), 13: (4.8626, -2.1555), 14: (3.1096, -6.5763),
         15: (4.1209, -9.3633), 16: (-4.4615, -9.0766), 17: (-8.0574, 6.4692), 18: (3.8966, -3.6580), 19: (9.0044, -9.3111) }
-# true map and current pose.
+# true landmark map and current pose.
 landmarks = None; x_v = [0.0, 0.0, 0.0]
-# true occupancy grid map.
-occ_map = None; occ_map_pub = None
 #################################################
 
 def norm(l1, l2):
@@ -75,7 +72,7 @@ def generate_landmarks(map_type:str):
         while len(landmarks.keys()) < Config.params["NUM_LANDMARKS"]:
             pos = (2*Config.params["MAP_BOUND"]*random() - Config.params["MAP_BOUND"], 2*Config.params["MAP_BOUND"]*random() - Config.params["MAP_BOUND"])
             # check that it's not colliding with an obstacle.
-            if occ_map[tf_ekf_to_map(pos)[0]][tf_ekf_to_map(pos)[1]] < 0.5: continue
+            if Config.occ_map[tf_ekf_to_map(pos)[0]][tf_ekf_to_map(pos)[1]] < 0.5: continue
             # check that it's not too close to any existing landmarks.
             if any([ norm(lm_pos, pos) < Config.params["MIN_SEP"] for lm_pos in landmarks.values()]): continue
             # add the landmark.
@@ -144,32 +141,32 @@ def get_cmd(msg):
     # TODO publish LiDAR measurements for occ grid node.
 
 
-def generate_occupany_map(pkg_path):
-    """
-    Read in the map from the image file and convert it to a 2D list occ grid.
-    """
-    global occ_map
-     # read map image and account for possible white = transparency that cv2 will call black.
-    # https://stackoverflow.com/questions/31656366/cv2-imread-and-cv2-imshow-return-all-zeros-and-black-image/62985765#62985765
-    img = cv2.imread(pkg_path+'/config/maps/'+Config.params["OCC_MAP_IMAGE"], cv2.IMREAD_UNCHANGED)
-    if img.shape[2] == 4: # we have an alpha channel
-        a1 = ~img[:,:,3] # extract and invert that alpha
-        img = cv2.add(cv2.merge([a1,a1,a1,a1]), img) # add up values (with clipping)
-        img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB) # strip alpha channels
-    # cv2.imshow('initial map', img); cv2.waitKey(0); cv2.destroyAllWindows()
-    # lower the image resolution to the desired grid size.
-    img = cv2.resize(img, (Config.params["OCC_MAP_SIZE"], Config.params["OCC_MAP_SIZE"]))
+# def generate_occupany_map(pkg_path):
+#     """
+#     Read in the map from the image file and convert it to a 2D list occ grid.
+#     """
+#     global occ_map
+#      # read map image and account for possible white = transparency that cv2 will call black.
+#     # https://stackoverflow.com/questions/31656366/cv2-imread-and-cv2-imshow-return-all-zeros-and-black-image/62985765#62985765
+#     img = cv2.imread(pkg_path+'/config/maps/'+Config.params["OCC_MAP_IMAGE"], cv2.IMREAD_UNCHANGED)
+#     if img.shape[2] == 4: # we have an alpha channel
+#         a1 = ~img[:,:,3] # extract and invert that alpha
+#         img = cv2.add(cv2.merge([a1,a1,a1,a1]), img) # add up values (with clipping)
+#         img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB) # strip alpha channels
+#     # cv2.imshow('initial map', img); cv2.waitKey(0); cv2.destroyAllWindows()
+#     # lower the image resolution to the desired grid size.
+#     img = cv2.resize(img, (Config.params["OCC_MAP_SIZE"], Config.params["OCC_MAP_SIZE"]))
 
-    # turn this into a grayscale img and then to a binary map.
-    occ_map = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)[1]
-    # normalize to range [0,1].
-    occ_map = np.divide(occ_map, 255)
+#     # turn this into a grayscale img and then to a binary map.
+#     occ_map = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)[1]
+#     # normalize to range [0,1].
+#     occ_map = np.divide(occ_map, 255)
 
-    rospy.loginfo("Map read in with shape "+str(occ_map.shape))
-    # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
-    bridge = CvBridge()
-    map_msg = bridge.cv2_to_imgmsg(occ_map, encoding="passthrough")
-    occ_map_pub.publish(map_msg)
+#     rospy.loginfo("Map read in with shape "+str(occ_map.shape))
+#     # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
+#     bridge = CvBridge()
+#     map_msg = bridge.cv2_to_imgmsg(occ_map, encoding="passthrough")
+#     occ_map_pub.publish(map_msg)
 
 
 def main():
@@ -204,7 +201,7 @@ def main():
 
     rospy.sleep(1)
     # generate occupancy grid.
-    generate_occupany_map(pkg_path)
+    # generate_occupany_map(pkg_path)
     # create the landmark map.
     generate_landmarks(map_type)
 
