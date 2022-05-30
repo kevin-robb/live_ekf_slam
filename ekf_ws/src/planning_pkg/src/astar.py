@@ -36,7 +36,7 @@ class Astar:
             # add this node to the closed list.
             closed_list.append(cur_cell)
             # add its unoccupied neighbors to the open list.
-            for chg in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+            for chg in Astar.nbrs:
                 # check each cell for occlusion and if we've already checked it.
                 nbr = Cell([cur_cell.i+chg[0], cur_cell.j+chg[1]], parent=cur_cell)
                 # skip if out of bounds.

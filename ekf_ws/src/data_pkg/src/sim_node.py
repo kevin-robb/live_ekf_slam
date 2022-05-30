@@ -23,7 +23,7 @@ from import_params import Config
 
 ############ GLOBAL VARIABLES ###################
 # publishers
-lm_pub = None; true_map_pub = None; true_pose_pub = None; cmd_pub = None
+lm_pub = None; true_map_pub = None; true_pose_pub = None; cmd_pub = None; color_map_pub = None
 # Default map from RSS demo:
 demo_map = { 0 : (6.2945, 8.1158), 1 : (-7.4603, 8.2675), 2 : (2.6472, -8.0492), 
         3 : (-4.4300, 0.9376), 4 : (9.1501, 9.2978), 5 : (-6.8477, 9.4119), 6 : (9.1433, -0.2925),
@@ -72,7 +72,7 @@ def generate_landmarks(map_type:str):
         while len(landmarks.keys()) < Config.params["NUM_LANDMARKS"]:
             pos = (2*Config.params["MAP_BOUND"]*random() - Config.params["MAP_BOUND"], 2*Config.params["MAP_BOUND"]*random() - Config.params["MAP_BOUND"])
             # check that it's not colliding with an obstacle.
-            if Config.occ_map[tf_ekf_to_map(pos)[0]][tf_ekf_to_map(pos)[1]] < 0.5: continue
+            if occ_map[tf_ekf_to_map(pos)[0]][tf_ekf_to_map(pos)[1]] < 0.5: continue
             # check that it's not too close to any existing landmarks.
             if any([ norm(lm_pos, pos) < Config.params["MIN_SEP"] for lm_pos in landmarks.values()]): continue
             # add the landmark.
@@ -141,36 +141,21 @@ def get_cmd(msg):
     # TODO publish LiDAR measurements for occ grid node.
 
 
-# def generate_occupany_map(pkg_path):
-#     """
-#     Read in the map from the image file and convert it to a 2D list occ grid.
-#     """
-#     global occ_map
-#      # read map image and account for possible white = transparency that cv2 will call black.
-#     # https://stackoverflow.com/questions/31656366/cv2-imread-and-cv2-imshow-return-all-zeros-and-black-image/62985765#62985765
-#     img = cv2.imread(pkg_path+'/config/maps/'+Config.params["OCC_MAP_IMAGE"], cv2.IMREAD_UNCHANGED)
-#     if img.shape[2] == 4: # we have an alpha channel
-#         a1 = ~img[:,:,3] # extract and invert that alpha
-#         img = cv2.add(cv2.merge([a1,a1,a1,a1]), img) # add up values (with clipping)
-#         img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB) # strip alpha channels
-#     # cv2.imshow('initial map', img); cv2.waitKey(0); cv2.destroyAllWindows()
-#     # lower the image resolution to the desired grid size.
-#     img = cv2.resize(img, (Config.params["OCC_MAP_SIZE"], Config.params["OCC_MAP_SIZE"]))
-
-#     # turn this into a grayscale img and then to a binary map.
-#     occ_map = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)[1]
-#     # normalize to range [0,1].
-#     occ_map = np.divide(occ_map, 255)
-
-#     rospy.loginfo("Map read in with shape "+str(occ_map.shape))
-#     # cv2.imshow("Thresholded Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
-#     bridge = CvBridge()
-#     map_msg = bridge.cv2_to_imgmsg(occ_map, encoding="passthrough")
-#     occ_map_pub.publish(map_msg)
+def get_occupancy_map():
+    """
+    Use the function in import_params to get the map.
+    """
+    global occ_map
+    occ_map, color_map = Config.read_map()
+    # rospy.loginfo("Occupancy map read with shape "+str(occ_map.shape))
+    # turn them into Image messages to publish for other nodes.
+    bridge = CvBridge()
+    occ_map_pub.publish(bridge.cv2_to_imgmsg(occ_map, encoding="passthrough"))
+    color_map_pub.publish(bridge.cv2_to_imgmsg(color_map, encoding="passthrough"))
 
 
 def main():
-    global lm_pub, pkg_path, true_map_pub, true_pose_pub, cmd_pub, occ_map_pub, x_v
+    global lm_pub, pkg_path, true_map_pub, true_pose_pub, cmd_pub, occ_map_pub, color_map_pub, x_v
     rospy.init_node('sim_node')
 
     # read map type from command line arg.
@@ -198,10 +183,11 @@ def main():
     true_pose_pub = rospy.Publisher("/truth/veh_pose",Vector3, queue_size=1)
     true_map_pub = rospy.Publisher("/truth/landmarks",Float32MultiArray, queue_size=1)
     occ_map_pub = rospy.Publisher("/truth/occ_grid", Image, queue_size=1)
+    color_map_pub = rospy.Publisher("/truth/color_map", Image, queue_size=1)
 
     rospy.sleep(1)
     # generate occupancy grid.
-    # generate_occupany_map(pkg_path)
+    get_occupancy_map()
     # create the landmark map.
     generate_landmarks(map_type)
 

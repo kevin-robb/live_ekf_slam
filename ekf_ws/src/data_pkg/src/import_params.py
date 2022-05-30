@@ -5,7 +5,6 @@ Script to read all the params from params.txt into a Python dictionary,
 to be used by all the Python nodes.
 Need to keep the txt file for the C++ nodes to access independently.
 """
-import rospy
 import rospkg, cv2
 import numpy as np
 
@@ -63,31 +62,29 @@ class Config:
             img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB) # strip alpha channels
         # cv2.imshow('initial map', img); cv2.waitKey(0); cv2.destroyAllWindows()
 
-
         # save the color map for the plotter.
-        # reduce from float64 (not supported by cv2) to float32.
         # convert from BGR to RGB for display.
-        Config.color_map = img #cv2.cvtColor(np.float32(img), cv2.COLOR_BGR2RGB)
-
+        Config.color_map = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         # lower the image resolution to the desired grid size.
         img = cv2.resize(img, (Config.params["OCC_MAP_SIZE"], Config.params["OCC_MAP_SIZE"]))
 
-
         # turn this into a grayscale img and then to a binary map.
-        occ_map_img = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)[1]
+        occ_map_img = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 200, 255, cv2.THRESH_BINARY)[1]
+        # cv2.imshow("Grayscale Map", occ_map_img); cv2.waitKey(0); cv2.destroyAllWindows()
         # normalize to range [0,1].
         occ_map_img = np.divide(occ_map_img, 255)
         # cv2.imshow("Thresholded Map", occ_map_img); cv2.waitKey(0); cv2.destroyAllWindows()
 
         # create matrix from map, converting cells to int 0 or 1.
         # anything not completely white (1) is considered occluded (0).
-        occ_map = []
-        for i in range(len(occ_map_img)):
-            row = []
-            for j in range(len(occ_map_img[0])):
-                row.append(int(occ_map_img[i][j]))
-            occ_map.append(row)
+        # occ_map = []
+        # for i in range(len(occ_map_img)):
+        #     row = []
+        #     for j in range(len(occ_map_img[0])):
+        #         row.append(np.int(occ_map_img[i][j]))
+        #     occ_map.append(row)
+        occ_map = np.floor(occ_map_img)
         # print("raw occupancy grid:\n",occ_map)
         # determine index pairs to select all neighbors when ballooning obstacles.
         nbrs = []
@@ -99,12 +96,12 @@ class Config:
         # expand all occluded cells outwards.
         for i in range(len(occ_map)):
             for j in range(len(occ_map[0])):
-                if occ_map_img[i][j] < 0.5: # occluded.
+                if occ_map_img[i][j] != 1: # occluded.
                     # mark all neighbors as occluded.
                     for chg in nbrs:
                         occ_map[max(0, min(i+chg[0], Config.params["OCC_MAP_SIZE"]-1))][max(0, min(j+chg[1], Config.params["OCC_MAP_SIZE"]-1))] = 0
         # print("inflated map:\n",occ_map)
-        Config.occ_map = occ_map
+        Config.occ_map = np.float32(np.array(occ_map))
         # show value distribution in occ_map.
         freqs = [0, 0]
         for i in range(len(occ_map)):
@@ -115,21 +112,12 @@ class Config:
                     freqs[1] += 1
         print("Occ map value frequencies: "+str(freqs[1])+" free, "+str(freqs[0])+" occluded.")
 
+        # return the maps.
+        return Config.occ_map, Config.color_map
 
 
 # automatically read in the params as soon as this is loaded.
 Config.read_params()
-# then load the map we've chosen.
-Config.read_map()
 
-# # only run once, since it's all static.
-# if __name__ == '__main__':
-#     try:
-#         rospy.logwarn("defining params")
-#         # automatically read in the params as soon as this is loaded.
-#         Config.read_params()
-#         # then load the map we've chosen.
-#         Config.read_map()
-#     except rospy.ROSInterruptException:
-#         pass
-
+# require explicit call to get map to avoid unnecessary repeated calculations. e.g.,
+# occ_map, color_map = Config.read_map()

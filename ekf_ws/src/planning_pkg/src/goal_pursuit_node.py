@@ -5,6 +5,7 @@ Command vehicle to pursue path to goal point chosen by clicking the plot.
 Generate the next odom command based on current state estimate.
 """
 import rospy
+import numpy as np
 from data_pkg.msg import Command
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float32MultiArray
@@ -14,6 +15,7 @@ from pf_pkg.msg import PFState
 from cv_bridge import CvBridge
 from pure_pursuit import PurePursuit
 from astar import Astar
+import cv2
 
 # import params script.
 import rospkg
@@ -26,9 +28,8 @@ spec.loader.exec_module(module)
 params = module.Config.params
 PurePursuit.params = params
 Astar.params = params
-# set map where needed.
-occ_map = module.Config.occ_map
-Astar.occ_map = occ_map
+# set rel neighbors list for A* search.
+Astar.nbrs = [(0, -1), (0, 1), (-1, 0), (1, 0)] + [(-1, -1), (-1, 1), (1, -1), (1, 1)] if params["ASTAR_INCL_DIAGONALS"] else []
 
 ############ GLOBAL VARIABLES ###################
 cmd_pub = None; path_pub = None
@@ -100,45 +101,16 @@ def get_goal_pt(msg):
     path_pub.publish(Float32MultiArray(data=sum(PurePursuit.goal_queue, [])))
 
 
-# def get_occ_grid_map(msg):
-#     global occ_map
-#     # get the true occupancy grid map image.
-#     bridge = CvBridge()
-#     occ_map_img = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-#     # create matrix from map, converting cells to int 0 or 1.
-#     occ_map = []
-#     for i in range(len(occ_map_img)):
-#         row = []
-#         for j in range(len(occ_map_img[0])):
-#             row.append(int(occ_map_img[i][j]))
-#         occ_map.append(row)
-#     # print("raw map:\n",occ_map)
-#     # determine index pairs to select all neighbors when ballooning obstacles.
-#     nbrs = []
-#     for i in range(-params["OCC_MAP_BALLOON_AMT"], params["OCC_MAP_BALLOON_AMT"]+1):
-#         for j in range(-params["OCC_MAP_BALLOON_AMT"], params["OCC_MAP_BALLOON_AMT"]+1):
-#             nbrs.append((i, j))
-#     # remove 0,0 which is just the parent cell.
-#     nbrs.remove((0,0))
-#     # expand all occluded cells outwards.
-#     for i in range(len(occ_map)):
-#         for j in range(len(occ_map[0])):
-#             if occ_map_img[i][j] < 0.5: # occluded.
-#                 # mark all neighbors as occluded.
-#                 for chg in nbrs:
-#                     occ_map[max(0, min(i+chg[0], params["OCC_MAP_SIZE"]-1))][max(0, min(j+chg[1], params["OCC_MAP_SIZE"]-1))] = 0
-#     # print("inflated map:\n",occ_map)
-#     # show value distribution in occ_map.
-#     freqs = [0, 0]
-#     for i in range(len(occ_map)):
-#         for j in range(len(occ_map[0])):
-#             if occ_map[i][j] == 0:
-#                 freqs[0] += 1
-#             else:
-#                 freqs[1] += 1
-#     print(ANSI_CYAN+"Occ map value frequencies: "+str(freqs[1])+" free, "+str(freqs[0])+" occluded."+ANSI_RESET)
-#     # set map for A* to use.
-#     Astar.occ_map = occ_map
+def get_occ_map(msg):
+    global occ_map
+    # get the true occupancy grid map image.
+    bridge = CvBridge()
+    occ_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+    cv2.imshow("Map", occ_map); cv2.waitKey(0); cv2.destroyAllWindows()
+    # convert to int (0 or 1).
+    # occ_map = np.int0(occ_map)
+    # set map for A* to use.
+    Astar.occ_map = occ_map
 
 
 def main():
@@ -149,7 +121,7 @@ def main():
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)
     # rospy.Subscriber("/state/pf", PFState, get_pf_state, queue_size=1)
     # subscribe to the true occupancy grid.
-    # rospy.Subscriber("/truth/occ_grid", Image, get_occ_grid_map, queue_size=1)
+    rospy.Subscriber("/truth/occ_grid", Image, get_occ_map, queue_size=1)
 
     # publish odom commands for the vehicle.
     cmd_pub = rospy.Publisher("/command", Command, queue_size=1)
