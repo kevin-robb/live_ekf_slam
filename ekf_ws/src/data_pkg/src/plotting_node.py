@@ -76,18 +76,19 @@ def update_plot(filter:str, msg):
             plots["veh_pos_est"].remove()
             del plots["veh_pos_est"]
         # draw a single pt with arrow to represent current veh pose.
-        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, Config.params["ARROW_LEN"]*cos(msg.yaw_v), Config.params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1, zorder=2)
+        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, Config.params["ARROW_LEN"]*cos(msg.yaw_v), Config.params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1, zorder=2, edgecolor="black")
 
         ################ VEH COV ##################
-        n = int(len(msg.P)**(1/2)) # length of state n = 3+2M
-        # compute parametric ellipse for veh covariance.
-        veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
-        # remove old ellipses.
-        if not Config.params["SHOW_ENTIRE_TRAJ"] and "veh_cov_est" in plots.keys():
-            plots["veh_cov_est"].remove()
-            del plots["veh_cov_est"]
-        # plot the ellipse.
-        plots["veh_cov_est"], = plt.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
+        if Config.params["SHOW_VEH_ELLIPSE"]:
+            n = int(len(msg.P)**(1/2)) # length of state n = 3+2M
+            # compute parametric ellipse for veh covariance.
+            veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
+            # remove old ellipses.
+            if not Config.params["SHOW_ENTIRE_TRAJ"] and "veh_cov_est" in plots.keys():
+                plots["veh_cov_est"].remove()
+                del plots["veh_cov_est"]
+            # plot the ellipse.
+            plots["veh_cov_est"], = plt.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
 
         ############## LANDMARK EST ##################
         lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]

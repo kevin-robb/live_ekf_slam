@@ -52,7 +52,7 @@ class PurePursuit:
         D = 0 #.01 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
 
         # set forward and turning commands.
-        cmd_msg.fwd = 0.1 * (1 - abs(beta / pi))**5 + 0.05
+        cmd_msg.fwd = 0.02 * (1 - abs(beta / pi))**12 + 0.01
         cmd_msg.ang = P + I + D
 
         PurePursuit.err_prev = beta

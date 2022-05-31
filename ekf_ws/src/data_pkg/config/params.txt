@@ -54,6 +54,7 @@ SHOW_OCC_MAP = True
 SHOW_ENTIRE_TRAJ = False
 SHOW_TRUE_TRAJ = True
 SHOW_LM_ELLIPSES = False
+SHOW_VEH_ELLIPSE = False
 # length of pose arrow.
 ARROW_LEN = 0.1
 # number of std dev to include in cov ellipse.
@@ -78,7 +79,7 @@ OCC_MAP_BALLOON_AMT = 1
 # choose goal pts autonomously or let the user click to choose?
 USE_LOCAL_PLANNER = True
 # distance ahead the local planner will path to.
-LOCAL_PLANNER_DIST = 2.0
+LOCAL_PLANNER_DIST = 1.8
 # nav function to use ("pp", "direct", or "simple")
 NAV_METHOD = pp
 # pure pursuit params.
