@@ -77,6 +77,8 @@ OCC_MAP_BALLOON_AMT = 1
 # ----- Path Planner / Nav -----
 # choose goal pts autonomously or let the user click to choose?
 USE_LOCAL_PLANNER = True
+# distance ahead the local planner will path to.
+LOCAL_PLANNER_DIST = 2.0
 # nav function to use ("pp", "direct", or "simple")
 NAV_METHOD = pp
 # pure pursuit params.
@@ -84,5 +86,3 @@ LOOKAHEAD_DIST_INITIAL = 0.2
 LOOKAHEAD_DIST_MAX = 2
 # A* search diagonals or only adjacent?
 ASTAR_INCL_DIAGONALS = True
-# max search distance for local planner?
-LOCAL_PLANNER_SEARCH_RADIUS = 10

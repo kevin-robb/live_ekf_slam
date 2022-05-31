@@ -54,7 +54,6 @@ def get_ekf_state(msg):
         # generate path to get to new goal.
         find_path_to_goal(goal)
 
-    # else: # follow path to point clicked on map.
     # check size of path.
     path_len = len(PurePursuit.goal_queue)
     # call the desired navigation function.
@@ -139,8 +138,6 @@ def main():
 
     # subscribe to current goal point.
     rospy.Subscriber("/plan/goal", Vector3, get_goal_pt, queue_size=1)
-    # publish current goal point when using local planner.
-    # goal_pub = rospy.Publisher("/plan/goal", Vector3, queue_size=1)
     # publish planned path to the goal.
     path_pub = rospy.Publisher("/plan/path", Float32MultiArray, queue_size=1)
 

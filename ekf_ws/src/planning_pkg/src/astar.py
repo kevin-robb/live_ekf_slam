@@ -16,7 +16,7 @@ class Astar:
         Simulates the veh only having access to a small local map.
         """
         # choose ideal point at the desired distance ahead of the vehicle.
-        pt = (cur[0]+Astar.params["RANGE_MAX"]*cos(cur[2]), cur[1]+Astar.params["RANGE_MAX"]*sin(cur[2]))
+        pt = (cur[0]+Astar.params["LOCAL_PLANNER_DIST"]*cos(cur[2]), cur[1]+Astar.params["LOCAL_PLANNER_DIST"]*sin(cur[2]))
         goal = Astar.tf_ekf_to_map(pt)
         # cap this point to make sure it's on the map.
         goal = [max(0, min(goal[0], Astar.params["OCC_MAP_SIZE"]-1)), max(0, min(goal[1], Astar.params["OCC_MAP_SIZE"]-1))]
@@ -30,7 +30,6 @@ class Astar:
         # iterate until finding a free cell or exhausting all cells within region.
         while len(open_list) > 0:
             # move first element of open list to closed list.
-            # open_list.sort(key=lambda cell: cell.g)
             cur_cell = open_list.pop(0)
 
             # add this node to the closed list.
@@ -47,8 +46,6 @@ class Astar:
                     # return this pt to be used for A* path planning.
                     return Astar.tf_map_to_ekf((nbr.i, nbr.j))
                     
-                # skip if this is too far from our ideal goal cell.
-                # if nbr.g > Astar.params["LOCAL_PLANNER_SEARCH_RADIUS"]: continue
                 # skip if already in closed list.
                 if any([nbr == c for c in closed_list]): continue
                 # skip if already in open list.
@@ -68,8 +65,12 @@ class Astar:
         """
         # define goal node.
         goal_cell = Cell(Astar.tf_ekf_to_map(goal))
+        # define start node.
+        start_cell = Cell(Astar.tf_ekf_to_map(start))
+        # check if starting node (veh pose) is in collision.
+        start_cell.in_collision = Astar.occ_map[start_cell.i][start_cell.j] == 0
         # add starting node to open list.
-        open_list = [Cell(Astar.tf_ekf_to_map(start))]
+        open_list = [start_cell]
         closed_list = []
         # iterate until reaching the goal or exhausting all cells.
         while len(open_list) > 0:
@@ -88,14 +89,13 @@ class Astar:
             closed_list.append(cur_cell)
             # add its unoccupied neighbors to the open list.
             for chg in Astar.nbrs:
-                # check each cell for occlusion and if we've already checked it.
                 nbr = Cell([cur_cell.i+chg[0], cur_cell.j+chg[1]], parent=cur_cell)
                 # skip if out of bounds.
                 if nbr.i < 0 or nbr.j < 0 or nbr.i >= Astar.params["OCC_MAP_SIZE"] or nbr.j >= Astar.params["OCC_MAP_SIZE"]: continue
-                # if using local planner, skip if path distance here is too big.
-                # if Astar.params["USE_LOCAL_PLANNER"] and nbr.g > Astar.params["LOCAL_PLANNER_SEARCH_RADIUS"]: continue
-                # skip if occluded.
-                if Astar.occ_map[nbr.i][nbr.j] == 0: continue
+                # skip if occluded, unless parent is occluded.
+                nbr.in_collision = Astar.occ_map[nbr.i][nbr.j] == 0
+                if nbr.in_collision and not nbr.parent.in_collision: continue
+                # if Astar.occ_map[nbr.i][nbr.j] == 0: continue
                 # skip if already in closed list.
                 if any([nbr == c for c in closed_list]): continue
                 # skip if already in open list, unless the cost is lower.
@@ -159,6 +159,7 @@ class Cell:
         self.parent = parent
         self.g = 0 if parent is None else parent.g + 1
         self.f = 0
+        self.in_collision = False
     
     def set_cost(self, h=None, g=None):
         # set/update either g or h and recompute the cost, f.
@@ -168,6 +169,8 @@ class Cell:
             self.g = g
         # update the cost.
         self.f = self.g + self.h
+        # give huge penalty if in collision to encourage leaving occluded cells ASAP.
+        if self.in_collision: self.f += 1000
 
     def __eq__(self, other):
         return self.i == other.i and self.j == other.j

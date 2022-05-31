@@ -193,20 +193,8 @@ def on_click(event):
         rospy.loginfo("Killing plotting_node on right click.")
         exit()
     elif event.button is MouseButton.LEFT:
-        # update the plot to show the current goal.
-        # if "goal_pt" in plots.keys():
-        #     plots["goal_pt"].remove()
-        #     del plots["goal_pt"]
-        # plots["goal_pt"] = plt.scatter(event.xdata, event.ydata, color="yellow", edgecolors="black", s=40, zorder=2)
         # publish new goal pt for the planner.
         goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
-
-# def get_goal_pt(msg):
-#     # update the plot to show the current goal.
-#     if "goal_pt" in plots.keys():
-#         plots["goal_pt"].remove()
-#         del plots["goal_pt"]
-#     plots["goal_pt"] = plt.scatter(msg.x, msg.y, color="yellow", edgecolors="black", s=40, zorder=2)
 
 def get_color_map(msg):
     if not Config.params["SHOW_OCC_MAP"]: return
@@ -260,8 +248,6 @@ def main():
 
     # publish the chosen goal point for the planner.
     goal_pub = rospy.Publisher("/plan/goal", Vector3, queue_size=1)
-    # subscribe to current goal point if using local planner.
-    # rospy.Subscriber("/plan/goal", Vector3, get_goal_pt, queue_size=1)
     # subscribe to planned path to the goal.
     rospy.Subscriber("/plan/path", Float32MultiArray, get_planned_path, queue_size=1)
 
