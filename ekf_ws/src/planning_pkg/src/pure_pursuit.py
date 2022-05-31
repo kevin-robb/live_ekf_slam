@@ -35,24 +35,28 @@ class PurePursuit:
             lookahead_pt = PurePursuit.choose_lookahead_pt(cur, lookahead_dist)
             lookahead_dist *= 1.25
         # make sure we actually found the path.
-        if lookahead_pt is not None:
-            # compute global heading to lookahead_pt
-            gb = atan2(lookahead_pt[1] - cur[1], lookahead_pt[0] - cur[0])
-            # compute hdg relative to veh pose.
-            beta = remainder(gb - cur[2], tau)
+        if lookahead_pt is None:
+            # we can't see the path, so just try to go to the first pt.
+            lookahead_pt = PurePursuit.goal_queue[0]
+        
+        # compute global heading to lookahead_pt
+        gb = atan2(lookahead_pt[1] - cur[1], lookahead_pt[0] - cur[0])
+        # compute hdg relative to veh pose.
+        beta = remainder(gb - cur[2], tau)
 
-            # update global integral term.
-            PurePursuit.integ += beta * PurePursuit.params["DT"]
+        # update global integral term.
+        PurePursuit.integ += beta * PurePursuit.params["DT"]
 
-            P = 0.15 * beta # proportional to hdg error.
-            I = 0.009 * PurePursuit.integ # integral to correct systematic error.
-            D = 0.012 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
+        P = 0.5 * beta # proportional to hdg error.
+        I = 0 #.01 * PurePursuit.integ # integral to correct systematic error.
+        D = 0 #.01 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
 
-            # set forward and turning commands.
-            cmd_msg.fwd = (1 - abs(beta / pi))**5 + 0.05
-            cmd_msg.ang = P + I + D
+        # set forward and turning commands.
+        cmd_msg.fwd = 0.1 * (1 - abs(beta / pi))**5 + 0.05
+        cmd_msg.ang = P + I + D
 
-            PurePursuit.err_prev = beta
+        PurePursuit.err_prev = beta
+        
 
         # ensure commands are capped within constraints.
         cmd_msg.fwd= max(0, min(cmd_msg.fwd, PurePursuit.params["ODOM_D_MAX"]))

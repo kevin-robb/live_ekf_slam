@@ -1,7 +1,7 @@
 # iteration period.
 DT = 0.05
 
-# starting veh pose.
+# starting veh pose. (pi/2 = 1.5707963267948966)
 x_0 = 0.0
 y_0 = -8.5
 yaw_0 = 0.0
@@ -26,7 +26,7 @@ ukf_mode = loc
 # ----- Landmark Map Gen -----
 # all lm will be w/in +- params["MAP_BOUND"] in both x/y.
 MAP_BOUND = 10.0
-NUM_LANDMARKS = 50
+NUM_LANDMARKS = 20
 # min dist between landmarks.
 MIN_SEP = 0.05
 # size of grid to place landmarks.
@@ -79,6 +79,6 @@ OCC_MAP_BALLOON_AMT = 1
 NAV_METHOD = pp
 # pure pursuit params.
 LOOKAHEAD_DIST_INITIAL = 0.2
-LOOKAHEAD_DIST_MAX = 3
+LOOKAHEAD_DIST_MAX = 2
 # A* search diagonals or only adjacent?
 ASTAR_INCL_DIAGONALS = True

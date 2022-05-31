@@ -27,7 +27,7 @@ params = module.Config.params
 PurePursuit.params = params
 Astar.params = params
 # set rel neighbors list for A* search.
-Astar.nbrs = [(0, -1), (0, 1), (-1, 0), (1, 0)] + [(-1, -1), (-1, 1), (1, -1), (1, 1)] if params["ASTAR_INCL_DIAGONALS"] else []
+Astar.nbrs = [(0, -1), (0, 1), (-1, 0), (1, 0)] + ([(-1, -1), (-1, 1), (1, -1), (1, 1)] if params["ASTAR_INCL_DIAGONALS"] else [])
 
 ############ GLOBAL VARIABLES ###################
 cmd_pub = None; path_pub = None

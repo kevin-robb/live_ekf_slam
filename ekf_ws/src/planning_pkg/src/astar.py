@@ -59,8 +59,13 @@ class Astar:
                 except:
                     # there's no match, so proceed.
                     pass
-                # compute heuristic "cost-to-go". keep squared to save unnecessary computation.
-                nbr.set_cost(h=(goal_cell.i - nbr.i)**2 + (goal_cell.j - nbr.j)**2)
+                # compute heuristic "cost-to-go"
+                if Astar.params["ASTAR_INCL_DIAGONALS"]:
+                    # chebyshev heuristic
+                    nbr.set_cost(h=max(abs(goal_cell.i - nbr.i), abs(goal_cell.j - nbr.j)))
+                else:
+                    # euclidean heuristic. (keep squared to save unnecessary computation.)
+                    nbr.set_cost(h=(goal_cell.i - nbr.i)**2 + (goal_cell.j - nbr.j)**2)
                 # add cell to open list.
                 open_list.append(nbr)
 
