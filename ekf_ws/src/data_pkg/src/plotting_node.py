@@ -194,13 +194,19 @@ def on_click(event):
         exit()
     elif event.button is MouseButton.LEFT:
         # update the plot to show the current goal.
-        if "goal_pt" in plots.keys():
-            plots["goal_pt"].remove()
-            del plots["goal_pt"]
-        plots["goal_pt"] = plt.scatter(event.xdata, event.ydata, color="yellow", edgecolors="black", s=40, zorder=2)
+        # if "goal_pt" in plots.keys():
+        #     plots["goal_pt"].remove()
+        #     del plots["goal_pt"]
+        # plots["goal_pt"] = plt.scatter(event.xdata, event.ydata, color="yellow", edgecolors="black", s=40, zorder=2)
         # publish new goal pt for the planner.
         goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
 
+# def get_goal_pt(msg):
+#     # update the plot to show the current goal.
+#     if "goal_pt" in plots.keys():
+#         plots["goal_pt"].remove()
+#         del plots["goal_pt"]
+#     plots["goal_pt"] = plt.scatter(msg.x, msg.y, color="yellow", edgecolors="black", s=40, zorder=2)
 
 def get_color_map(msg):
     if not Config.params["SHOW_OCC_MAP"]: return
@@ -219,9 +225,14 @@ def get_planned_path(msg):
     if "planned_path" in plots.keys():
         plots["planned_path"].remove()
         del plots["planned_path"]
+    if "goal_pt" in plots.keys():
+            plots["goal_pt"].remove()
+            del plots["goal_pt"]
     # only draw if the path is non-empty.
     if len(msg.data) > 1:
         plots["planned_path"] = plt.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
+        # show the goal point (end of path).
+        plots["goal_pt"] = plt.scatter(msg.data[-2], msg.data[-1], color="yellow", edgecolors="black", s=40, zorder=2)
 
 def main():
     global goal_pub
@@ -249,6 +260,8 @@ def main():
 
     # publish the chosen goal point for the planner.
     goal_pub = rospy.Publisher("/plan/goal", Vector3, queue_size=1)
+    # subscribe to current goal point if using local planner.
+    # rospy.Subscriber("/plan/goal", Vector3, get_goal_pt, queue_size=1)
     # subscribe to planned path to the goal.
     rospy.Subscriber("/plan/path", Float32MultiArray, get_planned_path, queue_size=1)
 

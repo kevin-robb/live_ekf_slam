@@ -42,6 +42,19 @@ def get_ekf_state(msg):
     # update current position.
     global cur
     cur = [msg.x_v, msg.y_v, msg.yaw_v]
+    if params["USE_LOCAL_PLANNER"] and msg.timestep % 5 == 0:
+        # choose arbitrary free point ahead to use as goal.
+        goal = Astar.local_planner(cur)
+        if goal is None:
+            rospy.logwarn("Could not find a free point to plan towards.")
+            cmd_pub.publish(Command(fwd=0,ang=0))
+            return
+        # clear the current path.
+        PurePursuit.goal_queue = []
+        # generate path to get to new goal.
+        find_path_to_goal(goal)
+
+    # else: # follow path to point clicked on map.
     # check size of path.
     path_len = len(PurePursuit.goal_queue)
     # call the desired navigation function.
@@ -60,6 +73,10 @@ def get_ekf_state(msg):
 
 
 def get_goal_pt(msg):
+    # check operating mode.
+    if params["USE_LOCAL_PLANNER"]:
+        rospy.logerr("Cannot select a goal point while running in local planner mode.")
+        return
     # verify chosen pt is on the map and not in collision.
     try:
         if occ_map[Astar.tf_ekf_to_map((msg.x,msg.y))[0]][Astar.tf_ekf_to_map((msg.x,msg.y))[1]] == 0:
@@ -68,11 +85,17 @@ def get_goal_pt(msg):
     except:
         rospy.logerr("Selected point is outside map bounds.")
         return
-
     rospy.loginfo("Setting goal pt to ("+"{0:.4f}".format(msg.x)+", "+"{0:.4f}".format(msg.y)+")")
+    find_path_to_goal((msg.x, msg.y))
+
+
+def find_path_to_goal(goal):
+    """
+    Given a desired goal point, use A* to generate a path there.
+    """
     # if running in "simple" mode, only add goal point rather than path planning.
     if params["NAV_METHOD"] == "simple":
-        PurePursuit.goal_queue.append([msg.x, msg.y])
+        PurePursuit.goal_queue.append(goal)
         return
     # determine starting pos for path.
     if len(PurePursuit.goal_queue) > 0: # use end of prev segment as start if there is one.
@@ -80,7 +103,7 @@ def get_goal_pt(msg):
     else: # otherwise use the current position estimate.
         start = cur
     # generate path with A*.
-    path = Astar.astar(start, [msg.x, msg.y])
+    path = Astar.astar(start, goal)
     if path is None:
         rospy.logerr("No path found by A*.")
         return
@@ -116,6 +139,8 @@ def main():
 
     # subscribe to current goal point.
     rospy.Subscriber("/plan/goal", Vector3, get_goal_pt, queue_size=1)
+    # publish current goal point when using local planner.
+    # goal_pub = rospy.Publisher("/plan/goal", Vector3, queue_size=1)
     # publish planned path to the goal.
     path_pub = rospy.Publisher("/plan/path", Float32MultiArray, queue_size=1)
 

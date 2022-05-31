@@ -3,10 +3,61 @@
 """
 Set of static functions to perform A* path planning.
 """
+from math import cos, sin
 
 class Astar:
     # Always use the same map.
     occ_map = None
+
+    @staticmethod
+    def local_planner(cur):
+        """
+        Choose a free point a small distance ahead to plan to.
+        Simulates the veh only having access to a small local map.
+        """
+        # choose ideal point at the desired distance ahead of the vehicle.
+        pt = (cur[0]+Astar.params["RANGE_MAX"]*cos(cur[2]), cur[1]+Astar.params["RANGE_MAX"]*sin(cur[2]))
+        goal = Astar.tf_ekf_to_map(pt)
+        # cap this point to make sure it's on the map.
+        goal = [max(0, min(goal[0], Astar.params["OCC_MAP_SIZE"]-1)), max(0, min(goal[1], Astar.params["OCC_MAP_SIZE"]-1))]
+        # if this point is free, use it.
+        if Astar.occ_map[goal[0]][goal[1]] == 1:
+            return Astar.tf_map_to_ekf(goal)
+
+        # find the nearest free cell to this one to use as our goal.
+        open_list = [Cell(goal)]
+        closed_list = []
+        # iterate until finding a free cell or exhausting all cells within region.
+        while len(open_list) > 0:
+            # move first element of open list to closed list.
+            # open_list.sort(key=lambda cell: cell.g)
+            cur_cell = open_list.pop(0)
+
+            # add this node to the closed list.
+            closed_list.append(cur_cell)
+            # add its neighbors to the open list.
+            for chg in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                # check each cell for occlusion and if we've already checked it.
+                nbr = Cell([cur_cell.i+chg[0], cur_cell.j+chg[1]], parent=cur_cell)
+                # skip if out of bounds.
+                if nbr.i < 0 or nbr.j < 0 or nbr.i >= Astar.params["OCC_MAP_SIZE"] or nbr.j >= Astar.params["OCC_MAP_SIZE"]: continue
+                
+                # stop if we've found a free cell to use as the goal.
+                if Astar.occ_map[nbr.i][nbr.j] == 1:
+                    # return this pt to be used for A* path planning.
+                    return Astar.tf_map_to_ekf((nbr.i, nbr.j))
+                    
+                # skip if this is too far from our ideal goal cell.
+                # if nbr.g > Astar.params["LOCAL_PLANNER_SEARCH_RADIUS"]: continue
+                # skip if already in closed list.
+                if any([nbr == c for c in closed_list]): continue
+                # skip if already in open list.
+                if any([nbr == c for c in open_list]): continue
+                # add cell to open list.
+                open_list.append(nbr)
+        # no free cell was found.
+        return None
+
 
     @staticmethod
     def astar(start, goal):
@@ -41,6 +92,8 @@ class Astar:
                 nbr = Cell([cur_cell.i+chg[0], cur_cell.j+chg[1]], parent=cur_cell)
                 # skip if out of bounds.
                 if nbr.i < 0 or nbr.j < 0 or nbr.i >= Astar.params["OCC_MAP_SIZE"] or nbr.j >= Astar.params["OCC_MAP_SIZE"]: continue
+                # if using local planner, skip if path distance here is too big.
+                # if Astar.params["USE_LOCAL_PLANNER"] and nbr.g > Astar.params["LOCAL_PLANNER_SEARCH_RADIUS"]: continue
                 # skip if occluded.
                 if Astar.occ_map[nbr.i][nbr.j] == 0: continue
                 # skip if already in closed list.
