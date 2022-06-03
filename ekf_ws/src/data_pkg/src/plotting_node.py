@@ -181,19 +181,23 @@ def get_true_pose(msg):
     plots["veh_pos_true"] = plt.arrow(msg.x, msg.y, Config.params["ARROW_LEN"]*cos(msg.z), Config.params["ARROW_LEN"]*sin(msg.z), color="blue", width=0.1, zorder=1)
 
 def get_true_landmark_map(msg):
+    if not Config.params["SHOW_TRUE_LM_MAP"]: return
     # rospy.loginfo("Ground truth map received by plotting node.")
     lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
     lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
     # plot the true landmark positions to compare to estimates.
     plt.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=1)
 
+# clicked_points = []
 def on_click(event):
-    global plots
+    # global clicked_points
     if event.button is MouseButton.RIGHT:
         # kill the node.
         rospy.loginfo("Killing plotting_node on right click.")
         exit()
     elif event.button is MouseButton.LEFT:
+        # clicked_points.append((event.xdata, event.ydata))
+        # print(clicked_points)
         # publish new goal pt for the planner.
         goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
 

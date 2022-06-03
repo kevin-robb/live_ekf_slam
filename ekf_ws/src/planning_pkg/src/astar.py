@@ -67,6 +67,10 @@ class Astar:
         goal_cell = Cell(Astar.tf_ekf_to_map(goal))
         # define start node.
         start_cell = Cell(Astar.tf_ekf_to_map(start))
+        # make sure starting pose is on the map.
+        if start_cell.i < 0 or start_cell.j < 0 or start_cell.i >= Astar.params["OCC_MAP_SIZE"] or start_cell.j >= Astar.params["OCC_MAP_SIZE"]:
+            print("Starting position for A* not within map bounds.")
+            return
         # check if starting node (veh pose) is in collision.
         start_cell.in_collision = Astar.occ_map[start_cell.i][start_cell.j] == 0
         # add starting node to open list.

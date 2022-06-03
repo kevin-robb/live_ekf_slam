@@ -1,9 +1,10 @@
 # iteration period.
 DT = 0.05
 
-# starting veh pose. (pi/2 = 1.5707963267948966)
-x_0 = 0.0
-y_0 = -8.5
+# ----- default init veh pose -----
+# (overridden for some maps)
+x_0 = -10.0
+y_0 = -10.0
 yaw_0 = 0.0
 
 # ----- EKF/UKF -----
@@ -13,7 +14,7 @@ v_th = 0.0
 # process noise cov.
 V_00 = 0.0004
 V_11 = 0.00007615435494667714
-# sensign noise mean.
+# sensing noise mean.
 w_r = 0.0
 w_b = 0.0
 # sensing noise cov.
@@ -53,6 +54,7 @@ SAVE_FINAL_MAP = True
 SHOW_OCC_MAP = True
 SHOW_ENTIRE_TRAJ = False
 SHOW_TRUE_TRAJ = True
+SHOW_TRUE_LM_MAP = False
 SHOW_LM_ELLIPSES = False
 SHOW_VEH_ELLIPSE = False
 # length of pose arrow.
@@ -69,11 +71,11 @@ NUM_PARTICLES = 500
 
 # ----- Occupancy Grid -----
 # file in config/maps to use.
-OCC_MAP_IMAGE = map5.png
+OCC_MAP_IMAGE = map6.png
 # number of cells per dim (square image).
 OCC_MAP_SIZE = 150
 # number of cells to balloon each occluded cell by (to reduce collisions).
-OCC_MAP_BALLOON_AMT = 1
+OCC_MAP_BALLOON_AMT = 2
 
 # ----- Path Planner / Nav -----
 # choose goal pts autonomously or let the user click to choose?

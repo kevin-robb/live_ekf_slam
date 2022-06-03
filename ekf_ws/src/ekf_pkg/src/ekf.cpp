@@ -29,6 +29,8 @@ EKF::EKF() {
 void EKF::init(float x_0, float y_0, float yaw_0) {
     // set starting vehicle pose.
     this->x_t << x_0, y_0, yaw_0;
+    // set initialized flag.
+    this->isInit = true;
 }
 
 // perform a full iteration of the EKF for this timestep.

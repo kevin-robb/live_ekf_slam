@@ -14,6 +14,7 @@
 
 class EKF {
     public:
+    bool isInit = false;
     // current timestep.
     int timestep = 0;
     // state distribution.

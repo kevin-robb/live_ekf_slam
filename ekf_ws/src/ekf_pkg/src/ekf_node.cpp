@@ -16,8 +16,6 @@ std::queue<std_msgs::Float32MultiArray::ConstPtr> lmMeasQueue;
 ros::Publisher statePub;
 // define EKF object from ekf.cpp class.
 EKF ekf;
-// config vars for params we need.
-float x_0; float y_0; float yaw_0;
 
 float readParams() {
     // read config parameters from file.
@@ -34,15 +32,6 @@ float readParams() {
         if (token == "DT") {
             line.erase(0, line.find(delimeter)+delimeter.length());
             DT = std::stof(line);
-        } else if (token == "x_0") {
-            line.erase(0, line.find(delimeter)+delimeter.length());
-            x_0 = std::stof(line);
-        } else if (token == "y_0") {
-            line.erase(0, line.find(delimeter)+delimeter.length());
-            y_0 = std::stof(line);
-        } else if (token == "yaw_0") {
-            line.erase(0, line.find(delimeter)+delimeter.length());
-            yaw_0 = std::stof(line);
         }
     }
     // close file.
@@ -50,9 +39,18 @@ float readParams() {
     return DT;
 }
 
+void initCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
+    // receive the vehicle's initial position.
+    float x_0 = msg->x;
+    float y_0 = msg->y;
+    float yaw_0 = msg->z;
+    // init the EKF.
+    ekf.init(x_0, y_0, yaw_0);
+}
+
 void ekfIterate(const ros::TimerEvent& event) {
     // perform an iteration of the EKF for this timestep.
-    if (cmdQueue.empty() || lmMeasQueue.empty()) {
+    if (!ekf.isInit || cmdQueue.empty() || lmMeasQueue.empty()) {
         return;
     }
     // get the next timestep's messages from the queues.
@@ -84,8 +82,8 @@ int main(int argc, char **argv) {
 
     // read config parameters.
     float DT = readParams();
-    // init the EKF.
-    ekf.init(x_0, y_0, yaw_0);
+    // get the initial veh pose and init the ekf.
+    ros::Subscriber initSub = node.subscribe("/truth/init_veh_pose", 1, initCallback);
 
     // subscribe to EKF inputs.
     ros::Subscriber cmdSub = node.subscribe("/command", 100, cmdCallback);

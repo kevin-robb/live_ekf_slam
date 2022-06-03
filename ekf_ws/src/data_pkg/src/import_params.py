@@ -45,7 +45,16 @@ class Config:
         Config.params["SHIFT"] = Config.params["OCC_MAP_SIZE"] / 2
         # size of region plotter will display.
         Config.params["DISPLAY_REGION"] = [Config.params["MAP_BOUND"] * Config.params["DISPLAY_REGION_MULT"] * sign for sign in (-1, 1)]
-
+        # Map-specific params:
+        if Config.params["OCC_MAP_IMAGE"] == "map6.png":
+            Config.params["x_0"] = 0.0
+            Config.params["y_0"] = -8.5
+            Config.params["yaw_0"] = 0.0
+        elif Config.params["OCC_MAP_IMAGE"] == "map7.png":
+            Config.params["x_0"] = 8.0
+            Config.params["y_0"] = 0.0
+            Config.params["yaw_0"] = 1.5707963267948966
+        
 
     @staticmethod
     def read_map():
