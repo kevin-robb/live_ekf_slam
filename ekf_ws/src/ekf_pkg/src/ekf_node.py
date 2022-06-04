@@ -10,9 +10,8 @@ and the rest are the positions of M landmarks.
 import rospy
 import numpy as np
 from math import sin, cos, remainder, tau, atan2
-from data_pkg.msg import Command
+from data_pkg.msg import Command, EKFState
 from std_msgs.msg import Float32MultiArray
-from ekf_pkg.msg import EKFState
 
 # import params script.
 import rospkg

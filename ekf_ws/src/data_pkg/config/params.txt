@@ -85,9 +85,12 @@ ARROW_LEN = 0.1
 # number of std dev to include in cov ellipses.
 COV_STD_DEV = 1
 # show individual heading for all PF particles / UKF sigma pts.
-PLOT_ARROWS = False
+PLOT_PF_ARROWS = False
+PLOT_UKF_ARROWS = True
 # amount to multiply MAP_BOUND by to get the display region.
 DISPLAY_REGION_MULT = 1.0
+# utility to display coords of all clicked points, for manually creating landmark maps.
+LIST_CLICKED_POINTS = False
 
 # ----- UKF -----
 # weight on mean sigma pt.

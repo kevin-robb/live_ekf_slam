@@ -25,6 +25,8 @@ plots = {"lm_cov_est" : {}}
 fname = ""
 # publish clicked point on map for planner.
 goal_pub = None
+# points clicked on the map, if using LIST_CLICKED_POINTS mode.
+clicked_points = []
 #################################################
 
 
@@ -114,7 +116,7 @@ def update_plot(filter:str, msg):
         
         ############## UKF SIGMA POINTS ##################
         if filter == "ukf":
-            if Config.params["PLOT_ARROWS"]:
+            if Config.params["PLOT_UKF_ARROWS"]:
                 # plot as arrows (slow).
                 if "sigma_pts" in plots.keys() and len(plots["sigma_pts"].keys()) > 0:
                     for i in plots["sigma_pts"].keys():
@@ -137,7 +139,7 @@ def update_plot(filter:str, msg):
     elif filter == "pf":
         plt.title("PF-Estimated Vehicle Pose")
         ########## PARTICLE SET ###############
-        if Config.params["PLOT_ARROWS"]:
+        if Config.params["PLOT_PF_ARROWS"]:
             # plot as arrows (slow).
             if "particle_set" in plots.keys() and len(plots["particle_set"].keys()) > 0:
                 for i in plots["particle_set"].keys():
@@ -207,7 +209,6 @@ def get_true_landmark_map(msg):
     # plot the true landmark positions to compare to estimates.
     plt.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=1)
 
-# clicked_points = []
 def on_click(event):
     # global clicked_points
     if event.button is MouseButton.RIGHT:
@@ -215,10 +216,13 @@ def on_click(event):
         rospy.loginfo("Killing plotting_node on right click.")
         exit()
     elif event.button is MouseButton.LEFT:
-        # clicked_points.append((event.xdata, event.ydata))
-        # print(clicked_points)
+        if Config.params["LIST_CLICKED_POINTS"]:
+            clicked_points.append((event.xdata, event.ydata))
+            print(clicked_points)
         # publish new goal pt for the planner.
         goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
+        # show this point so it appears even when not using A* planning.
+        get_planned_path(Float32MultiArray(data=[event.xdata, event.ydata]))
 
 def get_color_map(msg):
     if not Config.params["SHOW_OCC_MAP"]: return
@@ -277,7 +281,6 @@ def main():
 
 
     # startup the plot.
-    # plt.ion()
     plt.figure()
     # set constant plot params.
     plt.axis("equal")
