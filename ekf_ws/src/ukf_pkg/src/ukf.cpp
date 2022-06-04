@@ -89,11 +89,11 @@ data_pkg::UKFState UKF::getState() {
     return stateMsg;
 }
 
-Eigen::MatrixXd UKF::nearestSPD() {
+Eigen::MatrixXd UKF::nearestSPD(Eigen::MatrixXd P_t) {
     // find the nearest symmetric positive semidefinite matrix to P_t using Froebius Norm.
     // https://scicomp.stackexchange.com/questions/30631/how-to-find-the-nearest-a-near-positive-definite-from-a-given-matrix
     // first compute nearest symmetric matrix.
-    this->Y = 0.5 * (this->P_t + this->P_t.transpose());
+    this->Y = 0.5 * (P_t + P_t.transpose());
     // compute eigen decomposition of Y.
     Eigen::EigenSolver<Eigen::MatrixXd> es(this->Y);
     this->D = es.eigenvalues().real().asDiagonal();
@@ -142,8 +142,7 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     int n = 3;
 
     // compute the sqrt cov term.
-    this->P_t *= std::sqrt(n/(1-this->W_0));
-    this->sqtP = nearestSPD().sqrt();
+    this->sqtP = (nearestSPD(this->P_t) * std::sqrt(n/(1-this->W_0))).sqrt();
 
     // compute sigma points.
     this->X.col(0) = this->x_t;
@@ -276,7 +275,7 @@ void UKF::slamUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiA
     }
 
     // compute the sqrt cov term.
-    this->sqtP = nearestSPD().sqrt() * std::sqrt(n/(1-this->W_0));
+    this->sqtP = nearestSPD(this->P_t * std::sqrt(n/(1-this->W_0))).sqrt();
 
     // compute sigma points.
     this->X.col(0) = this->x_t;

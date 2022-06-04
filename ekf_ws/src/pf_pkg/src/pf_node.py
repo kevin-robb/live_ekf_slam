@@ -6,62 +6,44 @@ Localize mobile robot using a known map.
 """
 
 import rospy
-import rospkg
 from pf import PF
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
-from data_pkg.msg import PFState
+from data_pkg.msg import Command, PFState
+
+# import params script.
+import rospkg
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("module.name", rospkg.RosPack().get_path('data_pkg')+"/src/import_params.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules["module.name"] = module
+spec.loader.exec_module(module)
+# set params.
+params = module.Config.params
 
 ############ GLOBAL VARIABLES ###################
-params = {}
-pf = None
+pf = PF(params)
 set_pub = None
-# Most recent odom reading and landmark measurements.
-# odom = [dist, heading], lm_meas = [id, range, bearing, ...]
-odom_queue = []; lm_meas_queue = []
+# Most recent control cmd and landmark measurements.
+# cmd = [fwd dist, heading], lm_meas = [id, range, bearing, ...]
+cmd_queue = []; lm_meas_queue = []
 #################################################
-
-
-def read_params(pkg_path):
-    """
-    Read params from config file.
-    @param path to data_pkg.
-    """
-    global params
-    params_file = open(pkg_path+"/config/params.txt", "r")
-    params = {}
-    lines = params_file.readlines()
-    for line in lines:
-        if len(line) < 3 or line[0] == "#": # skip comments and blank lines.
-            continue
-        p_line = line.split("=")
-        key = p_line[0].strip()
-        arg = p_line[1].strip()
-        try:
-            params[key] = int(arg)
-        except:
-            try:
-                params[key] = float(arg)
-            except:
-                params[key] = (arg == "True")
-
 
 # main PF loop that uses monte carlo localization.
 def mcl_iteration(event):
-    global lm_meas_queue, odom_queue
+    global lm_meas_queue, cmd_queue
     # skip if there's no prediction or measurement yet, or if the pf hasn't been initialized.
-    if pf is None or len(odom_queue) < 1 or len(lm_meas_queue) < 1:
+    if not pf.is_init or len(cmd_queue) < 1 or len(lm_meas_queue) < 1:
         return
     # pop the next data off the queue.
-    odom = odom_queue.pop(0)
+    cmd = cmd_queue.pop(0)
     z = lm_meas_queue.pop(0)
     
     # iterate the filter.
-    pf.iterate(odom, z)
+    pf.iterate(cmd, z)
 
     # publish the particle set for plotting.
     set_pub.publish(pf.get_state())
-
 
 # Getters
 def get_true_map(msg):
@@ -73,13 +55,13 @@ def get_true_map(msg):
     MAP = {}
     for id in range(len(lm_x)):
         MAP[id] = (lm_x[id], lm_y[id])
-    # initialize the particle set.
-    pf = PF(params, MAP)
+    # set the map for the pf.
+    pf.MAP = MAP
 
-def get_odom(msg):
-    # get measurement of odometry info.
-    global odom_queue
-    odom_queue.append([msg.x, msg.y])
+def get_cmd(msg):
+    # get control command.
+    global cmd_queue
+    cmd_queue.append([msg.fwd, msg.ang])
 
 def get_landmarks(msg):
     # get measurement of landmarks.
@@ -87,20 +69,22 @@ def get_landmarks(msg):
     global lm_meas_queue
     lm_meas_queue.append(msg.data)
 
+def get_init_veh_pose(msg):
+    global cur
+    # get the vehicle's starting pose.
+    pf.init_particle_set([msg.x, msg.y, msg.z])
+
 def main():
     global set_pub
     rospy.init_node('pf_node')
 
-    # find the filepath to data package.
-    rospack = rospkg.RosPack()
-    pkg_path = rospack.get_path('data_pkg')
-    # read params.
-    read_params(pkg_path)
+    # subscribe to the initial veh pose.
+    rospy.Subscriber("/truth/init_veh_pose",Vector3, get_init_veh_pose, queue_size=1)
 
     # subscribe to landmark detections: [id1,r1,b1,...idN,rN,bN]
     rospy.Subscriber("/landmark", Float32MultiArray, get_landmarks, queue_size=1)
-    # subscribe to odom commands/measurements.
-    rospy.Subscriber("/odom", Vector3, get_odom, queue_size=1)
+    # subscribe to control commands.
+    rospy.Subscriber("/command", Command, get_cmd, queue_size=1)
 
     # subscribe to true map.
     rospy.Subscriber("/truth/landmarks",Float32MultiArray, get_true_map, queue_size=1)

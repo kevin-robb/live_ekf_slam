@@ -65,7 +65,7 @@ class UKF {
     void setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg);
     void slamUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     void localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
-    Eigen::MatrixXd nearestSPD();
+    Eigen::MatrixXd nearestSPD(Eigen::MatrixXd P_t);
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
     Eigen::VectorXd slamSensingModel(Eigen::VectorXd x, int lm_i);
     Eigen::VectorXd localizationSensingModel(Eigen::VectorXd x, int lm_i);

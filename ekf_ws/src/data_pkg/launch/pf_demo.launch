@@ -1,6 +1,6 @@
 <launch>
-    <arg name="occ_map_img" default="igvc1.png"/>
-    <arg name="landmark_map" default="random"/>
+    <arg name="occ_map_img" default="blank.jpg"/>
+    <arg name="landmark_map" default="grid"/>
     <arg name="precompute_trajectory" default="true"/>
     <arg name="tight_control" default="false"/>
     

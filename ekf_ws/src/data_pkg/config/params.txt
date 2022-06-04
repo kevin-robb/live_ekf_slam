@@ -85,7 +85,7 @@ ARROW_LEN = 0.1
 # number of std dev to include in cov ellipses.
 COV_STD_DEV = 1
 # show individual heading for all PF particles / UKF sigma pts.
-PLOT_ARROWS = True
+PLOT_ARROWS = False
 # amount to multiply MAP_BOUND by to get the display region.
 DISPLAY_REGION_MULT = 1.0
 
@@ -97,3 +97,5 @@ ukf_mode = loc
 
 # ----- Particle Filter -----
 NUM_PARTICLES = 500
+# use knowledge of starting pose, or spawn particles randomly?
+USE_INIT_VEH_POSE = True

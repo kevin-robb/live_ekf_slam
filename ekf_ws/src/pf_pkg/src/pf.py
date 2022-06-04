@@ -12,29 +12,35 @@ from scipy.stats import multivariate_normal, norm, uniform
 from data_pkg.msg import PFState
 
 class PF:
-    def __init__(self, params, map):
-        """
-        Initialize the particles uniformly across the entire map.
-        True map is available
-            -> Randomly select locations in the world.
-            -> Assign particles to those locations along with a random orientation value in (-pi, pi).
-        """
+    is_init = False
+
+    def __init__(self, params):
         self.timestep = 0
         self.params = params
-        # set process and sensing noise.
+        # create process and sensing noise covariance matrices.
         self.V = np.array([[params["V_00"],0.0],[0.0,params["V_11"]]])
         self.W = np.array([[params["W_00"],0.0],[0.0,params["W_11"]]])
-        self.DT = params["DT"]
-        self.MAP = map
-        self.MAP_BOUNDS = (-params["MAP_BOUND"], params["MAP_BOUND"])
-        # create particle set, x_t.
-        self.x_t = np.empty((3,params["NUM_PARTICLES"]))
-        for i in range(params["NUM_PARTICLES"]):
-            self.x_t[0,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
-            self.x_t[1,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
-            self.x_t[2,i] = 2*pi*random() - pi
+
+    def init_particle_set(self, x_init):
+        """
+        Initialize the particles uniformly across the entire map.
+        """
+        self.x_t = np.empty((3,self.params["NUM_PARTICLES"]))
+        if self.params["USE_INIT_VEH_POSE"]:
+            # create all particles clustered around known veh starting pose.
+            for i in range(self.params["NUM_PARTICLES"]):
+                self.x_t[0,i] = x_init[0] + (0.1 * random() - 0.05)
+                self.x_t[1,i] = x_init[1] + (0.1 * random() - 0.05)
+                self.x_t[2,i] = x_init[2] + (0.1 * random() - 0.05)
+        else:
+            # create particles spread randomly across the map.
+            for i in range(self.params["NUM_PARTICLES"]):
+                self.x_t[0,i] = 2*self.params["MAP_BOUND"]*random() - self.params["MAP_BOUND"]
+                self.x_t[1,i] = 2*self.params["MAP_BOUND"]*random() - self.params["MAP_BOUND"]
+                self.x_t[2,i] = 2*pi*random() - pi
         # instantiate predictions set as well.
         self.x_pred = self.x_t
+        self.is_init = True
 
 
     def iterate(self, u, z):
@@ -59,7 +65,7 @@ class PF:
 
         # cull particles that have likely left the map.
         for i in range(self.params["NUM_PARTICLES"]):
-            if (abs(self.x_pred[0,i]) > (1.5 * self.MAP_BOUNDS[1]) or abs(self.x_pred[1,i]) > (1.5 * self.MAP_BOUNDS[1])):
+            if max(abs(self.x_pred[0,i]), abs(self.x_pred[1,i])) > (1.5 * self.params["MAP_BOUND"]):
                 prbs[i] = 0
         # normalize probabilities.
         prb_tot = sum(prbs)
@@ -70,8 +76,8 @@ class PF:
         # randomly replace some particles with new, random ones.
         ind_to_replace = choices(list(range(self.params["NUM_PARTICLES"])), k=self.params["NUM_PARTICLES"]//100)
         for i in ind_to_replace:
-            self.x_t[0,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
-            self.x_t[1,i] = (self.MAP_BOUNDS[1]-self.MAP_BOUNDS[0])*random() + self.MAP_BOUNDS[0]
+            self.x_t[0,i] = 2*self.params["MAP_BOUND"]*random() - self.params["MAP_BOUND"]
+            self.x_t[1,i] = 2*self.params["MAP_BOUND"]*random() - self.params["MAP_BOUND"]
             self.x_t[2,i] = 2*pi*random() - pi
 
 
