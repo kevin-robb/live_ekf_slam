@@ -15,10 +15,14 @@ The trajectory that the vehicle pursues can also be created in a variety of ways
  - Let the user click on the map somewhere, and use A* on the occupancy map to find a path there. If one exists, navigate along its trajectory either directly or using Pure Pursuit. 
  - For the IGVC-like maps, we only allow the planner access to a local area of the map in front of the vehicle, as our IGVC robot would have from its camera. Choose an arbitrary free point ahead on this local map, plan a path to it with A*, and navigate there with Pure Pursuit. This allows the vehicle to autonomously navigate endlessly around these courses as long as it doesn't get itself stuck.
 
-<p>
+Local Planning             |  EKF-SLAM
+:-------------------------:|:-------------------------:
+![IGVC-like map with the vehicle performing EKF-SLAM to localize on a known occupancy grid, and doing local path planning to progress through the course,](images/igvc1_demo.gif)  |  ![Vehicle following a precomputed TSP-trajectory and performing EKF-SLAM on a map with landmarks placed in a grid.](images/ekf_grid_demo.gif)
+
+<!-- <p>
   <img src=images/igvc1_demo.gif height="400" />
   <img src=images/ekf_grid_demo.gif height="400" />
-</p>
+</p> -->
 
 Some key parameters are set using command line arguments, which are set differently in each launch file to ensure the proper setup for the different demos. These can also be changed when running the launch files by appending `arg=choice` (e.g. `landmark_map:=random`). All other parameters can be modified in `data_pkg/config/params.txt`. Additional occupancy maps can be added to `data_pkg/config/maps`. 
 
