@@ -1,0 +1,17 @@
+<launch>
+    <arg name="occ_map_img" default="igvc1.png"/>
+    <arg name="landmark_map" default="igvc1"/>
+    <arg name="use_local_planner" default="true"/>
+    <arg name="tight_control" default="true"/>
+
+    <!-- C++ EKF node -->
+    <node pkg="ekf_pkg" type="ekf_node" name="ekf_node"  output="screen" />
+    
+    <!-- Call main sim driver script. -->
+    <include file="$(find data_pkg)/launch/sim_base.launch" >
+        <arg name="occ_map_img" value="$(arg occ_map_img)"/>
+        <arg name="landmark_map" value="$(arg landmark_map)"/>
+        <arg name="use_local_planner" value="$(arg use_local_planner)"/>
+        <arg name="tight_control" value="$(arg tight_control)"/>
+    </include>
+</launch>

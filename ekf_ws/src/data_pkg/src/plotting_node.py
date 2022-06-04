@@ -76,7 +76,7 @@ def update_plot(filter:str, msg):
             plots["veh_pos_est"].remove()
             del plots["veh_pos_est"]
         # draw a single pt with arrow to represent current veh pose.
-        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, Config.params["ARROW_LEN"]*cos(msg.yaw_v), Config.params["ARROW_LEN"]*sin(msg.yaw_v), color="green", width=0.1, zorder=2, edgecolor="black")
+        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, Config.params["ARROW_LEN"]*cos(msg.yaw_v), Config.params["ARROW_LEN"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=2, edgecolor="black")
 
         ################ VEH COV ##################
         if Config.params["SHOW_VEH_ELLIPSE"]:

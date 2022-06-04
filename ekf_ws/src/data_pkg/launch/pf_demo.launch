@@ -1,0 +1,17 @@
+<launch>
+    <arg name="occ_map_img" default="igvc1.png"/>
+    <arg name="landmark_map" default="random"/>
+    <arg name="precompute_trajectory" default="true"/>
+    <arg name="tight_control" default="false"/>
+    
+    <!-- Particle Filter node -->
+    <node pkg="pf_pkg" type="pf_node.py" name="pf_node" output="screen" />
+    
+    <!-- Call main sim driver script. -->
+    <include file="$(find data_pkg)/launch/sim_base.launch" >
+        <arg name="occ_map_img" value="$(arg occ_map_img)"/>
+        <arg name="landmark_map" value="$(arg landmark_map)"/>
+        <arg name="precompute_trajectory" value="$(arg precompute_trajectory)"/>
+        <arg name="tight_control" value="$(arg tight_control)"/>
+    </include>
+</launch>

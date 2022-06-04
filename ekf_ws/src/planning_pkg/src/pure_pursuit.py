@@ -15,6 +15,29 @@ class PurePursuit:
     # we're synched to the EKF's "clock", so all time increments are the same.
 
     @staticmethod
+    def cmd_loose(beta):
+        # update PID terms.
+        P = 0.9 * beta # proportional to hdg error.
+        I = 0.01 * PurePursuit.integ # integral to correct systematic error.
+        D = 0.4 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
+        ang = P + I + D
+        # compute forward velocity control command using hdg error beta.
+        fwd = (1 - abs(beta / pi))**4 + 0.05
+        return fwd, ang
+
+    @staticmethod
+    def cmd_tight(beta):
+        # update PID terms.
+        P = 0.5 * beta # proportional to hdg error.
+        I = 0.0 * PurePursuit.integ # integral to correct systematic error.
+        D = 0.0 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
+        ang = P + I + D
+        # compute forward velocity control command using hdg error beta.
+        fwd = 0.02 * (1 - abs(beta / pi))**12 + 0.01
+        return fwd, ang
+
+
+    @staticmethod
     def get_next_cmd(cur):
         """
         Determine odom command to stay on the path.
@@ -47,17 +70,11 @@ class PurePursuit:
         # update global integral term.
         PurePursuit.integ += beta * PurePursuit.params["DT"]
 
-        P = 0.5 * beta # proportional to hdg error.
-        I = 0 #.01 * PurePursuit.integ # integral to correct systematic error.
-        D = 0 #.01 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
-
         # set forward and turning commands.
-        cmd_msg.fwd = 0.02 * (1 - abs(beta / pi))**12 + 0.01
-        cmd_msg.ang = P + I + D
+        cmd_msg.fwd, cmd_msg.ang = PurePursuit.get_control(beta)
 
         PurePursuit.err_prev = beta
         
-
         # ensure commands are capped within constraints.
         cmd_msg.fwd= max(0, min(cmd_msg.fwd, PurePursuit.params["ODOM_D_MAX"]))
         cmd_msg.ang = max(-PurePursuit.params["ODOM_TH_MAX"], min(cmd_msg.ang, PurePursuit.params["ODOM_TH_MAX"]))

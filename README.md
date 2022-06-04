@@ -15,13 +15,12 @@ The trajectory that the vehicle pursues can also be created in a variety of ways
  - Let the user click on the map somewhere, and use A* on the occupancy map to find a path there. If one exists, navigate along its trajectory either directly or using Pure Pursuit. 
  - For the IGVC-like maps, we only allow the planner access to a local area of the map in front of the vehicle, as our IGVC robot would have from its camera. Choose an arbitrary free point ahead on this local map, plan a path to it with A*, and navigate there with Pure Pursuit. This allows the vehicle to autonomously navigate endlessly around these courses as long as it doesn't get itself stuck.
 
-All parameters, from noise profiles, to vision and motion constraints, to the map being used can be modified in `data_pkg/config/params.txt`. Additional occupancy maps can be added to `data_pkg/config/maps`. The method for landmark generation is specified on the command line when running any of my launch files by appending the argument `map:=CHOICE`. There are several options of this, but the main ones to note are `random`, `grid`, and `igvc1`.
-
-
-<p float="center">
-  <img src=images/igvc1_demo.gif height="500" />
-  <img src=images/ekf_rand_demo.png height="500" />
+<p>
+  <img src=images/igvc1_demo.gif height="400" />
+  <img src=images/ekf_grid_demo.gif height="400" />
 </p>
+
+Some key parameters are set using command line arguments, which are set differently in each launch file to ensure the proper setup for the different demos. These can also be changed when running the launch files by appending `arg=choice` (e.g. `landmark_map:=random`). All other parameters can be modified in `data_pkg/config/params.txt`. Additional occupancy maps can be added to `data_pkg/config/maps`. 
 
 My full derivation of the math for the EKF is [included as a pdf](docs/EKF_SLAM_Derivation.pdf). It contains separate derivations for EKF Localization, EKF Mapping, and the combined EKF-SLAM which is implemented in this codebase. I've implemented Online SLAM, meaning we simultaneously estimate the current vehicle pose and the landmark positions, but we don't retroactively estimate all previous vehicle poses. That larger problem is called Full SLAM.
 
@@ -32,11 +31,12 @@ To run any of these demos, first run the following commands after cloning this r
     catkin_make
     source devel/setup.bash
 
-Then choose one of the demos to run from any of the packages' `launch` directories. The launch files in `data_pkg` get the simulation working, and will be automatically launched by any of the others. Some possibilities are:
+Then choose one of the demos to run the `data_pkg/launch` directory. The `sim_base.launch` is run automatically by all others to get the simulation working. Some that I know give good results are:
 
-    roslaunch planning_pkg pursue_goal.launch map:=igvc1
-    roslaunch ekf_pkg cpp_ekf_demo.launch map:=random
+    roslaunch data_pkg igvc1.launch
+    roslaunch data_pkg cpp_ekf_demo.launch
+    roslaunch data_pkg cpp_ekf_demo.launch landmark_map:=grid
 
 
-The `DT` parameter in `data_pkg/launch/demo_base.launch` sets the time between iterations. If you set this lower than your machine can handle, the filter will miss measurements and begin to fail. All other parameters can be modified in `data_pkg/config/params.txt`. Important ones you will want to change are `OCC_MAP_IMAGE` and `USE_LOCAL_PLANNER`.
+Note: The `DT` parameter in `data_pkg/config/params.txt` sets the time between iterations. Lowering this value makes everything run faster, but if you set this lower than your machine can handle, the filter will miss measurements and begin to fail.
 

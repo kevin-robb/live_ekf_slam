@@ -1,11 +1,15 @@
 <launch>
     <!-- Launch the basic necessities for all demos. -->
-    <arg name="map" default="-1"/>
+    <arg name="occ_map_img" default="blank.jpg"/>
+    <arg name="landmark_map" default="random"/>
+    <arg name="precompute_trajectory" default="false"/>
+    <arg name="use_local_planner" default="false"/>
+    <arg name="tight_control" default="false"/>
 
-    <!-- node to send odom and measurements to the ekf -->
-    <node pkg="data_pkg" type="sim_node.py" name="sim_node"  args="$(arg map)" output="screen" />
+    <!-- main simulator -->
+    <node pkg="data_pkg" type="sim_node.py" name="sim_node"  args="$(arg occ_map_img) $(arg landmark_map) $(arg precompute_trajectory)" output="screen" />
     <!-- plotting node -->
     <node pkg="data_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
-    <!-- node to pursue point chosen as goal -->
-    <node pkg="planning_pkg" type="goal_pursuit_node.py" name="goal_pursuit_node" output="screen" />
+    <!-- path planning/nav -->
+    <node pkg="planning_pkg" type="goal_pursuit_node.py" name="goal_pursuit_node" args="$(arg use_local_planner) $(arg precompute_trajectory) $(arg tight_control) $(arg occ_map_img)" output="screen" />
 </launch>
