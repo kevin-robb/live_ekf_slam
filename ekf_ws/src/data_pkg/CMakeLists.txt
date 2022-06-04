@@ -13,6 +13,9 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   Command.msg
+  EKFState.msg
+  UKFState.msg
+  PFState.msg
 )
 
 generate_messages(
@@ -21,10 +24,11 @@ generate_messages(
 )
 
 catkin_package(
-  CATKIN_DEPENDS message_runtime
+  INCLUDE_DIRS include
+  CATKIN_DEPENDS message_runtime roscpp rospy std_msgs geometry_msgs
 )
 
 include_directories(
-# include
+  include
   ${catkin_INCLUDE_DIRS}
 )

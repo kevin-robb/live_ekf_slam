@@ -25,6 +25,11 @@
   <build_depend>message_generation</build_depend>
   <exec_depend>message_runtime</exec_depend>
 
+  <!-- <build_depend>ekf_pkg</build_depend>
+  <exec_depend>ekf_pkg</exec_depend>
+  <build_depend>ukf_pkg</build_depend>
+  <exec_depend>ukf_pkg</exec_depend> -->
+
   <export>
   </export>
 </package>

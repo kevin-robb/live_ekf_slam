@@ -155,8 +155,8 @@ void EKF::update(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray
 }
 
 // return the state as a message.
-ekf_pkg::EKFState EKF::getState() {
-    ekf_pkg::EKFState stateMsg;
+data_pkg::EKFState EKF::getState() {
+    data_pkg::EKFState stateMsg;
     // timestep.
     stateMsg.timestep = this->timestep;
     // vehicle pose.
@@ -166,7 +166,7 @@ ekf_pkg::EKFState EKF::getState() {
     // landmarks.
     stateMsg.M = this->M;
     std::vector<float> lm;
-    for (int i=0; i<M; ++i) {
+    for (int i=0; i<this->M; ++i) {
         lm.push_back((float) this->lm_IDs[i]);
         lm.push_back(this->x_t(3+i*2));
         lm.push_back(this->x_t(3+i*2+1));
@@ -174,8 +174,8 @@ ekf_pkg::EKFState EKF::getState() {
     stateMsg.landmarks = lm;
     // covariance. collapse all rows side by side into a vector.
     std::vector<float> p;
-    for (int i=0; i<2*M+3; ++i) {
-        for (int j=0; j<2*M+3; ++j) {
+    for (int i=0; i<2*this->M+3; ++i) {
+        for (int j=0; j<2*this->M+3; ++j) {
             p.push_back(this->P_t(i,j));
         }
     }

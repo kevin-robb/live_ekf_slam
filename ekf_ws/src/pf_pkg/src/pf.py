@@ -9,21 +9,9 @@ import numpy as np
 from random import random, choices
 from math import sin, cos, remainder, tau, atan2, pi, log, exp
 from scipy.stats import multivariate_normal, norm, uniform
-from pf_pkg.msg import PFState
+from data_pkg.msg import PFState
 
 class PF:
-# ODOM_D_MAX = 0.1
-# ODOM_TH_MAX = 0.0546
-# # noise to use for generating map for TSP solution.
-# LM_NOISE = 0.2
-# # how close the veh must get to a lm to mark it as visited in TSP soln.
-# VISITATION_THRESHOLD = 3.0
-
-# # ----- Measurements Gen -----
-# # vision constraints:
-# RANGE_MAX = 4.0
-# FOV_MIN = -3.141592653589793
-# FOV_MAX = 3.141592653589793
     def __init__(self, params, map):
         """
         Initialize the particles uniformly across the entire map.

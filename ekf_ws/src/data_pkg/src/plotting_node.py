@@ -9,9 +9,7 @@ import rospkg
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from sensor_msgs.msg import Image
-from ekf_pkg.msg import EKFState
-from ukf_pkg.msg import UKFState
-from pf_pkg.msg import PFState
+from data_pkg.msg import EKFState, UKFState, PFState
 from matplotlib.backend_bases import MouseButton
 from matplotlib import pyplot as plt
 import numpy as np
@@ -67,11 +65,11 @@ def update_plot(filter:str, msg):
         plots["timestep"].remove()
     plots["timestep"] = plt.text(-Config.params["MAP_BOUND"], Config.params["MAP_BOUND"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
 
-    ####################### EKF SLAM #########################
+    ####################### EKF/UKF SLAM #########################
     if filter == "ekf" or filter == "ukf":
-        plt.title("EKF-Estimated Trajectory and Landmarks")
+        plt.title(filter.upper()+"-Estimated Trajectory and Landmarks")
         ################ VEH POS #################
-        # plot current EKF-estimated veh pos.
+        # plot current estimated veh pos.
         if not Config.params["SHOW_ENTIRE_TRAJ"] and "veh_pos_est" in plots.keys():
             plots["veh_pos_est"].remove()
             del plots["veh_pos_est"]
@@ -113,6 +111,27 @@ def update_plot(filter:str, msg):
                 lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
                 # plot its ellipse.
                 plots["lm_cov_est"][lm_id], = plt.plot(lm_x[i]+lm_ell[0,:] , lm_y[i]+lm_ell[1,:],'orange', zorder=1)
+        
+        ############## UKF SIGMA POINTS ##################
+        if filter == "ukf":
+            ######### current sigma pts.
+            X_x = [msg.X[i] for i in range(0,len(msg.X),3)]
+            X_y = [msg.X[i] for i in range(1,len(msg.X),3)]
+            # remove old points.
+            if "sigma_pts" in plots.keys():
+                plots["sigma_pts"].remove()
+                del plots["sigma_pts"]
+            # plot sigma points.
+            plots["sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:olive", zorder=1)
+            ######### predicted sigma pts.
+            X_x = [msg.X_pred[i] for i in range(0,len(msg.X_pred),3)]
+            X_y = [msg.X_pred[i] for i in range(1,len(msg.X_pred),3)]
+            # remove old points.
+            if "sigma_pts_pred" in plots.keys():
+                plots["sigma_pts_pred"].remove()
+                del plots["sigma_pts_pred"]
+            # plot sigma points.
+            plots["sigma_pts_pred"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=1)
 
     ############## PARTICLE FILTER LOCALIZATION #####################
     elif filter == "pf":
@@ -153,7 +172,7 @@ def get_ekf_state(msg):
 # get the state published by the UKF.
 def get_ukf_state(msg):
     global fname
-    # set filename for EKF.
+    # set filename for UKF.
     fname = "ukf"
     # update the plot.
     update_plot("ukf", msg)

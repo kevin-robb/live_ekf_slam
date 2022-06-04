@@ -11,3 +11,7 @@ int32 M
 float32[] landmarks
 # covariance matrix. (stored as one long row with (3+2M)^2 elements).
 float32[] P
+# sigma points.
+float32[] X
+# propagated sigma points.
+float32[] X_pred

@@ -61,7 +61,7 @@ void ekfIterate(const ros::TimerEvent& event) {
     // call the EKF's update function.
     ekf.update(cmdMsg, lmMeasMsg);
     // get the current state estimate.
-    ekf_pkg::EKFState stateMsg = ekf.getState();
+    data_pkg::EKFState stateMsg = ekf.getState();
     // publish it.
     statePub.publish(stateMsg);
 }
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
     ros::Subscriber cmdSub = node.subscribe("/command", 100, cmdCallback);
     ros::Subscriber lmMeasSub = node.subscribe("/landmark", 100, lmMeasCallback);
     // publish EKF state.
-    statePub = node.advertise<ekf_pkg::EKFState>("/state/ekf", 1);
+    statePub = node.advertise<data_pkg::EKFState>("/state/ekf", 1);
 
     // timer to update EKF at set frequency.
     ros::Timer ekfIterationTimer = node.createTimer(ros::Duration(DT), &ekfIterate, false);

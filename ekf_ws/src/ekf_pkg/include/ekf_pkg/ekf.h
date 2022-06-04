@@ -4,7 +4,7 @@
 #include <ros/ros.h>
 #include "geometry_msgs/Vector3.h"
 #include "std_msgs/Float32MultiArray.h"
-#include "ekf_pkg/EKFState.h"
+#include "data_pkg/EKFState.h"
 #include "data_pkg/Command.h"
 #include <eigen3/Eigen/Dense>
 #include <vector>
@@ -52,7 +52,7 @@ class EKF {
     EKF();
     void init(float x_0, float y_0, float yaw_0);
     void update(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
-    ekf_pkg::EKFState getState();
+    data_pkg::EKFState getState();
 };
 
 #endif

@@ -150,13 +150,13 @@ def generate_full_trajectory():
 
 def generate_landmarks(map_type:str):
     """
-    Create a set of 20 landmarks forming the map.
+    Create a set of landmarks forming the map.
     """
     global landmarks
     # key = integer ID. value = (x,y) position.
     landmarks = {}
 
-    if map_type in ["demo", "demo_map"]:
+    if map_type == "demo":
         # force number of landmarks to match.
         Config.params["NUM_LANDMARKS"] = len(demo_map.keys()) 
         landmarks = demo_map
@@ -164,9 +164,9 @@ def generate_landmarks(map_type:str):
         # place landmarks on a grid filling the bounds.
         shift = Config.params["GRID_STEP"] / 2
         id = 0
-        for r in np.arange(-Config.params["MAP_BOUND"], Config.params["MAP_BOUND"], Config.params["GRID_STEP"]):
-            for c in np.arange(-Config.params["MAP_BOUND"], Config.params["MAP_BOUND"], Config.params["GRID_STEP"]):
-                landmarks[id] = (shift + r, shift + c)
+        for r in np.arange(-Config.params["MAP_BOUND"]+shift, Config.params["MAP_BOUND"], Config.params["GRID_STEP"]):
+            for c in np.arange(-Config.params["MAP_BOUND"]+shift, Config.params["MAP_BOUND"], Config.params["GRID_STEP"]):
+                landmarks[id] = (r, c)
                 id += 1
         # update number of landmarks used.
         Config.params["NUM_LANDMARKS"] = id

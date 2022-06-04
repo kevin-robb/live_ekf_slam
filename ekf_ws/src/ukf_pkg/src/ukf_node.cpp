@@ -81,7 +81,7 @@ void ekfIterate(const ros::TimerEvent& event) {
         ukf.localizationUpdate(odomMsg, lmMeasMsg);
     }
     // get the current state estimate.
-    ukf_pkg::UKFState stateMsg = ukf.getState();
+    data_pkg::UKFState stateMsg = ukf.getState();
     // publish it.
     statePub.publish(stateMsg);
 }
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
     ros::Subscriber lmMeasSub = node.subscribe("/landmark", 100, lmMeasCallback);
     ros::Subscriber trueMapSub = node.subscribe("/truth/landmarks", 1, trueMapCallback);
     // publish state.
-    statePub = node.advertise<ukf_pkg::UKFState>("/state/ukf", 1);
+    statePub = node.advertise<data_pkg::UKFState>("/state/ukf", 1);
 
     // timer to update UKF at set frequency.
     ros::Timer ekfIterationTimer = node.createTimer(ros::Duration(DT), &ekfIterate, false);

@@ -42,9 +42,11 @@ void UKF::setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg) {
     this->map = trueMapMsg->data;    
 }
 
-ukf_pkg::UKFState UKF::getState() {
+data_pkg::UKFState UKF::getState() {
+    // state length for convenience.
+    int n = 2 * this->M + 3;
     // return the state as a message.
-    ukf_pkg::UKFState stateMsg;
+    data_pkg::UKFState stateMsg;
     // timestep.
     stateMsg.timestep = this->timestep;
     // vehicle pose.
@@ -54,7 +56,7 @@ ukf_pkg::UKFState UKF::getState() {
     // landmarks.
     stateMsg.M = this->M;
     std::vector<float> lm;
-    for (int i=0; i<M; ++i) {
+    for (int i=0; i<this->M; ++i) {
         lm.push_back((float) this->lm_IDs[i]);
         lm.push_back(this->x_t(3+i*2));
         lm.push_back(this->x_t(3+i*2+1));
@@ -62,12 +64,24 @@ ukf_pkg::UKFState UKF::getState() {
     stateMsg.landmarks = lm;
     // covariance. collapse all rows side by side into a vector.
     std::vector<float> p;
-    for (int i=0; i<2*M+3; ++i) {
-        for (int j=0; j<2*M+3; ++j) {
+    for (int i=0; i<n; ++i) {
+        for (int j=0; j<n; ++j) {
             p.push_back(this->P_t(i,j));
         }
     }
     stateMsg.P = p;
+    // sigma points. also collapse into a vector.
+    std::vector<float> sigma_pts;
+    std::vector<float> sigma_pts_propagated;
+    for (int i=0; i<n; ++i) {
+        for (int j=0; j<2*n+1; ++j) {
+            sigma_pts.push_back(this->X(i,j));
+            sigma_pts_propagated.push_back(this->X_pred(i,j));
+        }
+    }
+    stateMsg.X = sigma_pts;
+    stateMsg.X_pred = sigma_pts_propagated;
+
     return stateMsg;
 }
 

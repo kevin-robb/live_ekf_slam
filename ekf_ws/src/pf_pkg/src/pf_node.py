@@ -10,8 +10,7 @@ import rospkg
 from pf import PF
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
-from pf_pkg.msg import PFState
-import sys
+from data_pkg.msg import PFState
 
 ############ GLOBAL VARIABLES ###################
 params = {}

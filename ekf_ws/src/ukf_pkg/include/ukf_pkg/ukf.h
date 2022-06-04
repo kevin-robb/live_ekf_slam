@@ -4,14 +4,13 @@
 #include <ros/ros.h>
 #include "geometry_msgs/Vector3.h"
 #include "std_msgs/Float32MultiArray.h"
-#include "ukf_pkg/UKFState.h"
+#include "data_pkg/UKFState.h"
 #include "data_pkg/Command.h"
 #include <eigen3/Eigen/Dense>
 #include <vector>
 #include <cmath>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <eigen3/Eigen/Eigenvalues>
-
 
 #define pi 3.14159265358979323846
 
@@ -69,7 +68,7 @@ class UKF {
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
     Eigen::VectorXd slamSensingModel(Eigen::VectorXd x, int lm_i);
     Eigen::VectorXd localizationSensingModel(Eigen::VectorXd x, int lm_i);
-    ukf_pkg::UKFState getState();
+    data_pkg::UKFState getState();
 };
 
 #endif
