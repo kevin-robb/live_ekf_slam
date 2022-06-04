@@ -114,30 +114,30 @@ def update_plot(filter:str, msg):
         
         ############## UKF SIGMA POINTS ##################
         if filter == "ukf":
-            ######### current sigma pts.
-            X_x = [msg.X[i] for i in range(0,len(msg.X),3)]
-            X_y = [msg.X[i] for i in range(1,len(msg.X),3)]
-            # remove old points.
-            if "sigma_pts" in plots.keys():
-                plots["sigma_pts"].remove()
-                del plots["sigma_pts"]
-            # plot sigma points.
-            plots["sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:olive", zorder=1)
-            ######### predicted sigma pts.
-            X_x = [msg.X_pred[i] for i in range(0,len(msg.X_pred),3)]
-            X_y = [msg.X_pred[i] for i in range(1,len(msg.X_pred),3)]
-            # remove old points.
-            if "sigma_pts_pred" in plots.keys():
-                plots["sigma_pts_pred"].remove()
-                del plots["sigma_pts_pred"]
-            # plot sigma points.
-            plots["sigma_pts_pred"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=1)
+            if Config.params["PLOT_ARROWS"]:
+                # plot as arrows (slow).
+                if "sigma_pts" in plots.keys() and len(plots["sigma_pts"].keys()) > 0:
+                    for i in plots["sigma_pts"].keys():
+                        plots["sigma_pts"][i].remove()
+                plots["sigma_pts"] = {}
+                # draw a pt with arrow for all sigma pts.
+                for i in range(0, len(msg.X), 3):
+                    plots["sigma_pts"][i] = plt.arrow(msg.X[i], msg.X[i+1], Config.params["ARROW_LEN"]*cos(msg.X[i+2]), Config.params["ARROW_LEN"]*sin(msg.X[i+2]), color="cyan", width=0.1)
+            else: # just show x,y of pts.
+                X_x = [msg.X[i] for i in range(0,len(msg.X),3)]
+                X_y = [msg.X[i] for i in range(1,len(msg.X),3)]
+                # remove old points.
+                if "sigma_pts" in plots.keys():
+                    plots["sigma_pts"].remove()
+                    del plots["sigma_pts"]
+                # plot sigma points.
+                plots["sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=1)
 
     ############## PARTICLE FILTER LOCALIZATION #####################
     elif filter == "pf":
         plt.title("PF-Estimated Vehicle Pose")
         ########## PARTICLE SET ###############
-        if Config.params["PLOT_PARTICLE_ARROWS"]:
+        if Config.params["PLOT_ARROWS"]:
             # plot as arrows (slow).
             if "particle_set" in plots.keys() and len(plots["particle_set"].keys()) > 0:
                 for i in plots["particle_set"].keys():

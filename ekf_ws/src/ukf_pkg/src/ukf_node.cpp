@@ -18,8 +18,8 @@ ros::Publisher statePub;
 UKF ukf;
 // UKF mode (true for SLAM, false for localization-only).
 bool ukfSlamMode;
-// config vars for params we need.
-float x_0; float y_0; float yaw_0;
+// ukf config params.
+float W_0;
 // flag to wait for map to be received.
 bool loadedTrueMap = false;
 
@@ -38,15 +38,9 @@ float readParams() {
         if (token == "DT") {
             line.erase(0, line.find(delimeter)+delimeter.length());
             DT = std::stof(line);
-        } else if (token == "x_0") {
+        } else if (token == "W_0") {
             line.erase(0, line.find(delimeter)+delimeter.length());
-            x_0 = std::stof(line);
-        } else if (token == "y_0") {
-            line.erase(0, line.find(delimeter)+delimeter.length());
-            y_0 = std::stof(line);
-        } else if (token == "yaw_0") {
-            line.erase(0, line.find(delimeter)+delimeter.length());
-            yaw_0 = std::stof(line);
+            W_0 = std::stof(line);
         } else if (token == "ukf_mode") {
             line.erase(0, line.find(delimeter)+delimeter.length());
             if (line == "loc") {
@@ -64,9 +58,18 @@ float readParams() {
     return DT;
 }
 
+void initCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
+    // receive the vehicle's initial position.
+    float x_0 = msg->x;
+    float y_0 = msg->y;
+    float yaw_0 = msg->z;
+    // init the UKF.
+    ukf.init(x_0, y_0, yaw_0, W_0);
+}
+
 void ekfIterate(const ros::TimerEvent& event) {
     // perform an iteration of the EKF for this timestep.
-    if (!loadedTrueMap || cmdQueue.empty() || lmMeasQueue.empty()) {
+    if (!ukf.isInit || (!loadedTrueMap && !ukfSlamMode) || cmdQueue.empty() || lmMeasQueue.empty()) {
         return;
     }
     // get the next timestep's messages from the queues.
@@ -108,8 +111,8 @@ int main(int argc, char **argv) {
 
     // read config parameters.
     float DT = readParams();
-    // init the EKF.
-    ukf.init(x_0, y_0, yaw_0);
+    // get the initial veh pose and init the ukf.
+    ros::Subscriber initSub = node.subscribe("/truth/init_veh_pose", 1, initCallback);
 
     // subscribe to inputs.
     ros::Subscriber cmdSub = node.subscribe("/command", 100, cmdCallback);

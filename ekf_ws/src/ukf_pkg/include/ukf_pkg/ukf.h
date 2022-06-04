@@ -16,6 +16,7 @@
 
 class UKF {
     public:
+    bool isInit = false;
     // current timestep.
     int timestep = 0;
     // state distribution.
@@ -60,7 +61,7 @@ class UKF {
     std::vector<float> map;
 
     UKF();
-    void init(float x_0, float y_0, float yaw_0);
+    void init(float x_0, float y_0, float yaw_0, float W_0);
     void setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg);
     void slamUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     void localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);

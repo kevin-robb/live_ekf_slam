@@ -84,13 +84,15 @@ SHOW_VEH_ELLIPSE = True
 ARROW_LEN = 0.1
 # number of std dev to include in cov ellipses.
 COV_STD_DEV = 1
-# show individual heading for all PF particles.
-PLOT_PARTICLE_ARROWS = False
+# show individual heading for all PF particles / UKF sigma pts.
+PLOT_ARROWS = True
 # amount to multiply MAP_BOUND by to get the display region.
 DISPLAY_REGION_MULT = 1.0
 
-# ----- UKF Mode -----
-# ("loc"~localization or "slam"~SLAM)
+# ----- UKF -----
+# weight on mean sigma pt.
+W_0 = 0.4
+# operating mode ("loc"~localization or "slam"~SLAM)
 ukf_mode = loc
 
 # ----- Particle Filter -----

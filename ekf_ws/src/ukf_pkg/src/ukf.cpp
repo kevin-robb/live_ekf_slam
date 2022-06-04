@@ -32,9 +32,13 @@ UKF::UKF() {
     this->Q(2,2) = this->V(1,1);
 }
 
-void UKF::init(float x_0, float y_0, float yaw_0) {
+void UKF::init(float x_0, float y_0, float yaw_0, float W_0) {
     // set starting vehicle pose.
     this->x_t << x_0, y_0, yaw_0;
+    // set mean sigma pt weight.
+    this->W_0 = W_0;
+    // set initialized flag.
+    this->isInit = true;
 }
 
 void UKF::setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg) {
@@ -73,8 +77,8 @@ data_pkg::UKFState UKF::getState() {
     // sigma points. also collapse into a vector.
     std::vector<float> sigma_pts;
     std::vector<float> sigma_pts_propagated;
-    for (int i=0; i<n; ++i) {
-        for (int j=0; j<2*n+1; ++j) {
+    for (int j=0; j<2*n+1; ++j) {
+        for (int i=0; i<n; ++i) {
             sigma_pts.push_back(this->X(i,j));
             sigma_pts_propagated.push_back(this->X_pred(i,j));
         }
@@ -119,6 +123,8 @@ Eigen::VectorXd UKF::localizationSensingModel(Eigen::VectorXd x, int lm_id) {
     Eigen::VectorXd z_est = Eigen::VectorXd::Zero(2);
     z_est(0) = std::sqrt(std::pow(this->map[lm_id*3+1]-x(0), 2) + std::pow(this->map[lm_id*3+2]-x(1), 2)) + this->w_r;
     z_est(1) = std::atan2(this->map[lm_id*3+2]-x(1), this->map[lm_id*3+1]-x(0)) - x(2) + this->w_b;
+    // cap bearing within (-pi, pi).
+    z_est(1) = remainder(z_est(1), 2*pi);
     return z_est;
 }
 
@@ -136,7 +142,8 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     int n = 3;
 
     // compute the sqrt cov term.
-    this->sqtP = nearestSPD().sqrt() * std::sqrt(n/(1-this->W_0));
+    this->P_t *= std::sqrt(n/(1-this->W_0));
+    this->sqtP = nearestSPD().sqrt();
 
     // compute sigma points.
     this->X.col(0) = this->x_t;
@@ -145,6 +152,10 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     }
     for (int i=1; i<=n; ++i) {
         this->X.col(i+n) = this->x_t - this->sqtP.col(i-1);
+    }
+    // cap all headings within (-pi, pi).
+    for (int i=0; i<2*n+1; ++i) {
+        this->X(2,i) = remainder(this->X(2,i), 2*pi);
     }
 
     // propagate sigma vectors with motion model f.
@@ -157,6 +168,9 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     for (int i=0; i<2*n+1; ++i) {
         this->x_pred += this->Wts(i) * this->X_pred.col(i);
     }
+    // cap heading within (-pi, pi).
+    this->x_pred(2) = remainder(this->x_pred(2), 2*pi);
+
     //compute state covariance prediction.
     this->P_pred.setZero(n, n);
     for (int i=0; i<2*n+1; ++i) {
@@ -194,6 +208,8 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
         for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
             this->z_est += this->Wts(i) * this->X_zest.col(i);
         }
+        // cap bearing within (-pi, pi).
+        this->z_est(1) = remainder(this->z_est(1), 2*pi);
         // compute innovation covariance.
         this->S.setZero(2, 2);
         for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
@@ -212,6 +228,8 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
         // compute the posterior distribution.
         this->z(0) = r; this->z(1) = b;
         this->x_pred = this->x_pred + this->K * (this->z - this->z_est);
+        // cap heading within (-pi, pi).
+        this->x_pred(2) = remainder(this->x_pred(2), 2*pi);
         this->P_pred = this->P_pred - this->K * this->S * this->K.transpose();
 
     }
