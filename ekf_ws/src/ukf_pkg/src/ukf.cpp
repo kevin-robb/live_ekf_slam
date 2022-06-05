@@ -92,24 +92,32 @@ data_pkg::UKFState UKF::getState() {
 Eigen::MatrixXd UKF::nearestSPD() {
     // find the nearest symmetric positive semidefinite matrix to P_t using Froebius Norm.
     // https://scicomp.stackexchange.com/questions/30631/how-to-find-the-nearest-a-near-positive-definite-from-a-given-matrix
+    // https://stackoverflow.com/questions/61639182/find-the-nearest-postive-definte-matrix-with-eigen
     // first compute nearest symmetric matrix.
     this->Y = 0.5 * (this->P_t + this->P_t.transpose());
     // multiply by inner coefficient for UKF.
     this->Y *= (2*this->M+3)/(1-this->W_0);
     // compute eigen decomposition of Y.
-    Eigen::EigenSolver<Eigen::MatrixXd> es(this->Y);
-    this->D = es.eigenvalues().real().asDiagonal();
-    this->Qv = es.eigenvectors().real();
-    // cap values to be nonnegative.
-    // this->P_lower_bound.setZero(this->M*2+3, this->M*2+3);
-    this->P_lower_bound.setOnes(this->M*2+3, this->M*2+3);
+
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(this->Y);
+    this->D = solver.eigenvalues();
+    this->Qv = solver.eigenvectors();
+    this->Dplus = this->D.cwiseMax(0);
+    return this->Qv * this->Dplus.asDiagonal() * this->Qv.transpose();
+
+    // Eigen::EigenSolver<Eigen::MatrixXd> es(this->Y);
+    // this->D = es.eigenvalues().real().asDiagonal();
+    // this->Qv = es.eigenvectors().real();
+    // // cap values to be nonnegative.
+    // // this->P_lower_bound.setZero(this->M*2+3, this->M*2+3);
+    // this->P_lower_bound.setOnes(this->M*2+3, this->M*2+3);
     // this->P_lower_bound *= 0.0;
-    // this->P_lower_bound *= 0.0001;
-    this->P_lower_bound *= 0.00000001;
-    this->D = (this->D.array().max(this->P_lower_bound.array())).matrix();
-    // compute nearest positive semidefinite matrix.
-    // return ((this->Qv * this->D * this->Qv.transpose()).array().max(this->P_lower_bound.array())).matrix();
-    return this->Qv * this->D * this->Qv.transpose();
+    // // this->P_lower_bound *= 0.0001;
+    // // this->P_lower_bound *= 0.00000001;
+    // this->Dplus = (this->D.array().max(this->P_lower_bound.array())).matrix();
+    // // compute nearest positive semidefinite matrix.
+    // // return ((this->Qv * this->D * this->Qv.transpose()).array().max(this->P_lower_bound.array())).matrix();
+    // return this->Qv * this->Dplus * this->Qv.transpose();
 }
 
 Eigen::VectorXd UKF::motionModel(Eigen::VectorXd x, float u_d, float u_th) {
@@ -152,8 +160,14 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
 
     // compute the sqrt cov term.
     std::cout << "\nnearestSPD:\n" << nearestSPD() << std::endl << std::flush;
-    this->sqtP = nearestSPD().sqrt();
-    std::cout << "sqtP:\n" << this->sqtP << std::endl << std::flush;
+    try {
+        this->sqtP = nearestSPD().sqrt();
+        std::cout << "sqtP:\n" << this->sqtP << std::endl << std::flush;
+    } catch (...) {
+        std::cout << "sqtP failed.\n" << std::endl << std::flush;
+        // std::cout << e.what() << std::endl << std::flush;
+    }
+    
 
     // compute sigma points.
     this->X.col(0) = this->x_t;

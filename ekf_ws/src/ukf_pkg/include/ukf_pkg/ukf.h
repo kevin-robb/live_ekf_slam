@@ -1,6 +1,9 @@
 #ifndef IGVC_UKF_H
 #define IGVC_UKF_H
 
+// macro to make eigen use exceptions instead of assertion fails.
+#define eigen_assert(X) do { if(!(X)) throw std::runtime_error(#X); } while(false);
+
 #include <ros/ros.h>
 #include "geometry_msgs/Vector3.h"
 #include "std_msgs/Float32MultiArray.h"
@@ -24,8 +27,9 @@ class UKF {
     Eigen::MatrixXd P_t;
     // stuff used for P_t approx SPD calculation.
     Eigen::MatrixXd Y;
-    Eigen::MatrixXd D;
+    Eigen::VectorXd D;
     Eigen::MatrixXd Qv;
+    Eigen::VectorXd Dplus;
     Eigen::MatrixXd P_lower_bound;
     Eigen::MatrixXd sqtP; // sqrt of P_t for sigma pts calc.
     // sigma points matrix and weights.
