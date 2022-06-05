@@ -90,34 +90,22 @@ data_pkg::UKFState UKF::getState() {
 }
 
 Eigen::MatrixXd UKF::nearestSPD() {
-    // find the nearest symmetric positive semidefinite matrix to P_t using Froebius Norm.
+    // find the nearest symmetric positive (semi)definite matrix to P_t using Froebius Norm.
     // https://scicomp.stackexchange.com/questions/30631/how-to-find-the-nearest-a-near-positive-definite-from-a-given-matrix
     // https://stackoverflow.com/questions/61639182/find-the-nearest-postive-definte-matrix-with-eigen
+
     // first compute nearest symmetric matrix.
     this->Y = 0.5 * (this->P_t + this->P_t.transpose());
     // multiply by inner coefficient for UKF.
     this->Y *= (2*this->M+3)/(1-this->W_0);
     // compute eigen decomposition of Y.
-
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(this->Y);
     this->D = solver.eigenvalues();
     this->Qv = solver.eigenvectors();
-    this->Dplus = this->D.cwiseMax(0);
+    // cap eigenvalues to be strictly positive.
+    this->Dplus = this->D.cwiseMax(0.00000001);
+    // compute nearest positive semidefinite matrix.
     return this->Qv * this->Dplus.asDiagonal() * this->Qv.transpose();
-
-    // Eigen::EigenSolver<Eigen::MatrixXd> es(this->Y);
-    // this->D = es.eigenvalues().real().asDiagonal();
-    // this->Qv = es.eigenvectors().real();
-    // // cap values to be nonnegative.
-    // // this->P_lower_bound.setZero(this->M*2+3, this->M*2+3);
-    // this->P_lower_bound.setOnes(this->M*2+3, this->M*2+3);
-    // this->P_lower_bound *= 0.0;
-    // // this->P_lower_bound *= 0.0001;
-    // // this->P_lower_bound *= 0.00000001;
-    // this->Dplus = (this->D.array().max(this->P_lower_bound.array())).matrix();
-    // // compute nearest positive semidefinite matrix.
-    // // return ((this->Qv * this->D * this->Qv.transpose()).array().max(this->P_lower_bound.array())).matrix();
-    // return this->Qv * this->Dplus * this->Qv.transpose();
 }
 
 Eigen::VectorXd UKF::motionModel(Eigen::VectorXd x, float u_d, float u_th) {
@@ -159,16 +147,15 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     int n = 3;
 
     // compute the sqrt cov term.
-    std::cout << "\nnearestSPD:\n" << nearestSPD() << std::endl << std::flush;
+    // std::cout << "\nnearestSPD:\n" << nearestSPD() << std::endl << std::flush;
     try {
         this->sqtP = nearestSPD().sqrt();
-        std::cout << "sqtP:\n" << this->sqtP << std::endl << std::flush;
+        // std::cout << "sqtP:\n" << this->sqtP << std::endl << std::flush;
     } catch (...) {
+        std::cout << "\nnearestSPD:" << nearestSPD() << std::endl << std::flush;
         std::cout << "sqtP failed.\n" << std::endl << std::flush;
-        // std::cout << e.what() << std::endl << std::flush;
     }
     
-
     // compute sigma points.
     this->X.col(0) = this->x_t;
     for (int i=1; i<=n; ++i) {
@@ -177,10 +164,10 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     for (int i=1; i<=n; ++i) {
         this->X.col(i+n) = this->x_t - this->sqtP.col(i-1);
     }
-    // cap all headings within (-pi, pi).
-    for (int i=0; i<2*n+1; ++i) {
-        this->X(2,i) = remainder(this->X(2,i), 2*pi);
-    }
+    // // cap all headings within (-pi, pi).
+    // for (int i=0; i<2*n+1; ++i) {
+    //     this->X(2,i) = remainder(this->X(2,i), 2*pi);
+    // }
 
     // propagate sigma vectors with motion model f.
     this->X_pred.setZero(n,2*n+1);
@@ -189,15 +176,15 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     }
     // compute state mean prediction.
     this->x_pred.setZero(n);
-    this->x_yaw_components.setZero(2);
+    this->complex_angle.setZero(2);
     for (int i=0; i<2*n+1; ++i) {
         this->x_pred += this->Wts(i) * this->X_pred.col(i);
-        // convert angles to complex numbers to average them correctly (assume hypoteneuse = 1).
-        this->x_yaw_components(0) += this->Wts(i) * cos(this->X_pred.col(i)(2)); // real component.
-        this->x_yaw_components(1) += this->Wts(i) * sin(this->X_pred.col(i)(2)); // imaginary component.
+        // convert angles to vectors in complex plane to average them correctly (assume unit circle).
+        this->complex_angle(0) += this->Wts(i) * cos(this->X_pred.col(i)(2)); // real component.
+        this->complex_angle(1) += this->Wts(i) * sin(this->X_pred.col(i)(2)); // imaginary component.
     }
     // convert averaged heading back from complex to angle. also cap w/in (-pi, pi).
-    this->x_pred(2) = remainder(atan2(this->x_yaw_components(1), this->x_yaw_components(0)), 2*pi);
+    this->x_pred(2) = remainder(atan2(this->complex_angle(1), this->complex_angle(0)), 2*pi);
 
     //compute state covariance prediction.
     this->P_pred.setZero(n, n);
@@ -228,11 +215,16 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
         }
         // compute overall measurement estimate.
         this->z_est.setZero(2);
+        this->complex_angle.setZero(2);
         for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
             this->z_est += this->Wts(i) * this->X_zest.col(i);
+            // convert angles to vectors in complex plane to average them correctly (assume unit circle).
+            this->complex_angle(0) += this->Wts(i) * cos(this->X_zest.col(i)(1)); // real component.
+            this->complex_angle(1) += this->Wts(i) * sin(this->X_zest.col(i)(1)); // imaginary component.
         }
-        // cap bearing within (-pi, pi).
-        this->z_est(1) = remainder(this->z_est(1), 2*pi);
+        // convert averaged heading back from complex to angle. also cap w/in (-pi, pi).
+        this->z_est(1) = remainder(atan2(this->complex_angle(1), this->complex_angle(0)), 2*pi);
+
         // compute innovation covariance.
         this->S.setZero(2, 2);
         for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
@@ -250,7 +242,9 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
 
         // compute the posterior distribution.
         this->z(0) = r; this->z(1) = b;
-        this->x_pred = this->x_pred + this->K * (this->z - this->z_est);
+        this->innovation = (this->z - this->z_est);
+        this->innovation(1) = remainder(this->innovation(1), 2*pi);
+        this->x_pred = this->x_pred + this->K * this->innovation;
         // cap heading within (-pi, pi).
         this->x_pred(2) = remainder(this->x_pred(2), 2*pi);
         this->P_pred = this->P_pred - this->K * this->S * this->K.transpose();

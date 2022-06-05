@@ -44,9 +44,10 @@ class UKF {
     Eigen::MatrixXd K; // kalman gain.
     // current measurement.
     Eigen::VectorXd z = Eigen::VectorXd::Zero(2);
+    Eigen::VectorXd innovation = Eigen::VectorXd::Zero(2);
     // predicted state distribution.
     Eigen::VectorXd x_pred;
-    Eigen::Vector2d x_yaw_components =  Eigen::Vector2d::Zero(2); // temp storage for converting hdg to complex # during averaging.
+    Eigen::Vector2d complex_angle =  Eigen::Vector2d::Zero(2); // temp storage for converting hdg to complex # during averaging.
     Eigen::MatrixXd P_pred;
     Eigen::MatrixXd p_temp; // temp matrix used for P update.
     // landmark IDs.
