@@ -23,8 +23,6 @@ UKF::UKF() {
     this->P_pred(2,2) = 0.005 * 0.005;
     // set the sigma stuff to the right starting size.
     this->X.setZero(3,7);
-    this->Wts = Eigen::VectorXd::Constant(7,(1-this->W_0)/6);
-    this->Wts(0) = this->W_0;
     // set the expanding process noise.
     this->Q.setZero(3,3);
     this->Q(0,0) = this->V(0,0) * cos(this->x_t(2));
@@ -37,6 +35,8 @@ void UKF::init(float x_0, float y_0, float yaw_0, float W_0) {
     this->x_t << x_0, y_0, yaw_0;
     // set mean sigma pt weight.
     this->W_0 = W_0;
+    this->Wts = Eigen::VectorXd::Constant(7,(1-this->W_0)/6);
+    this->Wts(0) = this->W_0;
     // set initialized flag.
     this->isInit = true;
 }
@@ -89,11 +89,13 @@ data_pkg::UKFState UKF::getState() {
     return stateMsg;
 }
 
-Eigen::MatrixXd UKF::nearestSPD(Eigen::MatrixXd P_t) {
+Eigen::MatrixXd UKF::nearestSPD() {
     // find the nearest symmetric positive semidefinite matrix to P_t using Froebius Norm.
     // https://scicomp.stackexchange.com/questions/30631/how-to-find-the-nearest-a-near-positive-definite-from-a-given-matrix
     // first compute nearest symmetric matrix.
-    this->Y = 0.5 * (P_t + P_t.transpose());
+    this->Y = 0.5 * (this->P_t + this->P_t.transpose());
+    // multiply by inner coefficient for UKF.
+    this->Y *= (2*this->M+3)/(1-this->W_0);
     // compute eigen decomposition of Y.
     Eigen::EigenSolver<Eigen::MatrixXd> es(this->Y);
     this->D = es.eigenvalues().real().asDiagonal();
@@ -101,9 +103,12 @@ Eigen::MatrixXd UKF::nearestSPD(Eigen::MatrixXd P_t) {
     // cap values to be nonnegative.
     // this->P_lower_bound.setZero(this->M*2+3, this->M*2+3);
     this->P_lower_bound.setOnes(this->M*2+3, this->M*2+3);
+    // this->P_lower_bound *= 0.0;
+    // this->P_lower_bound *= 0.0001;
     this->P_lower_bound *= 0.00000001;
     this->D = (this->D.array().max(this->P_lower_bound.array())).matrix();
     // compute nearest positive semidefinite matrix.
+    // return ((this->Qv * this->D * this->Qv.transpose()).array().max(this->P_lower_bound.array())).matrix();
     return this->Qv * this->D * this->Qv.transpose();
 }
 
@@ -133,6 +138,10 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     // update timestep.
     this->timestep += 1;
 
+    // update process noise with new pos est.
+    this->Q(0,0) = this->V(0,0) * cos(this->x_t(2));
+    this->Q(1,1) = this->V(0,0) * sin(this->x_t(2));
+
     ////////////// PREDICTION STAGE /////////////////
     // extract odom.
     float u_d = cmdMsg->fwd;
@@ -142,7 +151,9 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     int n = 3;
 
     // compute the sqrt cov term.
-    this->sqtP = (nearestSPD(this->P_t) * std::sqrt(n/(1-this->W_0))).sqrt();
+    std::cout << "\nnearestSPD:\n" << nearestSPD() << std::endl << std::flush;
+    this->sqtP = nearestSPD().sqrt();
+    std::cout << "sqtP:\n" << this->sqtP << std::endl << std::flush;
 
     // compute sigma points.
     this->X.col(0) = this->x_t;
@@ -164,11 +175,15 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     }
     // compute state mean prediction.
     this->x_pred.setZero(n);
+    this->x_yaw_components.setZero(2);
     for (int i=0; i<2*n+1; ++i) {
         this->x_pred += this->Wts(i) * this->X_pred.col(i);
+        // convert angles to complex numbers to average them correctly (assume hypoteneuse = 1).
+        this->x_yaw_components(0) += this->Wts(i) * cos(this->X_pred.col(i)(2)); // real component.
+        this->x_yaw_components(1) += this->Wts(i) * sin(this->X_pred.col(i)(2)); // imaginary component.
     }
-    // cap heading within (-pi, pi).
-    this->x_pred(2) = remainder(this->x_pred(2), 2*pi);
+    // convert averaged heading back from complex to angle. also cap w/in (-pi, pi).
+    this->x_pred(2) = remainder(atan2(this->x_yaw_components(1), this->x_yaw_components(0)), 2*pi);
 
     //compute state covariance prediction.
     this->P_pred.setZero(n, n);
@@ -181,13 +196,8 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     ///////////////// UPDATE STAGE //////////////////
     std::vector<float> lm_meas = lmMeasMsg->data;
     int num_landmarks = (int) (lm_meas.size() / 3);
-    // if there was no detection, skip the update stage.
-    if (num_landmarks < 1) {
-        this->x_t = this->x_pred;
-        this->P_t = this->P_pred;
-        return;
-    }
-    // there is at least one detection, so we must update each individually.
+    // we must update for each detection individually.
+    // if there was no detection, this loop is skipped.
     for (int l=0; l<num_landmarks; ++l) {
         // extract the landmark details.
         int id = (int) lm_meas[l*3];
@@ -275,7 +285,7 @@ void UKF::slamUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiA
     }
 
     // compute the sqrt cov term.
-    this->sqtP = nearestSPD(this->P_t * std::sqrt(n/(1-this->W_0))).sqrt();
+    this->sqtP = nearestSPD().sqrt();
 
     // compute sigma points.
     this->X.col(0) = this->x_t;

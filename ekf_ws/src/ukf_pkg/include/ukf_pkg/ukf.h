@@ -42,6 +42,7 @@ class UKF {
     Eigen::VectorXd z = Eigen::VectorXd::Zero(2);
     // predicted state distribution.
     Eigen::VectorXd x_pred;
+    Eigen::Vector2d x_yaw_components =  Eigen::Vector2d::Zero(2); // temp storage for converting hdg to complex # during averaging.
     Eigen::MatrixXd P_pred;
     Eigen::MatrixXd p_temp; // temp matrix used for P update.
     // landmark IDs.
@@ -65,7 +66,7 @@ class UKF {
     void setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg);
     void slamUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     void localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
-    Eigen::MatrixXd nearestSPD(Eigen::MatrixXd P_t);
+    Eigen::MatrixXd nearestSPD();
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
     Eigen::VectorXd slamSensingModel(Eigen::VectorXd x, int lm_i);
     Eigen::VectorXd localizationSensingModel(Eigen::VectorXd x, int lm_i);

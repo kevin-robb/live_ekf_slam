@@ -68,7 +68,7 @@ def update_plot(filter:str, msg):
     plots["timestep"] = plt.text(-Config.params["MAP_BOUND"], Config.params["MAP_BOUND"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
 
     ####################### EKF/UKF SLAM #########################
-    if filter == "ekf" or filter == "ukf":
+    if filter in ["ekf", "ukf"]:
         plt.title(filter.upper()+"-Estimated Trajectory and Landmarks")
         ################ VEH POS #################
         # plot current estimated veh pos.

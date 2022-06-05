@@ -81,7 +81,11 @@ def generate_full_trajectory():
     # make noisy version of rough map to use.
     noisy_lm = {}
     for id in range(Config.params["NUM_LANDMARKS"]):
-        noisy_lm[id] = (landmarks[id][0] + 2*Config.params["LM_NOISE"]*random()-Config.params["LM_NOISE"], landmarks[id][1] + 2*Config.params["LM_NOISE"]*random()-Config.params["LM_NOISE"])
+        noisy_lm[id] = (landmarks[id][0] + 2*Config.params["LM_NOISE"]*random()-Config.params["LM_NOISE"], 
+                        landmarks[id][1] + 2*Config.params["LM_NOISE"]*random()-Config.params["LM_NOISE"])
+        # keep all points well within the visible map area.
+        noisy_lm[id] = (max(Config.params["DISPLAY_REGION"][0] + 1, min(noisy_lm[id][0], Config.params["DISPLAY_REGION"][1] - 1)),
+                        max(Config.params["DISPLAY_REGION"][0] + 1, min(noisy_lm[id][1], Config.params["DISPLAY_REGION"][1] - 1)))
     # choose nearest landmark to x0 as first node.
     cur_goal = 0; cur_dist = norm(noisy_lm[cur_goal], x_t)
     for id in range(Config.params["NUM_LANDMARKS"]):
@@ -142,6 +146,7 @@ def generate_full_trajectory():
         if t == Config.params["NUM_TIMESTEPS"]: return
         # send odom command and true pose for plotting.
         cmd_pub.publish(Command(fwd=odom_fwd[t], ang=odom_ang[t]))
+        # cmd_pub.publish(Command(fwd=0.1, ang=0.1))
         # increment time.
         t += 1
         # sleep to publish at desired freq.
