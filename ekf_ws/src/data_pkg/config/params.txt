@@ -96,7 +96,7 @@ LIST_CLICKED_POINTS = False
 # weight on mean sigma pt.
 W_0 = 0.2
 # operating mode ("loc"~localization or "slam"~SLAM)
-ukf_mode = slam
+ukf_mode = loc
 
 # ----- Particle Filter -----
 NUM_PARTICLES = 500

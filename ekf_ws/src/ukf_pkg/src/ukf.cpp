@@ -149,18 +149,18 @@ void UKF::ukfIterate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiA
 
     // get vector length.
     int n = this->M*2 + 3;
-    // update sizes if a landmark was added to the state last iteration.
-    if (this->X.rows() != n) {
-        // expand the size of X matrix.
-        this->X.conservativeResize(n, 1+2*n);
-        // recompute the weights vector.
-        this->Wts.setOnes(1+2*n);
-        this->Wts *= (1-this->W_0)/(2*n);
-        this->Wts(0) = this->W_0;
-        // expand the process noise.
-        this->Q.setZero(n,n);
-        this->Q(2,2) = this->V(1,1);
-    }
+    // // update sizes if a landmark was added to the state last iteration.
+    // if (this->X.rows() != n) {
+    //     // expand the size of X matrix.
+    //     this->X.conservativeResize(n, 1+2*n);
+    //     // recompute the weights vector.
+    //     this->Wts.setOnes(1+2*n);
+    //     this->Wts *= (1-this->W_0)/(2*n);
+    //     this->Wts(0) = this->W_0;
+    //     // expand the process noise.
+    //     this->Q.setZero(n,n);
+    //     this->Q(2,2) = this->V(1,1);
+    // }
     // update the process noise components for current yaw.
     this->Q(0,0) = this->V(0,0) * cos(this->x_t(2));
     this->Q(1,1) = this->V(0,0) * sin(this->x_t(2));
@@ -301,10 +301,10 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
                 this->diff = (this->X_pred.col(i) - this->x_pred);
                 // keep angles in range.
                 this->diff(2) = remainder(this->diff(2), 2*pi);
-                std::cout << "diff: " << this->diff << "\n" << std::flush;
+                // std::cout << "diff: " << this->diff << "\n" << std::flush;
                 this->diff2 = (this->X_zest.col(i) - this->z_est);
                 this->diff2(1) = remainder(this->diff2(1), 2*pi);
-                std::cout << "diff2: " << this->diff2 << "\n" << std::flush;
+                // std::cout << "diff2: " << this->diff2 << "\n" << std::flush;
                 // add cross covariance contribution.
                 this->C += this->Wts(i) * this->diff * this->diff2.transpose();
             }
@@ -341,15 +341,22 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
             this->M += 1; n += 2;
 
             // expand the size of X matrix.
-            this->X.conservativeResize(n, 1+2*n);
+            this->X.conservativeResize(n,1+2*n);
             // expand X_pred in case there's a re-detection also this timestep.
             this->X_pred.conservativeResize(n,1+2*n);
             // recompute the weights vector at new size.
             this->Wts.setOnes(1+2*n);
             this->Wts *= (1-this->W_0)/(2*n);
             this->Wts(0) = this->W_0;
-            // expand the process noise.
+            // expand the process noise with zeros.
+            // float q_00 = this->Q(0,0);
+            // float q_11 = this->Q(1,1);
             this->Q.setZero(n,n);
+            // this->Q(0,0) = q_00;
+            // this->Q(1,1) = q_11;
+            // update the process noise components for current predicted yaw.
+            this->Q(0,0) = this->V(0,0) * cos(this->x_pred(2));
+            this->Q(1,1) = this->V(0,0) * sin(this->x_pred(2));
             this->Q(2,2) = this->V(1,1);
         }
     }
