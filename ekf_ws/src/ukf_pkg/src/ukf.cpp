@@ -125,7 +125,7 @@ Eigen::VectorXd UKF::localizationSensingModel(Eigen::VectorXd x, int lm_id) {
     z_est(0) = std::sqrt(std::pow(this->map[lm_id*3+1]-x(0), 2) + std::pow(this->map[lm_id*3+2]-x(1), 2)) + this->w_r;
     z_est(1) = std::atan2(this->map[lm_id*3+2]-x(1), this->map[lm_id*3+1]-x(0)) - x(2) + this->w_b;
     // cap bearing within (-pi, pi).
-    z_est(1) = remainder(z_est(1), 2*pi);
+    // z_est(1) = remainder(z_est(1), 2*pi);
     return z_est;
 }
 
@@ -164,10 +164,10 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
     for (int i=1; i<=n; ++i) {
         this->X.col(i+n) = this->x_t - this->sqtP.col(i-1);
     }
-    // // cap all headings within (-pi, pi).
-    // for (int i=0; i<2*n+1; ++i) {
-    //     this->X(2,i) = remainder(this->X(2,i), 2*pi);
-    // }
+    // cap all headings within (-pi, pi).
+    for (int i=0; i<2*n+1; ++i) {
+        this->X(2,i) = remainder(this->X(2,i), 2*pi);
+    }
 
     // propagate sigma vectors with motion model f.
     this->X_pred.setZero(n,2*n+1);
@@ -217,7 +217,7 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
         this->z_est.setZero(2);
         this->complex_angle.setZero(2);
         for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
-            this->z_est += this->Wts(i) * this->X_zest.col(i);
+            this->z_est(0) += this->Wts(i) * this->X_zest.col(i)(0);
             // convert angles to vectors in complex plane to average them correctly (assume unit circle).
             this->complex_angle(0) += this->Wts(i) * cos(this->X_zest.col(i)(1)); // real component.
             this->complex_angle(1) += this->Wts(i) * sin(this->X_zest.col(i)(1)); // imaginary component.
@@ -228,14 +228,24 @@ void UKF::localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float
         // compute innovation covariance.
         this->S.setZero(2, 2);
         for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
-            this->S += this->Wts(i) * (this->X_zest.col(i) - this->z_est) * (this->X_zest.col(i) - this->z_est).transpose();
+            this->diff = (this->X_zest.col(i) - this->z_est);
+            // keep angle in range.
+            this->diff(1) = remainder(this->diff(1), 2*pi);
+            // add innovation covariance contribution.
+            this->S += this->Wts(i) * this->diff * this->diff.transpose();
         }
         // add sensing noise cov.
         this->S += this->W;
         // compute cross covariance b/w x_pred and z_est.
         this->C.setZero(n,2);
-        for (int i=0; i<this->Wts.rows(); ++i) { // 2*n+1
-            this->C += this->Wts(i) * (this->X_pred.col(i) - this->x_pred) * (this->X_zest.col(i) - this->z_est).transpose();
+        for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
+            this->diff = (this->X_pred.col(i) - this->x_pred);
+            this->diff2 = (this->X_zest.col(i) - this->z_est);
+            // keep angles in range.
+            this->diff(2) = remainder(this->diff(2), 2*pi);
+            this->diff2(1) = remainder(this->diff2(1), 2*pi);
+            // add cross covariance contribution.
+            this->C += this->Wts(i) * this->diff * this->diff2.transpose();
         }
         // compute kalman gain.
         this->K = this->C * this->S.inverse();

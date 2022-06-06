@@ -38,6 +38,8 @@ class UKF {
     float W_0 = 0.2; // mean weight.
     Eigen::MatrixXd X_pred; // propagated sigma pts.
     Eigen::MatrixXd X_zest; // meas ests for each sigma pt.
+    Eigen::VectorXd diff; // meas est differences for computing covariances.
+    Eigen::VectorXd diff2; // meas est differences for computing covariances.
     Eigen::VectorXd z_est; // combined z_est.
     Eigen::MatrixXd C; // cross cov b/w x_pred and z_est.
     Eigen::MatrixXd S; // innov cov.
