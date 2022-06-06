@@ -117,7 +117,7 @@ def update_plot(filter:str, msg):
         
         ############## UKF SIGMA POINTS ##################
         if filter == "ukf":
-            # TODO make numpy matrix for X instead of dealing with single array.
+            # only show sigma points' veh pose, not landmark info.
             if Config.params["PLOT_UKF_ARROWS"]:
                 # plot as arrows (slow).
                 if "sigma_pts" in plots.keys() and len(plots["sigma_pts"].keys()) > 0:
@@ -125,18 +125,18 @@ def update_plot(filter:str, msg):
                         plots["sigma_pts"][i].remove()
                 plots["sigma_pts"] = {}
                 # draw a pt with arrow for all sigma pts.
-                rospy.logwarn(str(msg.X))
-                for i in range(0, len(msg.X), n):
-                    plots["sigma_pts"][i] = plt.arrow(msg.X[i], msg.X[i+1], Config.params["ARROW_LEN"]*cos(msg.X[i+2]), Config.params["ARROW_LEN"]*sin(msg.X[i+2]), color="cyan", width=0.1)
+                # rospy.logwarn(str(msg.X))
+                for i in range(0, 2*n+1):
+                    plots["sigma_pts"][i] = plt.arrow(msg.X[i*n], msg.X[i*n+1], Config.params["ARROW_LEN"]*cos(msg.X[i*n+2]), Config.params["ARROW_LEN"]*sin(msg.X[i*n+2]), color="cyan", width=0.1)
             else: # just show x,y of pts.
-                X_x = [msg.X[i] for i in range(0,len(msg.X),3)]
-                X_y = [msg.X[i] for i in range(1,len(msg.X),3)]
+                X_x = [msg.X[i*n] for i in range(0,2*n+1)]
+                X_y = [msg.X[i*n+1] for i in range(0,2*n+1)]
                 # remove old points.
                 if "sigma_pts" in plots.keys():
                     plots["sigma_pts"].remove()
                     del plots["sigma_pts"]
                 # plot sigma points.
-                plots["sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=1)
+                plots["sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=5)
 
     ############## PARTICLE FILTER LOCALIZATION #####################
     elif filter == "pf":

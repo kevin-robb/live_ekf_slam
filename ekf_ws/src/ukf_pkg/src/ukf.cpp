@@ -255,7 +255,7 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
                 }
             }
         }
-        
+        // std::cout << "Detected landmark " << id << " at state index " << lm_i << "\n" << std::flush;
         if (!this->ukfSlamMode || lm_i != -1) {
             // localization mode, or the landmark was found in the state.
             //////////// LANDMARK UPDATE ///////////
@@ -299,10 +299,12 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
             this->C.setZero(n,2);
             for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
                 this->diff = (this->X_pred.col(i) - this->x_pred);
-                this->diff2 = (this->X_zest.col(i) - this->z_est);
                 // keep angles in range.
                 this->diff(2) = remainder(this->diff(2), 2*pi);
+                std::cout << "diff: " << this->diff << "\n" << std::flush;
+                this->diff2 = (this->X_zest.col(i) - this->z_est);
                 this->diff2(1) = remainder(this->diff2(1), 2*pi);
+                std::cout << "diff2: " << this->diff2 << "\n" << std::flush;
                 // add cross covariance contribution.
                 this->C += this->Wts(i) * this->diff * this->diff2.transpose();
             }
@@ -341,7 +343,7 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
             // expand the size of X matrix.
             this->X.conservativeResize(n, 1+2*n);
             // expand X_pred in case there's a re-detection also this timestep.
-            this->X_pred.conservativeResize(n+2,2*n+5);
+            this->X_pred.conservativeResize(n,1+2*n);
             // recompute the weights vector at new size.
             this->Wts.setOnes(1+2*n);
             this->Wts *= (1-this->W_0)/(2*n);
