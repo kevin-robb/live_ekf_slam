@@ -70,6 +70,8 @@ def update_plot(filter:str, msg):
     ####################### EKF/UKF SLAM #########################
     if filter in ["ekf", "ukf"]:
         plt.title(filter.upper()+"-Estimated Trajectory and Landmarks")
+        # compute length of state to use throughout. n = 3+2M
+        n = int(len(msg.P)**(1/2))
         ################ VEH POS #################
         # plot current estimated veh pos.
         if not Config.params["SHOW_ENTIRE_TRAJ"] and "veh_pos_est" in plots.keys():
@@ -80,7 +82,6 @@ def update_plot(filter:str, msg):
 
         ################ VEH COV ##################
         if Config.params["SHOW_VEH_ELLIPSE"]:
-            n = int(len(msg.P)**(1/2)) # length of state n = 3+2M
             # compute parametric ellipse for veh covariance.
             veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
             # remove old ellipses.
@@ -116,6 +117,7 @@ def update_plot(filter:str, msg):
         
         ############## UKF SIGMA POINTS ##################
         if filter == "ukf":
+            # TODO make numpy matrix for X instead of dealing with single array.
             if Config.params["PLOT_UKF_ARROWS"]:
                 # plot as arrows (slow).
                 if "sigma_pts" in plots.keys() and len(plots["sigma_pts"].keys()) > 0:
@@ -123,7 +125,8 @@ def update_plot(filter:str, msg):
                         plots["sigma_pts"][i].remove()
                 plots["sigma_pts"] = {}
                 # draw a pt with arrow for all sigma pts.
-                for i in range(0, len(msg.X), 3):
+                rospy.logwarn(str(msg.X))
+                for i in range(0, len(msg.X), n):
                     plots["sigma_pts"][i] = plt.arrow(msg.X[i], msg.X[i+1], Config.params["ARROW_LEN"]*cos(msg.X[i+2]), Config.params["ARROW_LEN"]*sin(msg.X[i+2]), color="cyan", width=0.1)
             else: # just show x,y of pts.
                 X_x = [msg.X[i] for i in range(0,len(msg.X),3)]

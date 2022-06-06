@@ -64,11 +64,11 @@ void initCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
     float y_0 = msg->y;
     float yaw_0 = msg->z;
     // init the UKF.
-    ukf.init(x_0, y_0, yaw_0, W_0);
+    ukf.init(x_0, y_0, yaw_0, W_0, ukfSlamMode);
 }
 
-void ekfIterate(const ros::TimerEvent& event) {
-    // perform an iteration of the EKF for this timestep.
+void ukfIterate(const ros::TimerEvent& event) {
+    // perform an iteration of the UKF for this timestep.
     if (!ukf.isInit || (!loadedTrueMap && !ukfSlamMode) || cmdQueue.empty() || lmMeasQueue.empty()) {
         return;
     }
@@ -77,12 +77,8 @@ void ekfIterate(const ros::TimerEvent& event) {
     cmdQueue.pop();
     std_msgs::Float32MultiArray::ConstPtr lmMeasMsg = lmMeasQueue.front();
     lmMeasQueue.pop();
-    // call the EKF's update function.
-    if (ukfSlamMode) {
-        ukf.slamUpdate(odomMsg, lmMeasMsg);
-    } else {
-        ukf.localizationUpdate(odomMsg, lmMeasMsg);
-    }
+    // call the UKF's update function.
+    ukf.ukfIterate(odomMsg, lmMeasMsg);
     // get the current state estimate.
     data_pkg::UKFState stateMsg = ukf.getState();
     // publish it.
@@ -122,7 +118,7 @@ int main(int argc, char **argv) {
     statePub = node.advertise<data_pkg::UKFState>("/state/ukf", 1);
 
     // timer to update UKF at set frequency.
-    ros::Timer ekfIterationTimer = node.createTimer(ros::Duration(DT), &ekfIterate, false);
+    ros::Timer ekfIterationTimer = node.createTimer(ros::Duration(DT), &ukfIterate, false);
 
     ros::spin();
     return 0;

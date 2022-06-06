@@ -20,6 +20,7 @@
 class UKF {
     public:
     bool isInit = false;
+    bool ukfSlamMode;
     // current timestep.
     int timestep = 0;
     // state distribution.
@@ -69,15 +70,16 @@ class UKF {
     std::vector<float> map;
 
     UKF();
-    void init(float x_0, float y_0, float yaw_0, float W_0);
+    void init(float x_0, float y_0, float yaw_0, float W_0, bool ukfSlamMode);
     void setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg);
-    void slamUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
+    void ukfIterate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     void localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     Eigen::MatrixXd nearestSPD();
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
-    Eigen::VectorXd slamSensingModel(Eigen::VectorXd x, int lm_i);
-    Eigen::VectorXd localizationSensingModel(Eigen::VectorXd x, int lm_i);
+    Eigen::VectorXd sensingModel(Eigen::VectorXd x, int lm_i);
     data_pkg::UKFState getState();
+    void predictionStage(data_pkg::Command::ConstPtr cmdMsg);
+    void updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
 };
 
 #endif
