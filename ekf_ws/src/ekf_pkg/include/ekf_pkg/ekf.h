@@ -1,5 +1,5 @@
-#ifndef IGVC_EKF_H
-#define IGVC_EKF_H
+#ifndef EKF_H
+#define EKF_H
 
 #include <ros/ros.h>
 #include "geometry_msgs/Vector3.h"

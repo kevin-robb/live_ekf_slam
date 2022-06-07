@@ -1,5 +1,5 @@
-#ifndef IGVC_UKF_H
-#define IGVC_UKF_H
+#ifndef UKF_H
+#define UKF_H
 
 // macro to make eigen use exceptions instead of assertion fails.
 #define eigen_assert(X) do { if(!(X)) throw std::runtime_error(#X); } while(false);
@@ -80,6 +80,8 @@ class UKF {
     data_pkg::UKFState getState();
     void predictionStage(data_pkg::Command::ConstPtr cmdMsg);
     void updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
+    void landmarkUpdate(int lm_i, int id, float r, float b);
+    void landmarkInsertion(int id, float r, float b);
 };
 
 #endif

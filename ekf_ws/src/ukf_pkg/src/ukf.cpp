@@ -144,23 +144,26 @@ Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
 
 void UKF::ukfIterate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // perform a full iteration of UKF-SLAM for this timestep.
-    // update timestep.
+    // update timestep count.
     this->timestep += 1;
 
     // get vector length.
     int n = this->M*2 + 3;
-    // // update sizes if a landmark was added to the state last iteration.
-    // if (this->X.rows() != n) {
-    //     // expand the size of X matrix.
-    //     this->X.conservativeResize(n, 1+2*n);
-    //     // recompute the weights vector.
-    //     this->Wts.setOnes(1+2*n);
-    //     this->Wts *= (1-this->W_0)/(2*n);
-    //     this->Wts(0) = this->W_0;
-    //     // expand the process noise.
-    //     this->Q.setZero(n,n);
-    //     this->Q(2,2) = this->V(1,1);
-    // }
+    // expand the sizes of everything if the state length has grown.
+    if (n != this->X.rows()) {
+        // expand the size of sigma pts matrices.
+        this->X.conservativeResize(n,1+2*n);
+        this->X_pred.conservativeResize(n,1+2*n);
+        // recompute the weights vector at new size.
+        this->Wts.setOnes(1+2*n);
+        this->Wts *= (1-this->W_0)/(2*n);
+        this->Wts(0) = this->W_0;
+        // expand the process noise with zeros.
+        // the elements are set at the start of ukfIterate; only need to update its size.
+        this->Q.setZero(n,n);
+        this->Q(2,2) = this->V(1,1);
+    }
+    
     // update the process noise components for current yaw.
     this->Q(0,0) = this->V(0,0) * cos(this->x_t(2));
     this->Q(1,1) = this->V(0,0) * sin(this->x_t(2));
@@ -235,9 +238,13 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     ///////////////// UPDATE STAGE //////////////////
     // get vector length.
     int n = this->M*2 + 3;
+
     // extract landmark measurements.
     std::vector<float> lm_meas = lmMeasMsg->data;
     int num_landmarks = (int) (lm_meas.size() / 3);
+    // some extra logic to make sure we perform all landmark updates FIRST,
+    // and all landmark insertions LAST. This makes all the code simpler without changing functionality.
+    std::vector<int> new_landmark_indexes;
     // we must update for each detection individually.
     // if there was no detection, this loop is skipped.
     for (int l=0; l<num_landmarks; ++l) {
@@ -255,112 +262,111 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
                 }
             }
         }
-        // std::cout << "Detected landmark " << id << " at state index " << lm_i << "\n" << std::flush;
-        if (!this->ukfSlamMode || lm_i != -1) {
-            // localization mode, or the landmark was found in the state.
-            //////////// LANDMARK UPDATE ///////////
-            if (this->ukfSlamMode) {
-                // get index of this landmark in the state.
-                lm_i = lm_i*2+3;
-            } else {
-                // get landmark's unique identifier.
-                lm_i = id;
-            }
-            
-            // get meas estimate for all sigma points.
-            this->X_zest.setZero(2,2*n+1);
-            for (int i=0; i<2*n+1; ++i) {
-                this->X_zest.col(i) = sensingModel(this->X_pred.col(i), lm_i);
-            }
-            // compute overall measurement estimate.
-            this->z_est.setZero(2);
-            this->complex_angle.setZero(2);
-            for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
-                this->z_est(0) += this->Wts(i) * this->X_zest.col(i)(0);
-                // convert angles to vectors in complex plane to average them correctly (assume unit circle).
-                this->complex_angle(0) += this->Wts(i) * cos(this->X_zest.col(i)(1)); // real component.
-                this->complex_angle(1) += this->Wts(i) * sin(this->X_zest.col(i)(1)); // imaginary component.
-            }
-            // convert averaged heading back from complex to angle. also cap w/in (-pi, pi).
-            this->z_est(1) = remainder(atan2(this->complex_angle(1), this->complex_angle(0)), 2*pi);
-            
-            // compute innovation covariance.
-            this->S.setZero(2, 2);
-            for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
-                this->diff = (this->X_zest.col(i) - this->z_est);
-                // keep angle in range.
-                this->diff(1) = remainder(this->diff(1), 2*pi);
-                // add innovation covariance contribution.
-                this->S += this->Wts(i) * this->diff * this->diff.transpose();
-            }
-            // add sensing noise cov.
-            this->S += this->W;
-            // compute cross covariance b/w x_pred and z_est.
-            this->C.setZero(n,2);
-            for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
-                this->diff = (this->X_pred.col(i) - this->x_pred);
-                // keep angles in range.
-                this->diff(2) = remainder(this->diff(2), 2*pi);
-                // std::cout << "diff: " << this->diff << "\n" << std::flush;
-                this->diff2 = (this->X_zest.col(i) - this->z_est);
-                this->diff2(1) = remainder(this->diff2(1), 2*pi);
-                // std::cout << "diff2: " << this->diff2 << "\n" << std::flush;
-                // add cross covariance contribution.
-                this->C += this->Wts(i) * this->diff * this->diff2.transpose();
-            }
-            // compute kalman gain.
-            this->K = this->C * this->S.inverse();
-
-            // compute the posterior distribution.
-            this->z(0) = r; this->z(1) = b;
-            this->innovation = (this->z - this->z_est);
-            this->innovation(1) = remainder(this->innovation(1), 2*pi);
-            this->x_pred = this->x_pred + this->K * this->innovation;
-            // cap heading within (-pi, pi).
-            this->x_pred(2) = remainder(this->x_pred(2), 2*pi);
-            this->P_pred = this->P_pred - this->K * this->S * this->K.transpose();
-
+        // if it's a new landmark, wait to handle it later.
+        if (lm_i == -1) {
+            new_landmark_indexes.push_back(l);
         } else {
-            // slam mode, and this is a new landmark.
-            /////////// LANDMARK INSERTION /////////
-            // resize the state to fit the new landmark.
-            this->x_pred.conservativeResize(n+2);
-            this->x_pred(n) = this->x_pred(0) + r*cos(this->x_pred(2)+b);
-            this->x_pred(n+1) = this->x_pred(1) + r*sin(this->x_pred(2)+b);
-            // add landmark ID to the list.
-            this->lm_IDs.push_back(id);
-
-            // expand state cov matrix.
-            // fill new space with zeros and W at bottom right.
-            this->p_temp.setIdentity(n+2,n+2);
-            this->p_temp.block(0,0,n,n) = this->P_pred;
-            this->p_temp.block(n,n,2,2) = this->W;
-            this->P_pred = this->p_temp;
-
-            // increment number of landmarks and update state size.
-            this->M += 1; n += 2;
-
-            // expand the size of X matrix.
-            this->X.conservativeResize(n,1+2*n);
-            // expand X_pred in case there's a re-detection also this timestep.
-            this->X_pred.conservativeResize(n,1+2*n);
-            // recompute the weights vector at new size.
-            this->Wts.setOnes(1+2*n);
-            this->Wts *= (1-this->W_0)/(2*n);
-            this->Wts(0) = this->W_0;
-            // expand the process noise with zeros.
-            // float q_00 = this->Q(0,0);
-            // float q_11 = this->Q(1,1);
-            this->Q.setZero(n,n);
-            // this->Q(0,0) = q_00;
-            // this->Q(1,1) = q_11;
-            // update the process noise components for current predicted yaw.
-            this->Q(0,0) = this->V(0,0) * cos(this->x_pred(2));
-            this->Q(1,1) = this->V(0,0) * sin(this->x_pred(2));
-            this->Q(2,2) = this->V(1,1);
+            landmarkUpdate(lm_i, id, r, b);
         }
+    }
+    // now do all the landmark insertions.
+    for (int i=0; i<new_landmark_indexes.size(); ++i) {
+        int l = new_landmark_indexes[i];
+        // extract the landmark details.
+        int id = (int) lm_meas[l*3];
+        float r = lm_meas[l*3+1];
+        float b = lm_meas[l*3+2];
+        // insert it into the state.
+        landmarkInsertion(id, r, b);
     }
     // after all landmarks have been processed, update the state.
     this->x_t = this->x_pred;
     this->P_t = this->P_pred;
+}
+
+void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
+    // localization mode, or the landmark was found in the state.
+    //////////// LANDMARK UPDATE ///////////
+    if (this->ukfSlamMode) {
+        // get index of this landmark in the state.
+        lm_i = lm_i*2+3;
+    } else {
+        // get landmark's unique identifier.
+        lm_i = id;
+    }
+    
+    // get meas estimate for all sigma points.
+    this->X_zest.setZero(2,2*this->Wts.rows()+1);
+    for (int i=0; i<2*this->Wts.rows()+1; ++i) {
+        this->X_zest.col(i) = sensingModel(this->X_pred.col(i), lm_i);
+    }
+    // compute overall measurement estimate.
+    this->z_est.setZero(2);
+    this->complex_angle.setZero(2);
+    for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
+        this->z_est(0) += this->Wts(i) * this->X_zest.col(i)(0);
+        // convert angles to vectors in complex plane to average them correctly (assume unit circle).
+        this->complex_angle(0) += this->Wts(i) * cos(this->X_zest.col(i)(1)); // real component.
+        this->complex_angle(1) += this->Wts(i) * sin(this->X_zest.col(i)(1)); // imaginary component.
+    }
+    // convert averaged heading back from complex to angle. also cap w/in (-pi, pi).
+    this->z_est(1) = remainder(atan2(this->complex_angle(1), this->complex_angle(0)), 2*pi);
+    
+    // compute innovation covariance.
+    this->S.setZero(2, 2);
+    for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
+        this->diff = (this->X_zest.col(i) - this->z_est);
+        // keep angle in range.
+        this->diff(1) = remainder(this->diff(1), 2*pi);
+        // add innovation covariance contribution.
+        this->S += this->Wts(i) * this->diff * this->diff.transpose();
+    }
+    // add sensing noise cov.
+    this->S += this->W;
+    // compute cross covariance b/w x_pred and z_est.
+    this->C.setZero(this->Wts.rows(),2);
+    for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
+        this->diff = (this->X_pred.col(i) - this->x_pred);
+        // keep angles in range.
+        this->diff(2) = remainder(this->diff(2), 2*pi);
+        // std::cout << "diff: " << this->diff << "\n" << std::flush;
+        this->diff2 = (this->X_zest.col(i) - this->z_est);
+        this->diff2(1) = remainder(this->diff2(1), 2*pi);
+        // std::cout << "diff2: " << this->diff2 << "\n" << std::flush;
+        // add cross covariance contribution.
+        this->C += this->Wts(i) * this->diff * this->diff2.transpose();
+    }
+    // compute kalman gain.
+    this->K = this->C * this->S.inverse();
+
+    // compute the posterior distribution.
+    this->z(0) = r; this->z(1) = b;
+    this->innovation = (this->z - this->z_est);
+    this->innovation(1) = remainder(this->innovation(1), 2*pi);
+    this->x_pred = this->x_pred + this->K * this->innovation;
+    // cap heading within (-pi, pi).
+    this->x_pred(2) = remainder(this->x_pred(2), 2*pi);
+    this->P_pred = this->P_pred - this->K * this->S * this->K.transpose();
+}
+
+void UKF::landmarkInsertion(int id, float r, float b) {
+    // slam mode, and this is a new landmark.
+    /////////// LANDMARK INSERTION /////////
+    int n = this->M*2+3;
+    // resize the state to fit the new landmark.
+    this->x_pred.conservativeResize(n+2);
+    this->x_pred(n) = this->x_pred(0) + r*cos(this->x_pred(2)+b);
+    this->x_pred(n+1) = this->x_pred(1) + r*sin(this->x_pred(2)+b);
+    // add landmark ID to the list.
+    this->lm_IDs.push_back(id);
+
+    // expand state cov matrix.
+    // fill new space with zeros and W at bottom right.
+    this->p_temp.setIdentity(n+2,n+2);
+    this->p_temp.block(0,0,n,n) = this->P_pred;
+    this->p_temp.block(n,n,2,2) = this->W;
+    this->P_pred = this->p_temp;
+
+    // increment number of landmarks and update state size.
+    this->M += 1; //n += 2;
 }
