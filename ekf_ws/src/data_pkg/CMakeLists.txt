@@ -16,6 +16,7 @@ add_message_files(
   EKFState.msg
   UKFState.msg
   PFState.msg
+  PGSState.msg
 )
 
 generate_messages(

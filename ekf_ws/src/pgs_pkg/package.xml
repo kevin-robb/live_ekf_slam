@@ -26,6 +26,9 @@
   <build_depend>data_pkg</build_depend>
   <exec_depend>data_pkg</exec_depend>
 
+  <build_depend>libg2o</build_depend>
+  <exec_depend>libg2o</exec_depend>
+
   <export>
   </export>
 </package>
