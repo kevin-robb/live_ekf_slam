@@ -7,8 +7,8 @@ EKF::EKF() {
     this->V(0,0) = 0.02 * 0.02;
     this->V(1,1) = (0.5*pi/180) * (0.5*pi/180);
     this->W.setIdentity(2,2);
-    this->V(0,0) = 0.1 * 0.1;
-    this->V(1,1) = (pi/180) * (pi/180);
+    this->W(0,0) = 0.1 * 0.1;
+    this->W(1,1) = (pi/180) * (pi/180);
     // initialize state distribution.
     this->x_t.resize(3);
     // starting pose will be set later.

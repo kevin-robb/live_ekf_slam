@@ -117,6 +117,8 @@ def update_plot(filter:str, msg):
         
         ############## UKF SIGMA POINTS ##################
         if filter == "ukf":
+            # extract length of vectors in sigma pts (not necessarily = n).
+            n_sig = int(((1+8*len(msg.X))**(1/2) - 1) / 4) # soln to n*(2n+1)=len.
             # only show sigma points' veh pose, not landmark info.
             if Config.params["PLOT_UKF_ARROWS"]:
                 # plot as arrows (slow).
@@ -126,11 +128,11 @@ def update_plot(filter:str, msg):
                 plots["sigma_pts"] = {}
                 # draw a pt with arrow for all sigma pts.
                 # rospy.logwarn(str(msg.X))
-                for i in range(0, 2*n+1):
-                    plots["sigma_pts"][i] = plt.arrow(msg.X[i*n], msg.X[i*n+1], Config.params["ARROW_LEN"]*cos(msg.X[i*n+2]), Config.params["ARROW_LEN"]*sin(msg.X[i*n+2]), color="cyan", width=0.1)
+                for i in range(0, 2*n_sig+1):
+                    plots["sigma_pts"][i] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], Config.params["ARROW_LEN"]*cos(msg.X[i*n_sig+2]), Config.params["ARROW_LEN"]*sin(msg.X[i*n_sig+2]), color="cyan", width=0.1)
             else: # just show x,y of pts.
-                X_x = [msg.X[i*n] for i in range(0,2*n+1)]
-                X_y = [msg.X[i*n+1] for i in range(0,2*n+1)]
+                X_x = [msg.X[i*n_sig] for i in range(0,2*n_sig+1)]
+                X_y = [msg.X[i*n_sig+1] for i in range(0,2*n_sig+1)]
                 # remove old points.
                 if "sigma_pts" in plots.keys():
                     plots["sigma_pts"].remove()

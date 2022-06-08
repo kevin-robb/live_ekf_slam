@@ -7,8 +7,8 @@ UKF::UKF() {
     this->V(0,0) = 0.02 * 0.02;
     this->V(1,1) = (0.5*pi/180) * (0.5*pi/180);
     this->W.setIdentity(2,2);
-    this->V(0,0) = 0.1 * 0.1;
-    this->V(1,1) = (pi/180) * (pi/180);
+    this->W(0,0) = 0.1 * 0.1;
+    this->W(1,1) = (pi/180) * (pi/180);
     // initialize state distribution.
     this->x_t.resize(3);
     this->x_t << 0.0 , 0.0, 0.0;
@@ -79,8 +79,8 @@ data_pkg::UKFState UKF::getState() {
     // sigma points. also collapse into a vector.
     std::vector<float> sigma_pts;
     // std::vector<float> sigma_pts_propagated;
-    for (int j=0; j<2*n+1; ++j) {
-        for (int i=0; i<n; ++i) {
+    for (int j=0; j<this->X.cols(); ++j) {
+        for (int i=0; i<this->X.rows(); ++i) {
             sigma_pts.push_back(this->X(i,j));
             // sigma_pts_propagated.push_back(this->X_pred(i,j));
         }
@@ -138,6 +138,7 @@ Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
     }
     // cap bearing within (-pi, pi).
     // z_est(1) = remainder(z_est(1), 2*pi);
+
     return z_est;
 }
 
@@ -159,11 +160,10 @@ void UKF::ukfIterate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiA
         this->Wts *= (1-this->W_0)/(2*n);
         this->Wts(0) = this->W_0;
         // expand the process noise with zeros.
-        // the elements are set at the start of ukfIterate; only need to update its size.
+        // the elements will already be set every iteration; only need to update its size.
         this->Q.setZero(n,n);
         this->Q(2,2) = this->V(1,1);
     }
-    
     // update the process noise components for current yaw.
     this->Q(0,0) = this->V(0,0) * cos(this->x_t(2));
     this->Q(1,1) = this->V(0,0) * sin(this->x_t(2));
@@ -263,7 +263,7 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
             }
         }
         // if it's a new landmark, wait to handle it later.
-        if (lm_i == -1) {
+        if (this->ukfSlamMode && lm_i == -1) {
             new_landmark_indexes.push_back(l);
         } else {
             landmarkUpdate(lm_i, id, r, b);
@@ -294,16 +294,16 @@ void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
         // get landmark's unique identifier.
         lm_i = id;
     }
-    
+    int n = this->M*2+3;
     // get meas estimate for all sigma points.
-    this->X_zest.setZero(2,2*this->Wts.rows()+1);
-    for (int i=0; i<2*this->Wts.rows()+1; ++i) {
+    this->X_zest.setZero(2,2*n+1);
+    for (int i=0; i<2*n+1; ++i) {
         this->X_zest.col(i) = sensingModel(this->X_pred.col(i), lm_i);
     }
     // compute overall measurement estimate.
     this->z_est.setZero(2);
     this->complex_angle.setZero(2);
-    for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
+    for (int i=0; i<2*n+1; ++i) {
         this->z_est(0) += this->Wts(i) * this->X_zest.col(i)(0);
         // convert angles to vectors in complex plane to average them correctly (assume unit circle).
         this->complex_angle(0) += this->Wts(i) * cos(this->X_zest.col(i)(1)); // real component.
@@ -314,7 +314,7 @@ void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
     
     // compute innovation covariance.
     this->S.setZero(2, 2);
-    for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
+    for (int i=0; i<2*n+1; ++i) {
         this->diff = (this->X_zest.col(i) - this->z_est);
         // keep angle in range.
         this->diff(1) = remainder(this->diff(1), 2*pi);
@@ -324,15 +324,13 @@ void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
     // add sensing noise cov.
     this->S += this->W;
     // compute cross covariance b/w x_pred and z_est.
-    this->C.setZero(this->Wts.rows(),2);
-    for (int i=0; i<this->Wts.rows(); ++i) { //2*n+1
+    this->C.setZero(n,2);
+    for (int i=0; i<2*n+1; ++i) {
         this->diff = (this->X_pred.col(i) - this->x_pred);
         // keep angles in range.
         this->diff(2) = remainder(this->diff(2), 2*pi);
-        // std::cout << "diff: " << this->diff << "\n" << std::flush;
         this->diff2 = (this->X_zest.col(i) - this->z_est);
         this->diff2(1) = remainder(this->diff2(1), 2*pi);
-        // std::cout << "diff2: " << this->diff2 << "\n" << std::flush;
         // add cross covariance contribution.
         this->C += this->Wts(i) * this->diff * this->diff2.transpose();
     }

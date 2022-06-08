@@ -31,8 +31,7 @@ class UKF {
     Eigen::VectorXd D;
     Eigen::MatrixXd Qv;
     Eigen::VectorXd Dplus;
-    Eigen::MatrixXd P_lower_bound;
-    Eigen::MatrixXd sqtP; // sqrt of P_t for sigma pts calc.
+    Eigen::MatrixXd sqtP; // sqrt of P_t term for sigma pts calc.
     // sigma points matrix and weights.
     Eigen::MatrixXd X; // sigma points.
     Eigen::VectorXd Wts; // weights for sigma pts.
@@ -73,7 +72,6 @@ class UKF {
     void init(float x_0, float y_0, float yaw_0, float W_0, bool ukfSlamMode);
     void setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg);
     void ukfIterate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
-    void localizationUpdate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     Eigen::MatrixXd nearestSPD();
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
     Eigen::VectorXd sensingModel(Eigen::VectorXd x, int lm_i);
