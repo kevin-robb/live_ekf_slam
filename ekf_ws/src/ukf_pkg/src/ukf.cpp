@@ -137,7 +137,7 @@ Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
         z_est(1) = std::atan2(this->map[lm_i*3+2]-x(1), this->map[lm_i*3+1]-x(0)) - x(2) + this->w_b;
     }
     // cap bearing within (-pi, pi).
-    // z_est(1) = remainder(z_est(1), 2*pi);
+    z_est(1) = remainder(z_est(1), 2*pi);
 
     return z_est;
 }

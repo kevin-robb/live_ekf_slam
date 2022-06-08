@@ -66,7 +66,7 @@ ASTAR_INCL_DIAGONALS = True
 
 # ----- Precomputed Trajectory Generation -----
 # (used if precompute_trajectory option is True in roslaunch)
-NUM_TIMESTEPS = 1000
+NUM_TIMESTEPS = 2000
 # noise to use for generating map for TSP solution.
 LM_NOISE = 0.2
 # how close the veh must get to a lm to mark it as visited in TSP soln.

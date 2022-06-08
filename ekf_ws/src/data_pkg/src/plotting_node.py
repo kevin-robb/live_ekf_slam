@@ -27,6 +27,8 @@ fname = ""
 goal_pub = None
 # points clicked on the map, if using LIST_CLICKED_POINTS mode.
 clicked_points = []
+# queue of true poses so we only show the one corresponding to the current estimate.
+true_poses = []
 #################################################
 
 
@@ -66,6 +68,13 @@ def update_plot(filter:str, msg):
     if "timestep" in plots.keys():
         plots["timestep"].remove()
     plots["timestep"] = plt.text(-Config.params["MAP_BOUND"], Config.params["MAP_BOUND"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
+    #################### TRUE POSE #########################
+    if Config.params["SHOW_TRUE_TRAJ"] and msg.timestep <= len(true_poses):
+        pose = true_poses[msg.timestep-1]
+        # plot the current veh pos, & remove previous.
+        if "veh_pos_true" in plots.keys():
+            plots["veh_pos_true"].remove()
+        plots["veh_pos_true"] = plt.arrow(pose.x, pose.y, Config.params["ARROW_LEN"]*cos(pose.z), Config.params["ARROW_LEN"]*sin(pose.z), color="blue", width=0.1, zorder=1)
 
     ####################### EKF/UKF SLAM #########################
     if filter in ["ekf", "ukf"]:
@@ -127,7 +136,6 @@ def update_plot(filter:str, msg):
                         plots["sigma_pts"][i].remove()
                 plots["sigma_pts"] = {}
                 # draw a pt with arrow for all sigma pts.
-                # rospy.logwarn(str(msg.X))
                 for i in range(0, 2*n_sig+1):
                     plots["sigma_pts"][i] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], Config.params["ARROW_LEN"]*cos(msg.X[i*n_sig+2]), Config.params["ARROW_LEN"]*sin(msg.X[i*n_sig+2]), color="cyan", width=0.1)
             else: # just show x,y of pts.
@@ -138,7 +146,7 @@ def update_plot(filter:str, msg):
                     plots["sigma_pts"].remove()
                     del plots["sigma_pts"]
                 # plot sigma points.
-                plots["sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=5)
+                plots["sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=2)
 
     ############## PARTICLE FILTER LOCALIZATION #####################
     elif filter == "pf":
@@ -200,11 +208,9 @@ def save_plot(pkg_path):
 
 def get_true_pose(msg):
     if not Config.params["SHOW_TRUE_TRAJ"]: return
-    global plots
-    # plot the current veh pos, & remove previous.
-    if "veh_pos_true" in plots.keys():
-        plots["veh_pos_true"].remove()
-    plots["veh_pos_true"] = plt.arrow(msg.x, msg.y, Config.params["ARROW_LEN"]*cos(msg.z), Config.params["ARROW_LEN"]*sin(msg.z), color="blue", width=0.1, zorder=1)
+    # save the messages to a queue so they can be shown with the corresponding estimate.
+    global true_poses
+    true_poses.append(msg)
 
 def get_true_landmark_map(msg):
     if not Config.params["SHOW_TRUE_LM_MAP"]: return
