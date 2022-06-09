@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0.2)
 project(pf_pkg)
 
 find_package(catkin REQUIRED COMPONENTS
-  data_pkg
+  base_pkg
   geometry_msgs
   roscpp
   rospy
@@ -12,7 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS data_pkg
+  CATKIN_DEPENDS base_pkg
 )
 
 include_directories(

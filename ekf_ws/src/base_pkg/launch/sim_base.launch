@@ -7,9 +7,9 @@
     <arg name="tight_control" default="false"/>
 
     <!-- main simulator -->
-    <node pkg="data_pkg" type="sim_node.py" name="sim_node"  args="$(arg occ_map_img) $(arg landmark_map) $(arg precompute_trajectory)" output="screen" />
+    <node pkg="base_pkg" type="sim_node.py" name="sim_node"  args="$(arg occ_map_img) $(arg landmark_map) $(arg precompute_trajectory)" output="screen" />
     <!-- plotting node -->
-    <node pkg="data_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
+    <node pkg="base_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
     <!-- path planning/nav -->
     <node pkg="planning_pkg" type="goal_pursuit_node.py" name="goal_pursuit_node" args="$(arg use_local_planner) $(arg precompute_trajectory) $(arg tight_control) $(arg occ_map_img)" output="screen" />
 </launch>

@@ -5,11 +5,11 @@ Command vehicle to pursue path to goal point chosen by clicking the plot.
 Generate the next odom command based on current state estimate.
 """
 import rospy
-from data_pkg.msg import Command
+from base_pkg.msg import Command
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import Image
-from data_pkg.msg import EKFState, UKFState #, PFState
+from base_pkg.msg import EKFState, UKFState #, PFState
 from cv_bridge import CvBridge
 from pure_pursuit import PurePursuit
 from astar import Astar
@@ -17,7 +17,7 @@ from astar import Astar
 # import params script.
 import rospkg
 import importlib.util, sys
-spec = importlib.util.spec_from_file_location("module.name", rospkg.RosPack().get_path('data_pkg')+"/src/import_params.py")
+spec = importlib.util.spec_from_file_location("module.name", rospkg.RosPack().get_path('base_pkg')+"/src/import_params.py")
 module = importlib.util.module_from_spec(spec)
 sys.modules["module.name"] = module
 spec.loader.exec_module(module)
@@ -36,7 +36,7 @@ cur = None
 
 def get_ekf_state(msg):
     """
-    Get the state published by the EKF.
+    Get the state published by the EKF/UKF.
     """
     # update current position.
     global cur
@@ -155,6 +155,7 @@ def main():
     rospy.Subscriber("/truth/init_veh_pose",Vector3, get_init_veh_pose, queue_size=1)
     # subscribe to the current state.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)
+    rospy.Subscriber("/state/ukf", UKFState, get_ekf_state, queue_size=1)
     # rospy.Subscriber("/state/pf", PFState, get_pf_state, queue_size=1)
     # subscribe to the true occupancy grid.
     rospy.Subscriber("/truth/occ_grid", Image, get_occ_map, queue_size=1)

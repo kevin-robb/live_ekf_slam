@@ -8,7 +8,7 @@ Receives odom commands and performs them with noise.
 """
 
 import rospy
-from data_pkg.msg import Command
+from base_pkg.msg import Command
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from sensor_msgs.msg import Image
@@ -261,7 +261,7 @@ def read_occ_map(occ_map_img:str):
     global occ_map
     # read map image and account for possible white = transparency that cv2 will think is black.
     # https://stackoverflow.com/questions/31656366/cv2-imread-and-cv2-imshow-return-all-zeros-and-black-image/62985765#62985765
-    img = cv2.imread(Config.params["DATA_PKG_PATH"]+'/config/maps/'+occ_map_img, cv2.IMREAD_UNCHANGED)
+    img = cv2.imread(Config.params["BASE_PKG_PATH"]+'/config/maps/'+occ_map_img, cv2.IMREAD_UNCHANGED)
     if img.shape[2] == 4: # we have an alpha channel
         a1 = ~img[:,:,3] # extract and invert that alpha
         img = cv2.add(cv2.merge([a1,a1,a1,a1]), img) # add up values (with clipping)

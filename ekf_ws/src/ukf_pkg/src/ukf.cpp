@@ -4,14 +4,9 @@ UKF::UKF() {
     // init the UKF object.
     // set the noise covariance matrices.
     this->V.setIdentity(2,2);
-    // this->V(0,0) = 0.02 * 0.02;
-    // this->V(1,1) = (0.5*pi/180) * (0.5*pi/180);
     this->W.setIdentity(2,2);
-    // this->W(0,0) = 0.1 * 0.1;
-    // this->W(1,1) = (pi/180) * (pi/180);
     // initialize state distribution.
     this->x_t.resize(3);
-    // this->x_t << 0.0 , 0.0, 0.0;
     this->x_pred.setZero(3);
     this->P_t.setIdentity(3,3);
     this->P_t(0,0) = 0.01 * 0.01;
@@ -41,11 +36,11 @@ void UKF::init(float x_0, float y_0, float yaw_0) {
     this->isInit = true;
 }
 
-data_pkg::UKFState UKF::getState() {
+base_pkg::UKFState UKF::getState() {
     // state length for convenience.
     int n = 2 * this->M + 3;
     // return the state as a message.
-    data_pkg::UKFState stateMsg;
+    base_pkg::UKFState stateMsg;
     // timestep.
     stateMsg.timestep = this->timestep;
     // vehicle pose.
@@ -135,7 +130,7 @@ Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
     return z_est;
 }
 
-void UKF::ukfIterate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
+void UKF::ukfIterate(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // perform a full iteration of UKF-SLAM for this timestep.
     // update timestep count.
     this->timestep += 1;
@@ -169,7 +164,7 @@ void UKF::ukfIterate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiA
     /////////////// END OF UKF ITERATION ///////////////////
 }
 
-void UKF::predictionStage(data_pkg::Command::ConstPtr cmdMsg) {
+void UKF::predictionStage(base_pkg::Command::ConstPtr cmdMsg) {
     ////////////// PREDICTION STAGE /////////////////
     // extract odom.
     float u_d = cmdMsg->fwd;

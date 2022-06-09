@@ -87,6 +87,7 @@ COV_STD_DEV = 1
 # show individual heading for all PF particles / UKF sigma pts.
 PLOT_PF_ARROWS = False
 PLOT_UKF_ARROWS = True
+SHOW_LM_SIG_PTS = True
 # amount to multiply MAP_BOUND by to get the display region.
 DISPLAY_REGION_MULT = 1.0
 # utility to display coords of all clicked points, for manually creating landmark maps.

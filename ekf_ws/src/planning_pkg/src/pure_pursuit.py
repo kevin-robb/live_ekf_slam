@@ -4,7 +4,7 @@
 Set of static functions to perform pure pursuit navigation.
 """
 
-from data_pkg.msg import Command
+from base_pkg.msg import Command
 from math import remainder, tau, pi, atan2, sqrt
 
 class PurePursuit:

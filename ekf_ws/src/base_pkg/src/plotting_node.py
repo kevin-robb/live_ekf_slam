@@ -5,11 +5,10 @@ Create a live plot of the true and estimated states.
 """
 
 import rospy
-import rospkg
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from sensor_msgs.msg import Image
-from data_pkg.msg import EKFState, UKFState, PFState
+from base_pkg.msg import EKFState, UKFState, PFState
 from matplotlib.backend_bases import MouseButton
 from matplotlib import pyplot as plt
 import numpy as np
@@ -74,7 +73,7 @@ def update_plot(filter:str, msg):
         # plot the current veh pos, & remove previous.
         if "veh_pos_true" in plots.keys():
             plots["veh_pos_true"].remove()
-        plots["veh_pos_true"] = plt.arrow(pose.x, pose.y, Config.params["ARROW_LEN"]*cos(pose.z), Config.params["ARROW_LEN"]*sin(pose.z), color="blue", width=0.1, zorder=1)
+        plots["veh_pos_true"] = plt.arrow(pose.x, pose.y, Config.params["ARROW_LEN"]*cos(pose.z), Config.params["ARROW_LEN"]*sin(pose.z), color="blue", width=0.1, zorder=2)
 
     ####################### EKF/UKF SLAM #########################
     if filter in ["ekf", "ukf"]:
@@ -87,7 +86,7 @@ def update_plot(filter:str, msg):
             plots["veh_pos_est"].remove()
             del plots["veh_pos_est"]
         # draw a single pt with arrow to represent current veh pose.
-        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, Config.params["ARROW_LEN"]*cos(msg.yaw_v), Config.params["ARROW_LEN"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=2, edgecolor="black")
+        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, Config.params["ARROW_LEN"]*cos(msg.yaw_v), Config.params["ARROW_LEN"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
 
         ################ VEH COV ##################
         if Config.params["SHOW_VEH_ELLIPSE"]:
@@ -108,7 +107,7 @@ def update_plot(filter:str, msg):
             plots["lm_pos_est"].remove()
             del plots["lm_pos_est"]
         # plot new landmark estimates.
-        plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=1)
+        plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
 
         ############## LANDMARK COV ###################
         if Config.params["SHOW_LM_ELLIPSES"]:
@@ -122,31 +121,47 @@ def update_plot(filter:str, msg):
                 # extract 2x2 cov for this landmark.
                 lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
                 # plot its ellipse.
-                plots["lm_cov_est"][lm_id], = plt.plot(lm_x[i]+lm_ell[0,:] , lm_y[i]+lm_ell[1,:],'orange', zorder=1)
+                plots["lm_cov_est"][lm_id], = plt.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
         
         ############## UKF SIGMA POINTS ##################
         if filter == "ukf":
             # extract length of vectors in sigma pts (not necessarily = n).
             n_sig = int(((1+8*len(msg.X))**(1/2) - 1) / 4) # soln to n*(2n+1)=len.
+            ############## VEH POSE SIGMA POINTS #################
             # only show sigma points' veh pose, not landmark info.
             if Config.params["PLOT_UKF_ARROWS"]:
                 # plot as arrows (slow).
-                if "sigma_pts" in plots.keys() and len(plots["sigma_pts"].keys()) > 0:
-                    for i in plots["sigma_pts"].keys():
-                        plots["sigma_pts"][i].remove()
-                plots["sigma_pts"] = {}
+                if "veh_sigma_pts" in plots.keys() and len(plots["veh_sigma_pts"].keys()) > 0:
+                    for i in plots["veh_sigma_pts"].keys():
+                        plots["veh_sigma_pts"][i].remove()
+                plots["veh_sigma_pts"] = {}
                 # draw a pt with arrow for all sigma pts.
                 for i in range(0, 2*n_sig+1):
-                    plots["sigma_pts"][i] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], Config.params["ARROW_LEN"]*cos(msg.X[i*n_sig+2]), Config.params["ARROW_LEN"]*sin(msg.X[i*n_sig+2]), color="cyan", width=0.1)
+                    plots["veh_sigma_pts"][i] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], Config.params["ARROW_LEN"]*cos(msg.X[i*n_sig+2]), Config.params["ARROW_LEN"]*sin(msg.X[i*n_sig+2]), color="cyan", width=0.1)
             else: # just show x,y of pts.
                 X_x = [msg.X[i*n_sig] for i in range(0,2*n_sig+1)]
                 X_y = [msg.X[i*n_sig+1] for i in range(0,2*n_sig+1)]
                 # remove old points.
-                if "sigma_pts" in plots.keys():
-                    plots["sigma_pts"].remove()
-                    del plots["sigma_pts"]
+                if "veh_sigma_pts" in plots.keys():
+                    plots["veh_sigma_pts"].remove()
+                    del plots["veh_sigma_pts"]
                 # plot sigma points.
-                plots["sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=2)
+                plots["veh_sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=2)
+
+            ################# LANDMARK SIGMA POINTS ##################
+            if Config.params["SHOW_LM_SIG_PTS"]:
+                # plot all landmark sigma pts.
+                X_lm_x = []; X_lm_y = []
+                for j in range(2*n_sig+1):
+                    X_lm_x += [msg.X[j*n_sig+i] for i in range(3,n_sig,2)]
+                    X_lm_y += [msg.X[j*n_sig+i+1] for i in range(3,n_sig,2)]
+                # remove old points.
+                if "lm_sigma_pts" in plots.keys():
+                    plots["lm_sigma_pts"].remove()
+                    del plots["lm_sigma_pts"]
+                # plot sigma points.
+                plots["lm_sigma_pts"] = plt.scatter(X_lm_x, X_lm_y, s=30, color="tab:cyan", zorder=1)
+
 
     ############## PARTICLE FILTER LOCALIZATION #####################
     elif filter == "pf":
@@ -218,7 +233,7 @@ def get_true_landmark_map(msg):
     lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
     lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
     # plot the true landmark positions to compare to estimates.
-    plt.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=1)
+    plt.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=2)
 
 def on_click(event):
     # global clicked_points
@@ -268,12 +283,8 @@ def main():
     # make live plot bigger.
     plt.rcParams["figure.figsize"] = (9,9)
 
-    # find the filepath to this package.
-    rospack = rospkg.RosPack()
-    pkg_path = rospack.get_path('data_pkg')
-
     # when the node exits, make the plot.
-    atexit.register(save_plot, pkg_path)
+    atexit.register(save_plot, Config.params["BASE_PKG_PATH"])
 
     # subscribe to the current state.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)

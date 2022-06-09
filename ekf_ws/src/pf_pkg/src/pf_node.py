@@ -9,12 +9,12 @@ import rospy
 from pf import PF
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
-from data_pkg.msg import Command, PFState
+from base_pkg.msg import Command, PFState
 
 # import params script.
 import rospkg
 import importlib.util, sys
-spec = importlib.util.spec_from_file_location("module.name", rospkg.RosPack().get_path('data_pkg')+"/src/import_params.py")
+spec = importlib.util.spec_from_file_location("module.name", rospkg.RosPack().get_path('base_pkg')+"/src/import_params.py")
 module = importlib.util.module_from_spec(spec)
 sys.modules["module.name"] = module
 spec.loader.exec_module(module)

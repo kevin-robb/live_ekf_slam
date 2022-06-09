@@ -11,7 +11,7 @@
 #include "ukf_pkg/ukf.h"
 
 // define queues for messages.
-std::queue<data_pkg::Command::ConstPtr> cmdQueue;
+std::queue<base_pkg::Command::ConstPtr> cmdQueue;
 std::queue<std_msgs::Float32MultiArray::ConstPtr> lmMeasQueue;
 // define state publisher.
 ros::Publisher statePub;
@@ -25,7 +25,7 @@ float readParams() {
     float DT;
     std::string delimeter = " = ";
     std::string line;
-    std::string pkgPath = ros::package::getPath("data_pkg");
+    std::string pkgPath = ros::package::getPath("base_pkg");
     std::ifstream paramsFile(pkgPath+"/config/params.txt", std::ifstream::in);
     std::string token;
     // read all lines from file.
@@ -84,19 +84,19 @@ void ukfIterate(const ros::TimerEvent& event) {
         return;
     }
     // get the next timestep's messages from the queues.
-    data_pkg::Command::ConstPtr odomMsg = cmdQueue.front();
+    base_pkg::Command::ConstPtr odomMsg = cmdQueue.front();
     cmdQueue.pop();
     std_msgs::Float32MultiArray::ConstPtr lmMeasMsg = lmMeasQueue.front();
     lmMeasQueue.pop();
     // call the UKF's update function.
     ukf.ukfIterate(odomMsg, lmMeasMsg);
     // get the current state estimate.
-    data_pkg::UKFState stateMsg = ukf.getState();
+    base_pkg::UKFState stateMsg = ukf.getState();
     // publish it.
     statePub.publish(stateMsg);
 }
 
-void cmdCallback(const data_pkg::Command::ConstPtr& msg) {
+void cmdCallback(const base_pkg::Command::ConstPtr& msg) {
     // receive an odom command and add to the queue.
     cmdQueue.push(msg);
 }
@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
     ros::Subscriber lmMeasSub = node.subscribe("/landmark", 100, lmMeasCallback);
     ros::Subscriber trueMapSub = node.subscribe("/truth/landmarks", 1, trueMapCallback);
     // publish state.
-    statePub = node.advertise<data_pkg::UKFState>("/state/ukf", 1);
+    statePub = node.advertise<base_pkg::UKFState>("/state/ukf", 1);
 
     // timer to update UKF at set frequency.
     ros::Timer ekfIterationTimer = node.createTimer(ros::Duration(DT), &ukfIterate, false);

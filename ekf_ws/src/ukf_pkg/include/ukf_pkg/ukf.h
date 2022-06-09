@@ -7,8 +7,8 @@
 #include <ros/ros.h>
 #include "geometry_msgs/Vector3.h"
 #include "std_msgs/Float32MultiArray.h"
-#include "data_pkg/UKFState.h"
-#include "data_pkg/Command.h"
+#include "base_pkg/UKFState.h"
+#include "base_pkg/Command.h"
 #include <eigen3/Eigen/Dense>
 #include <vector>
 #include <cmath>
@@ -70,12 +70,12 @@ class UKF {
 
     UKF();
     void init(float x_0, float y_0, float yaw_0);
-    data_pkg::UKFState getState();
+    base_pkg::UKFState getState();
     Eigen::MatrixXd nearestSPD();
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
     Eigen::VectorXd sensingModel(Eigen::VectorXd x, int lm_i);
-    void ukfIterate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
-    void predictionStage(data_pkg::Command::ConstPtr cmdMsg);
+    void ukfIterate(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
+    void predictionStage(base_pkg::Command::ConstPtr cmdMsg);
     void updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     void landmarkUpdate(int lm_i, int id, float r, float b);
     void landmarkInsertion(int id, float r, float b);

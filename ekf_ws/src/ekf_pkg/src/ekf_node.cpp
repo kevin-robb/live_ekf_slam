@@ -10,7 +10,7 @@
 #include "ekf_pkg/ekf.h"
 
 // define queues for messages.
-std::queue<data_pkg::Command::ConstPtr> cmdQueue;
+std::queue<base_pkg::Command::ConstPtr> cmdQueue;
 std::queue<std_msgs::Float32MultiArray::ConstPtr> lmMeasQueue;
 // define EKF state publisher.
 ros::Publisher statePub;
@@ -22,7 +22,7 @@ float readParams() {
     float DT;
     std::string delimeter = " = ";
     std::string line;
-    std::string pkgPath = ros::package::getPath("data_pkg");
+    std::string pkgPath = ros::package::getPath("base_pkg");
     std::ifstream paramsFile(pkgPath+"/config/params.txt", std::ifstream::in);
     std::string token;
     // read all lines from file.
@@ -32,6 +32,30 @@ float readParams() {
         if (token == "DT") {
             line.erase(0, line.find(delimeter)+delimeter.length());
             DT = std::stof(line);
+        } else if (token == "v_d") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            ekf.v_d = std::stof(line);
+        } else if (token == "v_th") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            ekf.v_th = std::stof(line);
+        } else if (token == "w_r") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            ekf.w_r = std::stof(line);
+        } else if (token == "w_b") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            ekf.w_b = std::stof(line);
+        } else if (token == "V_00") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            ekf.V(0,0) = std::stof(line);
+        } else if (token == "V_11") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            ekf.V(1,1) = std::stof(line);
+        } else if (token == "W_00") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            ekf.W(0,0) = std::stof(line);
+        } else if (token == "W_11") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            ekf.W(1,1) = std::stof(line);
         }
     }
     // close file.
@@ -54,19 +78,19 @@ void ekfIterate(const ros::TimerEvent& event) {
         return;
     }
     // get the next timestep's messages from the queues.
-    data_pkg::Command::ConstPtr cmdMsg = cmdQueue.front();
+    base_pkg::Command::ConstPtr cmdMsg = cmdQueue.front();
     cmdQueue.pop();
     std_msgs::Float32MultiArray::ConstPtr lmMeasMsg = lmMeasQueue.front();
     lmMeasQueue.pop();
     // call the EKF's update function.
     ekf.update(cmdMsg, lmMeasMsg);
     // get the current state estimate.
-    data_pkg::EKFState stateMsg = ekf.getState();
+    base_pkg::EKFState stateMsg = ekf.getState();
     // publish it.
     statePub.publish(stateMsg);
 }
 
-void cmdCallback(const data_pkg::Command::ConstPtr& msg) {
+void cmdCallback(const base_pkg::Command::ConstPtr& msg) {
     // receive an odom command and add to the queue.
     cmdQueue.push(msg);
 }
@@ -89,7 +113,7 @@ int main(int argc, char **argv) {
     ros::Subscriber cmdSub = node.subscribe("/command", 100, cmdCallback);
     ros::Subscriber lmMeasSub = node.subscribe("/landmark", 100, lmMeasCallback);
     // publish EKF state.
-    statePub = node.advertise<data_pkg::EKFState>("/state/ekf", 1);
+    statePub = node.advertise<base_pkg::EKFState>("/state/ekf", 1);
 
     // timer to update EKF at set frequency.
     ros::Timer ekfIterationTimer = node.createTimer(ros::Duration(DT), &ekfIterate, false);

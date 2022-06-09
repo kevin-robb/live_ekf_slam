@@ -1,0 +1,30 @@
+<launch>
+    <arg name="occ_map_img" default="igvc1.png"/>
+    <arg name="landmark_map" default="igvc1"/>
+    <arg name="use_local_planner" default="true"/>
+    <arg name="tight_control" default="true"/>
+
+    <!-- Select which filter to use. -->
+    <arg name="filter" default="ekf_cpp"/> <!-- options: "ekf_cpp", "ekf_py", "ukf" -->
+    <group if="$(eval arg('filter')=='ekf_cpp')">
+        <!-- C++ EKF node -->
+        <node pkg="ekf_pkg" type="ekf_node" name="ekf_node"  output="screen" />
+    </group>
+    <group if="$(eval arg('filter')=='ekf_py')">
+        <!-- Python3 EKF node -->
+        <node pkg="ekf_pkg" type="ekf_node.py" name="ekf_node"  output="screen" />
+    </group>
+    <group if="$(eval arg('filter')=='ukf')">
+        <!-- UKF node -->
+        <arg name="mode" default="slam"/> <!-- options: "loc", "slam" -->
+        <node pkg="ukf_pkg" type="ukf_node" name="ukf_node" args="$(arg mode)" output="screen" />
+    </group>
+    
+    <!-- Call main sim driver script. -->
+    <include file="$(find base_pkg)/launch/sim_base.launch" >
+        <arg name="occ_map_img" value="$(arg occ_map_img)"/>
+        <arg name="landmark_map" value="$(arg landmark_map)"/>
+        <arg name="use_local_planner" value="$(arg use_local_planner)"/>
+        <arg name="tight_control" value="$(arg tight_control)"/>
+    </include>
+</launch>

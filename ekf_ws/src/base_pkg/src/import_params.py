@@ -12,13 +12,13 @@ class Config:
     def read_params():
         """
         Read params from config file and add to dict in correct data type.
-        @param path to data_pkg.
+        @param path to base_pkg.
         """
         Config.params = {}
         # find the filepath to the params file.
         rospack = rospkg.RosPack()
-        Config.params["DATA_PKG_PATH"] = rospack.get_path('data_pkg')
-        params_file = open(Config.params["DATA_PKG_PATH"]+"/config/params.txt", "r")
+        Config.params["BASE_PKG_PATH"] = rospack.get_path('base_pkg')
+        params_file = open(Config.params["BASE_PKG_PATH"]+"/config/params.txt", "r")
         lines = params_file.readlines()
         # set all params.
         for line in lines:

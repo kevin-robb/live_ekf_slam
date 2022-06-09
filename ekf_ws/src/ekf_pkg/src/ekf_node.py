@@ -10,13 +10,14 @@ and the rest are the positions of M landmarks.
 import rospy
 import numpy as np
 from math import sin, cos, remainder, tau, atan2
-from data_pkg.msg import Command, EKFState
+from base_pkg.msg import Command, EKFState
 from std_msgs.msg import Float32MultiArray
+from geometry_msgs.msg import Vector3
 
 # import params script.
 import rospkg
 import importlib.util, sys
-spec = importlib.util.spec_from_file_location("module.name", rospkg.RosPack().get_path('data_pkg')+"/src/import_params.py")
+spec = importlib.util.spec_from_file_location("module.name", rospkg.RosPack().get_path('base_pkg')+"/src/import_params.py")
 module = importlib.util.module_from_spec(spec)
 sys.modules["module.name"] = module
 spec.loader.exec_module(module)
@@ -29,7 +30,7 @@ state_pub = None
 V = np.array([[params["V_00"],0.0],[0.0,params["V_11"]]])
 W = np.array([[params["W_00"],0.0],[0.0,params["W_11"]]])
 # Initial vehicle state mean and covariance.
-x_t = np.array([[params["x_0"]],[params["y_0"]],[params["yaw_0"]]])
+x_t = None
 P_t = np.array([[0.01**2,0.0,0.0],[0.0,0.01**2,0.0],[0.0,0.0,0.005**2]])
 # Most recent odom reading and landmark measurements.
 odom_queue = []; lm_meas_queue = []
@@ -44,7 +45,7 @@ timestep = 0
 def ekf_iteration(event):
     global x_t, P_t, lm_IDs, lm_meas_queue, odom_queue, timestep
     # skip if params not read yet or there's no prediction or measurement.
-    if W is None or len(odom_queue) < 1 or len(lm_meas_queue) < 1:
+    if W is None or x_t is None or len(odom_queue) < 1 or len(lm_meas_queue) < 1:
         return
     timestep += 1
     # pop the next data off the queue.
@@ -175,10 +176,17 @@ def get_landmarks(msg):
     global lm_meas_queue
     lm_meas_queue.append(msg.data)
 
+def get_init_veh_pose(msg):
+    global x_t
+    # get the vehicle's starting pose.
+    x_t = np.array([[msg.x],[msg.y],[msg.z]])
+
 def main():
     global state_pub
     rospy.init_node('ekf_node')
 
+    # subscribe to the initial veh pose.
+    rospy.Subscriber("/truth/init_veh_pose",Vector3, get_init_veh_pose, queue_size=1)
     # subscribe to landmark detections: [id1,r1,b1,...idN,rN,bN]
     rospy.Subscriber("/landmark", Float32MultiArray, get_landmarks, queue_size=1)
     # subscribe to odom commands/measurements.

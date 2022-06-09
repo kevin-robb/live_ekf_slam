@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>data_pkg</name>
+  <name>base_pkg</name>
   <version>0.0.1</version>
-  <description>Package to handle creation of map, odometry commands, and measurements to feed the EKF.</description>
+  <description>Package to handle creation of map, odometry commands, and measurements to feed the EKF or other filter.</description>
   <maintainer email="kevin.robb@alumni.ou.edu">Kevin Robb</maintainer>
   <license>MIT</license>
 
@@ -24,11 +24,6 @@
   <exec_depend>std_msgs</exec_depend>
   <build_depend>message_generation</build_depend>
   <exec_depend>message_runtime</exec_depend>
-
-  <!-- <build_depend>ekf_pkg</build_depend>
-  <exec_depend>ekf_pkg</exec_depend>
-  <build_depend>ukf_pkg</build_depend>
-  <exec_depend>ukf_pkg</exec_depend> -->
 
   <export>
   </export>

@@ -4,15 +4,10 @@
 EKF::EKF() {
     // set the noise covariance matrices.
     this->V.setIdentity(2,2);
-    this->V(0,0) = 0.02 * 0.02;
-    this->V(1,1) = (0.5*pi/180) * (0.5*pi/180);
     this->W.setIdentity(2,2);
-    this->W(0,0) = 0.1 * 0.1;
-    this->W(1,1) = (pi/180) * (pi/180);
     // initialize state distribution.
     this->x_t.resize(3);
     // starting pose will be set later.
-    this->x_t << 0.0 , -10.0, 0.0;
     this->x_pred.setZero(3);
     this->P_t.setIdentity(3,3);
     this->P_t(0,0) = 0.01 * 0.01;
@@ -34,7 +29,7 @@ void EKF::init(float x_0, float y_0, float yaw_0) {
 }
 
 // perform a full iteration of the EKF for this timestep.
-void EKF::update(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
+void EKF::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // update timestep.
     this->timestep += 1;
 
@@ -155,8 +150,8 @@ void EKF::update(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray
 }
 
 // return the state as a message.
-data_pkg::EKFState EKF::getState() {
-    data_pkg::EKFState stateMsg;
+base_pkg::EKFState EKF::getState() {
+    base_pkg::EKFState stateMsg;
     // timestep.
     stateMsg.timestep = this->timestep;
     // vehicle pose.
