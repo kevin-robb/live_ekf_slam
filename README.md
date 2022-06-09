@@ -22,7 +22,10 @@ Local Planning           |      UKF-SLAM
 :-------------------------:|:-------------------------:
 ![IGVC-like map with the vehicle performing EKF-SLAM to localize on a known occupancy grid, and doing local path planning to progress through the course.](images/igvc1_demo.gif)  |  ![Vehicle following a precomputed TSP-trajectory and performing UKF-SLAM on a map with randomly-placed landmarks.](images/ukf_slam_demo.gif)
 
-<!-- TODO add gifs of driving to clicked pt on blank map, and of creating path w A* on building map to clicked pt. -->
+Pursuing Clicked Point           |       Pursuing Clicked Point
+:-------------------------:|:-------------------------:
+![Vehicle pursuing a point clicked on the map, while performing EKF-SLAM to track its position.](images/pursuing_clicked_pt.gif)  |  ![Vehicle finding a path to a clicked point with A* and navigating with Pure Pursuit.](images/pursuing_clicked_pt_bldg.gif)
+
 
 Some key parameters are set using command line arguments, which have different default values in each launch file to ensure the proper setup for the different demos. These can also be changed when running the launch files by appending `arg=choice` (e.g. `landmark_map:=random`). All other parameters can be modified in `data_pkg/config/params.txt`. Additional occupancy maps can be added to `data_pkg/config/maps`.
 
