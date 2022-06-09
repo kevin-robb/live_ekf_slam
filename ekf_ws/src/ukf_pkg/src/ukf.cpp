@@ -1,17 +1,17 @@
 #include "ukf_pkg/ukf.h"
 
-// init the UKF.
 UKF::UKF() {
+    // init the UKF object.
     // set the noise covariance matrices.
     this->V.setIdentity(2,2);
-    this->V(0,0) = 0.02 * 0.02;
-    this->V(1,1) = (0.5*pi/180) * (0.5*pi/180);
+    // this->V(0,0) = 0.02 * 0.02;
+    // this->V(1,1) = (0.5*pi/180) * (0.5*pi/180);
     this->W.setIdentity(2,2);
-    this->W(0,0) = 0.1 * 0.1;
-    this->W(1,1) = (pi/180) * (pi/180);
+    // this->W(0,0) = 0.1 * 0.1;
+    // this->W(1,1) = (pi/180) * (pi/180);
     // initialize state distribution.
     this->x_t.resize(3);
-    this->x_t << 0.0 , 0.0, 0.0;
+    // this->x_t << 0.0 , 0.0, 0.0;
     this->x_pred.setZero(3);
     this->P_t.setIdentity(3,3);
     this->P_t(0,0) = 0.01 * 0.01;
@@ -21,31 +21,24 @@ UKF::UKF() {
     this->P_pred(0,0) = 0.01 * 0.01;
     this->P_pred(1,1) = 0.01 * 0.01;
     this->P_pred(2,2) = 0.005 * 0.005;
-    // set the sigma stuff to the right starting size.
+    // set the sigma pts matrix to the right starting size.
     this->X.setZero(3,7);
-    // set the expanding process noise.
+    // setup the expanding process noise matrix.
     this->Q.setZero(3,3);
+}
+
+void UKF::init(float x_0, float y_0, float yaw_0) {
+    // set starting vehicle pose.
+    this->x_t << x_0, y_0, yaw_0;
+    // set mean sigma pt weights, since by now W_0 should have been set.
+    this->Wts = Eigen::VectorXd::Constant(7,(1-this->W_0)/6);
+    this->Wts(0) = this->W_0;
+    // set elements of expanding process noise matrix, since now all noise profile info should have been set.
     this->Q(0,0) = this->V(0,0) * cos(this->x_t(2));
     this->Q(1,1) = this->V(0,0) * sin(this->x_t(2));
     this->Q(2,2) = this->V(1,1);
-}
-
-void UKF::init(float x_0, float y_0, float yaw_0, float W_0, bool ukfSlamMode) {
-    // set starting vehicle pose.
-    this->x_t << x_0, y_0, yaw_0;
-    // set mean sigma pt weight.
-    this->W_0 = W_0;
-    this->Wts = Eigen::VectorXd::Constant(7,(1-this->W_0)/6);
-    this->Wts(0) = this->W_0;
-    // set operating mode. (loc or slam)
-    this->ukfSlamMode = ukfSlamMode;
     // set initialized flag.
     this->isInit = true;
-}
-
-void UKF::setTrueMap(std_msgs::Float32MultiArray::ConstPtr trueMapMsg) {
-    // set the true map for localization-only mode.
-    this->map = trueMapMsg->data;    
 }
 
 data_pkg::UKFState UKF::getState() {
@@ -142,7 +135,6 @@ Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
     return z_est;
 }
 
-
 void UKF::ukfIterate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // perform a full iteration of UKF-SLAM for this timestep.
     // update timestep count.
@@ -176,7 +168,6 @@ void UKF::ukfIterate(data_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiA
 
     /////////////// END OF UKF ITERATION ///////////////////
 }
-
 
 void UKF::predictionStage(data_pkg::Command::ConstPtr cmdMsg) {
     ////////////// PREDICTION STAGE /////////////////
@@ -232,7 +223,6 @@ void UKF::predictionStage(data_pkg::Command::ConstPtr cmdMsg) {
     // add process noise cov.
     this->P_pred += this->Q;
 }
-
 
 void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     ///////////////// UPDATE STAGE //////////////////

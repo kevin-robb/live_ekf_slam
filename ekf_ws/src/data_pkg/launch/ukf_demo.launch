@@ -1,10 +1,11 @@
 <launch>
-    <arg name="landmark_map" default="random"/>
+    <arg name="landmark_map" default="random"/> <!-- options: "random", "grid", ... -->
     <arg name="precompute_trajectory" default="true"/>
     <arg name="tight_control" default="false"/>
-    
+
     <!-- UKF node -->
-    <node pkg="ukf_pkg" type="ukf_node" name="ukf_node"  output="screen" />
+    <arg name="mode" default="loc"/> <!-- options: "loc", "slam" -->
+    <node pkg="ukf_pkg" type="ukf_node" name="ukf_node" args="$(arg mode)" output="screen" />
     
     <!-- Call main sim driver script. -->
     <include file="$(find data_pkg)/launch/sim_base.launch" >
