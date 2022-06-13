@@ -13,7 +13,7 @@ from matplotlib.backend_bases import MouseButton
 from matplotlib import pyplot as plt
 import numpy as np
 import atexit
-from math import cos, sin, pi
+from math import cos, sin, pi, atan2, remainder, tau
 from cv_bridge import CvBridge
 from import_params import Config
 
@@ -127,6 +127,8 @@ def update_plot(filter:str, msg):
         if filter == "ukf":
             # extract length of vectors in sigma pts (not necessarily = n).
             n_sig = int(((1+8*len(msg.X))**(1/2) - 1) / 4) # soln to n*(2n+1)=len.
+            # check if we're using UKF with 3x1 or 4x1 veh state.
+            veh_len = 3 if n_sig % 2 == 1 else 4
             ############## VEH POSE SIGMA POINTS #################
             # only show sigma points' veh pose, not landmark info.
             if Config.params["PLOT_UKF_ARROWS"]:
@@ -137,7 +139,8 @@ def update_plot(filter:str, msg):
                 plots["veh_sigma_pts"] = {}
                 # draw a pt with arrow for all sigma pts.
                 for i in range(0, 2*n_sig+1):
-                    plots["veh_sigma_pts"][i] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], Config.params["ARROW_LEN"]*cos(msg.X[i*n_sig+2]), Config.params["ARROW_LEN"]*sin(msg.X[i*n_sig+2]), color="cyan", width=0.1)
+                    yaw = msg.X[i*n_sig+2] if veh_len == 3 else remainder(atan2(msg.X[i*n_sig+3], msg.X[i*n_sig+2]), tau)
+                    plots["veh_sigma_pts"][i] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], Config.params["ARROW_LEN"]*cos(yaw), Config.params["ARROW_LEN"]*sin(yaw), color="cyan", width=0.1)
             else: # just show x,y of pts.
                 X_x = [msg.X[i*n_sig] for i in range(0,2*n_sig+1)]
                 X_y = [msg.X[i*n_sig+1] for i in range(0,2*n_sig+1)]
@@ -152,8 +155,6 @@ def update_plot(filter:str, msg):
             if Config.params["SHOW_LM_SIG_PTS"]:
                 # plot all landmark sigma pts.
                 X_lm_x = []; X_lm_y = []
-                # check if we're using UKF with 3x1 or 4x1 veh state.
-                veh_len = 3 if n_sig % 2 == 1 else 4
                 for j in range(2*n_sig+1):
                     X_lm_x += [msg.X[j*n_sig+i] for i in range(veh_len,n_sig,2)]
                     X_lm_y += [msg.X[j*n_sig+i+1] for i in range(veh_len,n_sig,2)]

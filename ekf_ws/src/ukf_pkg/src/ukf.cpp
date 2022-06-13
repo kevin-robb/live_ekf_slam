@@ -106,11 +106,12 @@ Eigen::MatrixXd UKF::nearestSPD() {
 Eigen::VectorXd UKF::motionModel(Eigen::VectorXd x, float u_d, float u_th) {
     // predict to propagate state mean forward one timestep using commanded odometry.
     Eigen::VectorXd x_pred = x;
-    x_pred(0) = x(0)+(u_d+this->v_d)*std::cos(x(2));
-    x_pred(1) = x(1)+(u_d+this->v_d)*std::sin(x(2));
-    float yaw = remainder(x(2) + u_th + this->v_th, 2*pi);
-    x_pred(2) = cos(yaw);
-    x_pred(3) = sin(yaw);
+    float yaw = remainder(atan2(x(3),x(2)), 2*pi);
+    x_pred(0) = x(0)+(u_d+this->v_d)*cos(yaw);
+    x_pred(1) = x(1)+(u_d+this->v_d)*sin(yaw);
+    float new_yaw = remainder(yaw + u_th + this->v_th, 2*pi);
+    x_pred(2) = cos(new_yaw);
+    x_pred(3) = sin(new_yaw);
     return x_pred;
 }
 
