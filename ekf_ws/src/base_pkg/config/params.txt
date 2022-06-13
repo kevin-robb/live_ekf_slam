@@ -11,8 +11,8 @@ DT = 0.05
 
 # ----- Initial Vehicle Pose -----
 # (will be overridden for some maps)
-x_0 = -9.0
-y_0 = 9.0
+x_0 = 0.0
+y_0 = 0.0
 yaw_0 = 0.0
 
 # ----- Constraints -----

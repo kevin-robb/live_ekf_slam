@@ -152,9 +152,11 @@ def update_plot(filter:str, msg):
             if Config.params["SHOW_LM_SIG_PTS"]:
                 # plot all landmark sigma pts.
                 X_lm_x = []; X_lm_y = []
+                # check if we're using UKF with 3x1 or 4x1 veh state.
+                veh_len = 3 if n_sig % 2 == 1 else 4
                 for j in range(2*n_sig+1):
-                    X_lm_x += [msg.X[j*n_sig+i] for i in range(3,n_sig,2)]
-                    X_lm_y += [msg.X[j*n_sig+i+1] for i in range(3,n_sig,2)]
+                    X_lm_x += [msg.X[j*n_sig+i] for i in range(veh_len,n_sig,2)]
+                    X_lm_y += [msg.X[j*n_sig+i+1] for i in range(veh_len,n_sig,2)]
                 # remove old points.
                 if "lm_sigma_pts" in plots.keys():
                     plots["lm_sigma_pts"].remove()

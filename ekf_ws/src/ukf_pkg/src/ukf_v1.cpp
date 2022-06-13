@@ -6,43 +6,39 @@ UKF::UKF() {
     this->V.setIdentity(2,2);
     this->W.setIdentity(2,2);
     // initialize state distribution.
-    this->x_t.resize(4);
-    this->x_pred.setZero(4);
-    this->P_t.setIdentity(4,4);
+    this->x_t.resize(3);
+    this->x_pred.setZero(3);
+    this->P_t.setIdentity(3,3);
     this->P_t(0,0) = 0.01 * 0.01;
     this->P_t(1,1) = 0.01 * 0.01;
     this->P_t(2,2) = 0.005 * 0.005;
-    this->P_t(3,3) = 0.005 * 0.005;
-    this->P_pred.setIdentity(4,4);
+    this->P_pred.setIdentity(3,3);
     this->P_pred(0,0) = 0.01 * 0.01;
     this->P_pred(1,1) = 0.01 * 0.01;
     this->P_pred(2,2) = 0.005 * 0.005;
-    this->P_pred(3,3) = 0.005 * 0.005;
     // set the sigma pts matrix to the right starting size.
-    this->X.setZero(4,9);
+    this->X.setZero(3,7);
     // setup the expanding process noise matrix.
-    this->Q.setZero(4,4);
+    this->Q.setZero(3,3);
 }
 
 void UKF::init(float x_0, float y_0, float yaw_0) {
     // set starting vehicle pose.
-    this->x_t << x_0, y_0, cos(yaw_0), sin(yaw_0);
+    this->x_t << x_0, y_0, yaw_0;
     // set mean sigma pt weights, since by now W_0 should have been set.
-    this->Wts = Eigen::VectorXd::Constant(9,(1-this->W_0)/8);
+    this->Wts = Eigen::VectorXd::Constant(7,(1-this->W_0)/6);
     this->Wts(0) = this->W_0;
     // set elements of expanding process noise matrix, since now all noise profile info should have been set.
-    float yaw = remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi);
-    this->Q(0,0) = this->V(0,0) * cos(yaw);
-    this->Q(1,1) = this->V(0,0) * sin(yaw);
-    this->Q(2,2) = this->V(1,1) * cos(yaw);
-    this->Q(3,3) = this->V(1,1) * sin(yaw);
+    this->Q(0,0) = this->V(0,0) * cos(this->x_t(2));
+    this->Q(1,1) = this->V(0,0) * sin(this->x_t(2));
+    this->Q(2,2) = this->V(1,1);
     // set initialized flag.
     this->isInit = true;
 }
 
 base_pkg::UKFState UKF::getState() {
     // state length for convenience.
-    int n = 2 * this->M + 4;
+    int n = 2 * this->M + 3;
     // return the state as a message.
     base_pkg::UKFState stateMsg;
     // timestep.
@@ -50,15 +46,14 @@ base_pkg::UKFState UKF::getState() {
     // vehicle pose.
     stateMsg.x_v = this->x_t(0);
     stateMsg.y_v = this->x_t(1);
-    stateMsg.yaw_v = remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi);
-
+    stateMsg.yaw_v = this->x_t(2);
     // landmarks.
     stateMsg.M = this->M;
     std::vector<float> lm;
     for (int i=0; i<this->M; ++i) {
         lm.push_back((float) this->lm_IDs[i]);
-        lm.push_back(this->x_t(4+i*2));
-        lm.push_back(this->x_t(4+i*2+1));
+        lm.push_back(this->x_t(3+i*2));
+        lm.push_back(this->x_t(3+i*2+1));
     }
     stateMsg.landmarks = lm;
     // covariance. collapse all rows side by side into a vector.
@@ -92,7 +87,7 @@ Eigen::MatrixXd UKF::nearestSPD() {
     // first compute nearest symmetric matrix.
     this->Y = 0.5 * (this->P_t + this->P_t.transpose());
     // multiply by inner coefficient for UKF.
-    this->Y *= (2*this->M+4)/(1-this->W_0);
+    this->Y *= (2*this->M+3)/(1-this->W_0);
     // compute eigen decomposition of Y.
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(this->Y);
     this->D = solver.eigenvalues();
@@ -108,21 +103,18 @@ Eigen::VectorXd UKF::motionModel(Eigen::VectorXd x, float u_d, float u_th) {
     Eigen::VectorXd x_pred = x;
     x_pred(0) = x(0)+(u_d+this->v_d)*std::cos(x(2));
     x_pred(1) = x(1)+(u_d+this->v_d)*std::sin(x(2));
-    float yaw = remainder(x(2) + u_th + this->v_th, 2*pi);
-    x_pred(2) = cos(yaw);
-    x_pred(3) = sin(yaw);
+    x_pred(2) = remainder(x(2) + u_th + this->v_th, 2*pi);
     return x_pred;
 }
 
 Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
     Eigen::VectorXd z_est = Eigen::VectorXd::Zero(2);
-    float yaw = remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi);
     if (this->ukfSlamMode) {
         // SLAM mode. lm_i is the index of this landmark in our state.
         // Generate measurement we expect from current estimates
         // of veh pose and landmark position.
         z_est(0) = std::sqrt(std::pow(x(lm_i)-x(0), 2) + std::pow(x(lm_i+1)-x(1), 2)) + this->w_r;
-        z_est(1) = std::atan2(x(lm_i+1)-x(1), x(lm_i)-x(0)) - yaw + this->w_b;
+        z_est(1) = std::atan2(x(lm_i+1)-x(1), x(lm_i)-x(0)) - x(2) + this->w_b;
     } else {
         // localization-only, so we have access to the true map.
         // lm_i is the known ID of the landmark.
@@ -130,7 +122,7 @@ Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
         // current belief of the vehicle pose, and the known
         // location of the lm_i landmark on the true map.
         z_est(0) = std::sqrt(std::pow(this->map[lm_i*3+1]-x(0), 2) + std::pow(this->map[lm_i*3+2]-x(1), 2)) + this->w_r;
-        z_est(1) = std::atan2(this->map[lm_i*3+2]-x(1), this->map[lm_i*3+1]-x(0)) - yaw + this->w_b;
+        z_est(1) = std::atan2(this->map[lm_i*3+2]-x(1), this->map[lm_i*3+1]-x(0)) - x(2) + this->w_b;
     }
     // cap bearing within (-pi, pi).
     z_est(1) = remainder(z_est(1), 2*pi);
@@ -144,7 +136,7 @@ void UKF::ukfIterate(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiA
     this->timestep += 1;
 
     // get vector length.
-    int n = this->M*2 + 4;
+    int n = this->M*2 + 3;
     // expand the sizes of everything if the state length has grown.
     if (n != this->X.rows()) {
         // expand the size of sigma pts matrices.
@@ -157,13 +149,11 @@ void UKF::ukfIterate(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiA
         // expand the process noise with zeros.
         // the elements will already be set every iteration; only need to update its size.
         this->Q.setZero(n,n);
+        this->Q(2,2) = this->V(1,1);
     }
     // update the process noise components for current yaw.
-    float yaw = remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi);
-    this->Q(0,0) = this->V(0,0) * cos(yaw);
-    this->Q(1,1) = this->V(0,0) * sin(yaw);
-    this->Q(2,2) = this->V(1,1) * cos(yaw);
-    this->Q(3,3) = this->V(1,1) * sin(yaw);
+    this->Q(0,0) = this->V(0,0) * cos(this->x_t(2));
+    this->Q(1,1) = this->V(0,0) * sin(this->x_t(2));
 
     ////////////// PREDICTION STAGE /////////////////
     predictionStage(cmdMsg);
@@ -181,7 +171,7 @@ void UKF::predictionStage(base_pkg::Command::ConstPtr cmdMsg) {
     float u_th = cmdMsg->ang;
 
     // get vector length.
-    int n = this->M*2 + 4;
+    int n = this->M*2 + 3;
 
     // compute the sqrt cov term.
     try {
@@ -198,6 +188,10 @@ void UKF::predictionStage(base_pkg::Command::ConstPtr cmdMsg) {
     for (int i=1; i<=n; ++i) {
         this->X.col(i+n) = this->x_t - this->sqtP.col(i-1);
     }
+    // cap all headings within (-pi, pi).
+    for (int i=0; i<2*n+1; ++i) {
+        this->X(2,i) = remainder(this->X(2,i), 2*pi);
+    }
 
     // propagate sigma vectors with motion model f.
     this->X_pred.setZero(n,2*n+1);
@@ -209,7 +203,12 @@ void UKF::predictionStage(base_pkg::Command::ConstPtr cmdMsg) {
     this->complex_angle.setZero(2);
     for (int i=0; i<2*n+1; ++i) {
         this->x_pred += this->Wts(i) * this->X_pred.col(i);
+        // convert angles to vectors in complex plane to average them correctly (assume unit circle).
+        this->complex_angle(0) += this->Wts(i) * cos(this->X_pred.col(i)(2)); // real component.
+        this->complex_angle(1) += this->Wts(i) * sin(this->X_pred.col(i)(2)); // imaginary component.
     }
+    // convert averaged heading back from complex to angle. also cap w/in (-pi, pi).
+    this->x_pred(2) = remainder(atan2(this->complex_angle(1), this->complex_angle(0)), 2*pi);
 
     //compute state covariance prediction.
     this->P_pred.setZero(n, n);
@@ -223,7 +222,7 @@ void UKF::predictionStage(base_pkg::Command::ConstPtr cmdMsg) {
 void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     ///////////////// UPDATE STAGE //////////////////
     // get vector length.
-    int n = this->M*2 + 4;
+    int n = this->M*2 + 3;
 
     // extract landmark measurements.
     std::vector<float> lm_meas = lmMeasMsg->data;
@@ -275,12 +274,12 @@ void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
     //////////// LANDMARK UPDATE ///////////
     if (this->ukfSlamMode) {
         // get index of this landmark in the state.
-        lm_i = lm_i*2+4;
+        lm_i = lm_i*2+3;
     } else {
         // get landmark's unique identifier.
         lm_i = id;
     }
-    int n = this->M*2+4;
+    int n = this->M*2+3;
     // get meas estimate for all sigma points.
     this->X_zest.setZero(2,2*n+1);
     for (int i=0; i<2*n+1; ++i) {
@@ -291,7 +290,12 @@ void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
     this->complex_angle.setZero(2);
     for (int i=0; i<2*n+1; ++i) {
         this->z_est(0) += this->Wts(i) * this->X_zest.col(i)(0);
+        // convert angles to vectors in complex plane to average them correctly (assume unit circle).
+        this->complex_angle(0) += this->Wts(i) * cos(this->X_zest.col(i)(1)); // real component.
+        this->complex_angle(1) += this->Wts(i) * sin(this->X_zest.col(i)(1)); // imaginary component.
     }
+    // convert averaged heading back from complex to angle. also cap w/in (-pi, pi).
+    this->z_est(1) = remainder(atan2(this->complex_angle(1), this->complex_angle(0)), 2*pi);
     
     // compute innovation covariance.
     this->S.setZero(2, 2);
@@ -309,7 +313,7 @@ void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
     for (int i=0; i<2*n+1; ++i) {
         this->diff = (this->X_pred.col(i) - this->x_pred);
         // keep angles in range.
-        // this->diff(2) = remainder(this->diff(2), 2*pi);
+        this->diff(2) = remainder(this->diff(2), 2*pi);
         this->diff2 = (this->X_zest.col(i) - this->z_est);
         this->diff2(1) = remainder(this->diff2(1), 2*pi);
         // add cross covariance contribution.
@@ -324,19 +328,18 @@ void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
     this->innovation(1) = remainder(this->innovation(1), 2*pi);
     this->x_pred = this->x_pred + this->K * this->innovation;
     // cap heading within (-pi, pi).
-    // this->x_pred(2) = remainder(this->x_pred(2), 2*pi);
+    this->x_pred(2) = remainder(this->x_pred(2), 2*pi);
     this->P_pred = this->P_pred - this->K * this->S * this->K.transpose();
 }
 
 void UKF::landmarkInsertion(int id, float r, float b) {
     // slam mode, and this is a new landmark.
     /////////// LANDMARK INSERTION /////////
-    int n = this->M*2+4;
+    int n = this->M*2+3;
     // resize the state to fit the new landmark.
-    float yaw = remainder(atan2(this->x_pred(3), this->x_pred(2)), 2*pi);
     this->x_pred.conservativeResize(n+2);
-    this->x_pred(n) = this->x_pred(0) + r*cos(yaw+b);
-    this->x_pred(n+1) = this->x_pred(1) + r*sin(yaw+b);
+    this->x_pred(n) = this->x_pred(0) + r*cos(this->x_pred(2)+b);
+    this->x_pred(n+1) = this->x_pred(1) + r*sin(this->x_pred(2)+b);
     // add landmark ID to the list.
     this->lm_IDs.push_back(id);
 
@@ -348,5 +351,5 @@ void UKF::landmarkInsertion(int id, float r, float b) {
     this->P_pred = this->p_temp;
 
     // increment number of landmarks and update state size.
-    this->M += 1;
+    this->M += 1; //n += 2;
 }
