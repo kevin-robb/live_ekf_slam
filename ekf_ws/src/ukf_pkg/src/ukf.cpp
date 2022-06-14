@@ -5,6 +5,7 @@ UKF::UKF() {
     // set the noise covariance matrices.
     this->V.setIdentity(2,2);
     this->W.setIdentity(2,2);
+    this->R.setIdentity(3,3);
     // initialize state distribution.
     this->x_t.resize(4);
     this->x_pred.setZero(4);
@@ -36,6 +37,8 @@ void UKF::init(float x_0, float y_0, float yaw_0) {
     this->Q(1,1) = this->V(0,0) * sin(yaw);
     this->Q(2,2) = this->V(1,1) * cos(yaw);
     this->Q(3,3) = this->V(1,1) * sin(yaw);
+    // set range noise of sensing noise matrix.
+    this->R(0,0) = this->W(0,0) * cos(yaw);
     // set initialized flag.
     this->isInit = true;
 }
@@ -116,14 +119,15 @@ Eigen::VectorXd UKF::motionModel(Eigen::VectorXd x, float u_d, float u_th) {
 }
 
 Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
-    Eigen::VectorXd z_est = Eigen::VectorXd::Zero(2);
+    Eigen::VectorXd z_est = Eigen::VectorXd::Zero(3);
     float yaw = remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi);
+    float beta;
     if (this->ukfSlamMode) {
         // SLAM mode. lm_i is the index of this landmark in our state.
         // Generate measurement we expect from current estimates
         // of veh pose and landmark position.
         z_est(0) = std::sqrt(std::pow(x(lm_i)-x(0), 2) + std::pow(x(lm_i+1)-x(1), 2)) + this->w_r;
-        z_est(1) = std::atan2(x(lm_i+1)-x(1), x(lm_i)-x(0)) - yaw + this->w_b;
+        beta = std::atan2(x(lm_i+1)-x(1), x(lm_i)-x(0)) - yaw + this->w_b;
     } else {
         // localization-only, so we have access to the true map.
         // lm_i is the known ID of the landmark.
@@ -131,11 +135,13 @@ Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
         // current belief of the vehicle pose, and the known
         // location of the lm_i landmark on the true map.
         z_est(0) = std::sqrt(std::pow(this->map[lm_i*3+1]-x(0), 2) + std::pow(this->map[lm_i*3+2]-x(1), 2)) + this->w_r;
-        z_est(1) = std::atan2(this->map[lm_i*3+2]-x(1), this->map[lm_i*3+1]-x(0)) - yaw + this->w_b;
+        beta = std::atan2(this->map[lm_i*3+2]-x(1), this->map[lm_i*3+1]-x(0)) - yaw + this->w_b;
     }
+    // extract complex vector for beta.
+    z_est(1) = cos(beta);
+    z_est(2) = sin(beta);
     // cap bearing within (-pi, pi).
-    z_est(1) = remainder(z_est(1), 2*pi);
-
+    // z_est(1) = remainder(z_est(1), 2*pi);
     return z_est;
 }
 
@@ -165,6 +171,9 @@ void UKF::ukfIterate(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiA
     this->Q(1,1) = this->V(0,0) * sin(yaw);
     this->Q(2,2) = this->V(1,1) * cos(yaw);
     this->Q(3,3) = this->V(1,1) * sin(yaw);
+    // update the sensing noise components for current yaw.
+    this->R(1,1) = this->W(1,1) * cos(yaw);
+    this->R(2,2) = this->W(1,1) * sin(yaw);
 
     ////////////// PREDICTION STAGE /////////////////
     predictionStage(cmdMsg);
@@ -207,7 +216,6 @@ void UKF::predictionStage(base_pkg::Command::ConstPtr cmdMsg) {
     }
     // compute state mean prediction.
     this->x_pred.setZero(n);
-    this->complex_angle.setZero(2);
     for (int i=0; i<2*n+1; ++i) {
         this->x_pred += this->Wts(i) * this->X_pred.col(i);
     }
@@ -283,49 +291,48 @@ void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
     }
     int n = this->M*2+4;
     // get meas estimate for all sigma points.
-    this->X_zest.setZero(2,2*n+1);
+    this->X_zest.setZero(3,2*n+1);
     for (int i=0; i<2*n+1; ++i) {
         this->X_zest.col(i) = sensingModel(this->X_pred.col(i), lm_i);
     }
     // compute overall measurement estimate.
-    this->z_est.setZero(2);
-    this->complex_angle.setZero(2);
+    this->z_est.setZero(3);
     for (int i=0; i<2*n+1; ++i) {
         this->z_est(0) += this->Wts(i) * this->X_zest.col(i)(0);
+        // beta component is kept in a complex vector for averaging to work.
+        this->z_est(1) += this->Wts(i) * this->X_zest.col(i)(1);
+        this->z_est(2) += this->Wts(i) * this->X_zest.col(i)(2);
     }
+    // normalize angle vector.
+    float beta_len = sqrt(this->z_est(1)*this->z_est(1) + this->z_est(2)*this->z_est(2));
+    this->z_est(1) = this->z_est(1) / beta_len;
+    this->z_est(2) = this->z_est(2) / beta_len;
     
     // compute innovation covariance.
-    this->S.setZero(2, 2);
+    this->S.setZero(3, 3);
     for (int i=0; i<2*n+1; ++i) {
-        this->diff = (this->X_zest.col(i) - this->z_est);
-        // keep angle in range.
-        this->diff(1) = remainder(this->diff(1), 2*pi);
         // add innovation covariance contribution.
-        this->S += this->Wts(i) * this->diff * this->diff.transpose();
+        this->S += this->Wts(i) * (this->X_zest.col(i) - this->z_est) * (this->X_zest.col(i) - this->z_est).transpose();
     }
     // add sensing noise cov.
-    this->S += this->W;
+    this->S += this->R;
     // compute cross covariance b/w x_pred and z_est.
-    this->C.setZero(n,2);
+    this->C.setZero(n,3);
     for (int i=0; i<2*n+1; ++i) {
-        this->diff = (this->X_pred.col(i) - this->x_pred);
-        // keep angles in range.
-        // this->diff(2) = remainder(this->diff(2), 2*pi);
-        this->diff2 = (this->X_zest.col(i) - this->z_est);
-        this->diff2(1) = remainder(this->diff2(1), 2*pi);
         // add cross covariance contribution.
-        this->C += this->Wts(i) * this->diff * this->diff2.transpose();
+        this->C += this->Wts(i) * (this->X_pred.col(i) - this->x_pred) * (this->X_zest.col(i) - this->z_est).transpose();
     }
     // compute kalman gain.
     this->K = this->C * this->S.inverse();
 
-    // compute the posterior distribution.
-    this->z(0) = r; this->z(1) = b;
+    // set true measurement.
+    this->z(0) = r; this->z(1) = cos(b); this->z(2) = sin(b);
+    // compute innovation, and cap angle in range.
+    std::cout << z_est << std::endl << std::flush;
     this->innovation = (this->z - this->z_est);
-    this->innovation(1) = remainder(this->innovation(1), 2*pi);
+    // this->innovation(1) = remainder(this->innovation(1), 2*pi);
+    // compute the posterior distribution.
     this->x_pred = this->x_pred + this->K * this->innovation;
-    // cap heading within (-pi, pi).
-    // this->x_pred(2) = remainder(this->x_pred(2), 2*pi);
     this->P_pred = this->P_pred - this->K * this->S * this->K.transpose();
 }
 

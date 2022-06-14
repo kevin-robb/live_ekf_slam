@@ -38,18 +38,15 @@ class UKF {
     float W_0 = 0.2; // mean weight.
     Eigen::MatrixXd X_pred; // propagated sigma pts.
     Eigen::MatrixXd X_zest; // meas ests for each sigma pt.
-    Eigen::VectorXd diff; // meas est differences for computing covariances.
-    Eigen::VectorXd diff2; // meas est differences for computing covariances.
     Eigen::VectorXd z_est; // combined z_est.
     Eigen::MatrixXd C; // cross cov b/w x_pred and z_est.
     Eigen::MatrixXd S; // innov cov.
     Eigen::MatrixXd K; // kalman gain.
     // current measurement.
-    Eigen::VectorXd z = Eigen::VectorXd::Zero(2);
-    Eigen::VectorXd innovation = Eigen::VectorXd::Zero(2);
+    Eigen::VectorXd z = Eigen::VectorXd::Zero(3);
+    Eigen::VectorXd innovation = Eigen::VectorXd::Zero(3);
     // predicted state distribution.
     Eigen::VectorXd x_pred;
-    Eigen::Vector2d complex_angle =  Eigen::Vector2d::Zero(2); // temp storage for converting hdg to complex # during averaging.
     Eigen::MatrixXd P_pred;
     Eigen::MatrixXd p_temp; // temp matrix used for P update.
     // landmark IDs.
@@ -65,6 +62,7 @@ class UKF {
     float w_r = 0;
     float w_b = 0;
     Eigen::MatrixXd W;
+    Eigen::MatrixXd R; // expanded for cov summation.
     // true map for localization-only mode.
     std::vector<float> map;
 
