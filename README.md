@@ -27,12 +27,12 @@ Pursuing Clicked Point           |       Pursuing Clicked Point
 ![Vehicle pursuing a point clicked on the map, while performing EKF-SLAM to track its position.](images/pursuing_clicked_pt.gif)  |  ![Vehicle finding a path to a clicked point with A* and navigating with Pure Pursuit.](images/pursuing_clicked_pt_bldg.gif)
 
 
-Some key parameters are set using command line arguments, which have different default values in each launch file to ensure the proper setup for the different demos. These can also be changed when running the launch files by appending `arg=choice` (e.g. `landmark_map:=random`). All other parameters can be modified in `data_pkg/config/params.txt`. Additional occupancy maps can be added to `data_pkg/config/maps`.
+Some key parameters are set using command line arguments, which have different default values in each launch file to ensure the proper setup for the different demos. These can also be changed when running the launch files by appending `arg:=choice` (e.g. `landmark_map:=random`). All other parameters can be modified in `data_pkg/config/params.txt`. Additional occupancy maps can be added to `data_pkg/config/maps`.
 
-My full derivation of the math for the EKF is [included as a pdf](docs/EKF_SLAM_Derivation.pdf). It contains separate derivations for EKF Localization, EKF Mapping, and the combined EKF-SLAM which is implemented in this codebase. I've implemented Online SLAM, meaning we simultaneously estimate the current vehicle pose and the landmark positions, but we don't retroactively estimate all previous vehicle poses. That larger problem is called Full SLAM.
+My full derivation of the math for this project is [included as a pdf](docs/EKF_SLAM_Derivation.pdf). It contains separate derivations for EKF Localization, EKF Mapping, and the combined EKF-SLAM which is implemented in this codebase. I then derive my UKF-SLAM implementation, and include overall context and explanation for much of this field of study.
 
 # Running it
-To run any of these demos, first run the following commands after cloning this repo.
+To run any of these demos, first run the following commands after cloning this repo to build the project.
 
     cd ekf_ws
     catkin_make
