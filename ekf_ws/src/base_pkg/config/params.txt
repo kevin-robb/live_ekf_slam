@@ -23,6 +23,9 @@ ODOM_TH_MAX = 0.0546
 RANGE_MAX = 4.0
 FOV_MIN = -3.141592653589793
 FOV_MAX = 3.141592653589793
+# limitations on measurements:
+LM_ID_IS_KNOWN = False
+MIN_LM_SEPARATION = 0.1
 
 # ----- Noise Profiles -----
 # process noise mean.

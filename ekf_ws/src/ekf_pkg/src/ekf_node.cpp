@@ -6,6 +6,7 @@
 #include <string>
 #include <fstream>
 #include <ros/package.h>
+#include <boost/algorithm/string.hpp>
 
 #include "ekf_pkg/ekf.h"
 
@@ -56,6 +57,13 @@ float readParams() {
         } else if (token == "W_11") {
             line.erase(0, line.find(delimeter)+delimeter.length());
             ekf.W(1,1) = std::stof(line);
+        } else if (token == "MIN_LM_SEPARATION") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            ekf.min_landmark_separation = std::stof(line);
+        } else if (token == "LM_ID_IS_KNOWN") {
+            line.erase(0, line.find(delimeter)+delimeter.length());
+            boost::algorithm::to_lower(line);
+            ekf.landmark_ID_is_known = line == "true";
         }
     }
     // close file.

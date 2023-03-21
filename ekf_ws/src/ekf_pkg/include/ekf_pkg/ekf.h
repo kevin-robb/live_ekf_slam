@@ -15,6 +15,8 @@
 class EKF {
     public:
     bool isInit = false;
+    bool landmark_ID_is_known = false;
+    float min_landmark_separation; // two detections less than this distance apart will be considered the same landmark.
     // current timestep.
     int timestep = 0;
     // state distribution.

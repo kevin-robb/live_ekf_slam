@@ -67,15 +67,39 @@ void EKF::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray
     // there is at least one detection, so we must update each individually.
     for (int l=0; l<num_landmarks; ++l) {
         // extract the landmark details.
-        int id = (int) lm_meas[l*3];
         float r = lm_meas[l*3+1];
         float b = lm_meas[l*3+2];
-        // check if we have seen this landmark before.
+
+        // need to determine index of landmark in lm_IDs (and thus the state).
         int i = -1;
-        for (int j=0; j<M; ++j) {
-            if (this->lm_IDs[j] == id) {
-                i = j;
-                break;
+        // check if the landmark ID was provided, or if we need to determine it ourselves.
+        int id;
+        if (!this->landmark_ID_is_known) {
+            // ID was not given.
+            id = this->M; // if this is a new landmark, it will be assigned the next available ID in ascending order.
+            // we need to determine if this is a new or existing landmark that we've detected.
+            // compute the location this new landmark was detected at.
+            float x_detected = this->x_pred(0) + r * cos(this->x_pred(2) + b);
+            float y_detected = this->x_pred(1) + r * sin(this->x_pred(2) + b);
+            // we will use the detected location to compare to all previously detected landmarks, and declare a match if the position difference is small.
+            for (int j=0; j<this->M; ++j) {
+                float x_diff = abs(x_detected - this->x_pred(3+2*j));
+                float y_diff = abs(y_detected - this->x_pred(3+2*j+1));
+                if (x_diff < this->min_landmark_separation && y_diff < this->min_landmark_separation) {
+                    i = j;
+                    id = j;
+                    break;
+                }
+            }
+        } else {
+            // landmark ID was provided with the measurement.
+            id = (int) lm_meas[l*3];
+            // check if we have seen this landmark before.
+            for (int j=0; j<this->M; ++j) {
+                if (this->lm_IDs[j] == id) {
+                    i = j;
+                    break;
+                }
             }
         }
         if (i != -1) { // the landmark was found.
