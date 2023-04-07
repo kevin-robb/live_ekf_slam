@@ -87,13 +87,13 @@ void iterate(const ros::TimerEvent& event) {
             statePub.publish(stateMsg);
             break;
         }
-        case FilterChoice::UKF_LOC: 
-        case FilterChoice::UKF_SLAM: {
+        case FilterChoice::UKF_LOC ... FilterChoice::UKF_SLAM: {
             base_pkg::UKFState stateMsg = filter->getUKFState();
             statePub.publish(stateMsg);
             break;
         }
         default: {
+            throw std::runtime_error("Not publishing anything for the state.");
             ///\todo: need to publish something for state so the sim will keep going?
             break;
         }
@@ -126,6 +126,8 @@ int main(int argc, char **argv) {
     ros::Subscriber lmMeasSub = node.subscribe("/landmark", 100, lmMeasCallback);
     // get the initial veh pose and init the filter.
     ros::Subscriber initSub = node.subscribe("/truth/init_veh_pose", 1, initCallback);
+    // get the true landmark map (used for localization-only filters).
+    ros::Subscriber trueMapSub = node.subscribe("/truth/landmarks", 1, trueMapCallback);
 
     // read config parameters and setup the specific filter instance.
     float DT = readParams();
@@ -133,20 +135,16 @@ int main(int argc, char **argv) {
     // publish localization state.
     // Not all filters will necessarily have the same (or any) state output.
     switch (filter->type) {
-        case FilterChoice::EKF_SLAM: {
+        case FilterChoice::EKF_SLAM:
             statePub = node.advertise<base_pkg::EKFState>("/state/ekf", 1);
             break;
-        }
-        case FilterChoice::UKF_LOC: 
-        case FilterChoice::UKF_SLAM: {
+        case FilterChoice::UKF_LOC ... FilterChoice::UKF_SLAM:
             statePub = node.advertise<base_pkg::UKFState>("/state/ukf", 1);
             break;
-        }
-        default: {
+        default:
             throw std::runtime_error("Not setting up any state publisher.");
             ///\todo: need to publish something for state so the sim will keep going?
             break;
-        }
     }
 
     // timer to update filter at set frequency.
