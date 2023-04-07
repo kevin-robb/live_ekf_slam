@@ -19,7 +19,7 @@ class PurePursuit:
         # update PID terms.
         P = 0.9 * beta # proportional to hdg error.
         I = 0.01 * PurePursuit.integ # integral to correct systematic error.
-        D = 0.4 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
+        D = 0.4 * (beta - PurePursuit.err_prev) / PurePursuit.config["dt"] # slope to reduce oscillation.
         ang = P + I + D
         # compute forward velocity control command using hdg error beta.
         fwd = (1 - abs(beta / pi))**4 + 0.05
@@ -30,7 +30,7 @@ class PurePursuit:
         # update PID terms.
         P = 0.5 * beta # proportional to hdg error.
         I = 0.0 * PurePursuit.integ # integral to correct systematic error.
-        D = 0.0 * (beta - PurePursuit.err_prev) / PurePursuit.params["DT"] # slope to reduce oscillation.
+        D = 0.0 * (beta - PurePursuit.err_prev) / PurePursuit.config["dt"] # slope to reduce oscillation.
         ang = P + I + D
         # compute forward velocity control command using hdg error beta.
         fwd = 0.02 * (1 - abs(beta / pi))**12 + 0.01
@@ -52,9 +52,9 @@ class PurePursuit:
 
         # define lookahead point.
         lookahead_pt = None
-        lookahead_dist = PurePursuit.params["LOOKAHEAD_DIST_INITIAL"] # starting search radius.
+        lookahead_dist = PurePursuit.config["path_planning"]["lookahead_dist_init"] # starting search radius.
         # look until we find the path, or give up at the maximum dist.
-        while lookahead_pt is None and lookahead_dist <= PurePursuit.params["LOOKAHEAD_DIST_MAX"]: 
+        while lookahead_pt is None and lookahead_dist <= PurePursuit.config["path_planning"]["lookahead_dist_max"]: 
             lookahead_pt = PurePursuit.choose_lookahead_pt(cur, lookahead_dist)
             lookahead_dist *= 1.25
         # make sure we actually found the path.
@@ -68,7 +68,7 @@ class PurePursuit:
         beta = remainder(gb - cur[2], tau)
 
         # update global integral term.
-        PurePursuit.integ += beta * PurePursuit.params["DT"]
+        PurePursuit.integ += beta * PurePursuit.config["dt"]
 
         # set forward and turning commands.
         cmd_msg.fwd, cmd_msg.ang = PurePursuit.get_control(beta)
@@ -76,8 +76,8 @@ class PurePursuit:
         PurePursuit.err_prev = beta
         
         # ensure commands are capped within constraints.
-        cmd_msg.fwd= max(0, min(cmd_msg.fwd, PurePursuit.params["ODOM_D_MAX"]))
-        cmd_msg.ang = max(-PurePursuit.params["ODOM_TH_MAX"], min(cmd_msg.ang, PurePursuit.params["ODOM_TH_MAX"]))
+        cmd_msg.fwd= max(0, min(cmd_msg.fwd, PurePursuit.config["constraints"]["commands"]["d_max"]))
+        cmd_msg.ang = max(-PurePursuit.config["constraints"]["commands"]["th_max"], min(cmd_msg.ang, PurePursuit.config["constraints"]["commands"]["th_max"]))
         return cmd_msg
 
 
@@ -149,12 +149,12 @@ class PurePursuit:
         beta = remainder(gb - cur[2], tau) # bearing rel to robot
 
         # go faster the more aligned the hdg is.
-        cmd_msg.fwd= 1 * (1 - abs(beta)/PurePursuit.params["ODOM_TH_MAX"])**3 + 0.05 if r > 0.1 else 0.0
+        cmd_msg.fwd= 1 * (1 - abs(beta)/PurePursuit.config["constraints"]["commands"]["th_max"])**3 + 0.05 if r > 0.1 else 0.0
         P = 0.03 if r > 0.2 else 0.2
         cmd_msg.ang = beta #* P if r > 0.05 else 0.0
         # ensure commands are capped within constraints.
-        cmd_msg.fwd= max(0, min(cmd_msg.fwd, PurePursuit.params["ODOM_D_MAX"]))
-        cmd_msg.ang = max(-PurePursuit.params["ODOM_TH_MAX"], min(cmd_msg.ang, PurePursuit.params["ODOM_TH_MAX"]))
+        cmd_msg.fwd= max(0, min(cmd_msg.fwd, PurePursuit.config["constraints"]["commands"]["d_max"]))
+        cmd_msg.ang = max(-PurePursuit.config["constraints"]["commands"]["th_max"], min(cmd_msg.ang, PurePursuit.config["constraints"]["commands"]["th_max"]))
         # remove the goal from the queue if we've arrived.
         if r < 0.15:
             PurePursuit.goal_queue.pop(0)

@@ -1,0 +1,100 @@
+####### SET VIA LAUNCH FILE PARAMS #######
+#  - image for occupancy map
+#  - type of landmark map
+#  - precompute trajectory?
+#  - use tight control for pure pursuit?
+#  - use local planner?
+##########################################
+
+# ----- Filter -----
+# options: ekf_slam, ukf_loc, ukf_slam, pose_graph
+filter: "ekf_slam"
+
+# ----- Iteration Period -----
+dt: 0.05
+
+# ----- Initial Vehicle Pose -----
+# (will be overridden for some maps)
+init_pose:
+  x: 0.0
+  y: 0.0
+  yaw: 0.0
+
+# ----- Constraints -----
+constraints:
+  commands:
+    d_max: 0.1 # max forward motion in one timestep. min is 0.
+    th_max: 0.0546 # max angular motion magnitude in one timestep. min is -th_max.
+  vision:
+    range_max: 4.0
+    fov_min: -3.141592653589793
+    fov_max: 3.141592653589793
+  measurements:
+    # limitations on measurements:
+    landmark_id_is_known: False # if true, filter will use the known landmark IDs.
+    min_landmark_separation: 0.1 # landmarks detected closer together than this are assumed to be the same.
+
+# ----- Noise Profiles -----
+process_noise:
+  mean:
+    v_d: 0.0
+    v_th: 0.0
+  cov:
+    V_00: 0.0004
+    V_11: 0.00007615435494667714
+sensing_noise:
+  mean:
+    w_r: 0.0
+    w_b: 0.0
+  cov:
+    W_00: 0.01
+    W_11: 0.00030461741978670857
+
+# ----- UKF -----
+ukf:
+  W_0: 0.2 # weight on mean sigma pt.
+
+# ----- Map -----
+map:
+  bound: 10.0 # display area is +-bound in both x/y.
+  num_landmarks: 20
+  min_landmark_separation: 0.05 # min dist between landmarks when creating map.
+  grid_step: 4 # size of grid to place landmarks if using grid map_type.
+  # Occupancy grid params:
+  occ_map_size: 150 # number of cells per side (square image).
+  occ_map_balloon_amt: 2 # number of cells to balloon each occluded cell by (to reduce collisions).
+
+# ----- Path Planner / Nav -----
+path_planning:
+  local_planner_dist: 1.8 # distance ahead the local planner will path to.
+  nav_method: "pp" # nav function to use ("pp", "direct", or "simple")
+  # pure pursuit params.
+  lookahead_dist_init: 0.2 # meters
+  lookahead_dist_max: 2 # meters
+  astar_incl_diagonals: True # A* search diagonals or only orthogonally adjacent cells?
+
+# ----- Precomputed Trajectory Generation -----
+# (used if precompute_trajectory option is True in roslaunch)
+trajectory_gen:
+  num_timesteps: 2000
+  landmark_noise: 0.2 # noise to use for generating map for TSP solution.
+  visitation_threshold: 3.0 # how close the veh must get to a lm to mark it as visited in TSP soln.
+
+# ----- Plotter -----
+plotter:
+  save_final_map: False
+  # flags to display certain things
+  show_occ_map: True
+  show_entire_traj: False
+  show_true_traj: True
+  show_true_landmark_map: True
+  show_landmark_ellipses: True
+  show_veh_ellipse: True
+  # display params
+  arrow_len: 0.1 # length of pose arrow.
+  cov_std_dev: 1 # number of std dev to include in cov ellipses.
+  plot_pf_arrows: False # show individual heading for all PF particles
+  plot_ukf_arrows: True # show individual heading for all UKF sigma points
+  show_landmark_sigma_pts: True # for UKF, show sigma points for landmarks as well as vehicle.
+  display_region_mult: 1.0 # amount to multiply map.bound by to get the display region.
+  list_clicked_points: False # utility to display coords of all clicked points, for manually creating landmark maps.

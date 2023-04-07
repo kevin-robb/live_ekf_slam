@@ -1,10 +1,9 @@
-#include "ekf_pkg/ekf.h"
+#include "localization_pkg/filter.h"
 
 // init the EKF.
 EKF::EKF() {
-    // set the noise covariance matrices.
-    this->V.setIdentity(2,2);
-    this->W.setIdentity(2,2);
+    // set filter type.
+    this->type = FilterChoice::EKF_SLAM;
     // initialize state distribution.
     this->x_t.resize(3);
     // starting pose will be set later.
@@ -19,6 +18,12 @@ EKF::EKF() {
     this->P_pred(2,2) = 0.005 * 0.005;
     // set jacobians that are constant.
     this->H_w.setIdentity(2,2);
+}
+
+void EKF::readParams(YAML::Node config) {
+    // setup all commonly-used params.
+    Filter::readParams(config);
+    // setup all filter-specific params, if any.
 }
 
 void EKF::init(float x_0, float y_0, float yaw_0) {
@@ -74,7 +79,7 @@ void EKF::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray
         int i = -1;
         // check if the landmark ID was provided, or if we need to determine it ourselves.
         int id;
-        if (!this->landmark_ID_is_known) {
+        if (!this->landmark_id_is_known) {
             // ID was not given.
             id = this->M; // if this is a new landmark, it will be assigned the next available ID in ascending order.
             // we need to determine if this is a new or existing landmark that we've detected.
@@ -174,7 +179,7 @@ void EKF::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray
 }
 
 // return the state as a message.
-base_pkg::EKFState EKF::getState() {
+base_pkg::EKFState EKF::getEKFState() {
     base_pkg::EKFState stateMsg;
     // timestep.
     stateMsg.timestep = this->timestep;

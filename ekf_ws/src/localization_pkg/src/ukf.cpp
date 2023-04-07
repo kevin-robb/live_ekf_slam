@@ -1,10 +1,8 @@
-#include "ukf_pkg/ukf.h"
+#include "localization_pkg/filter.h"
 
 UKF::UKF() {
-    // init the UKF object.
-    // set the noise covariance matrices.
-    this->V.setIdentity(2,2);
-    this->W.setIdentity(2,2);
+    // set filter type.
+    this->type = FilterChoice::UKF_SLAM;
     // initialize state distribution.
     this->x_t.resize(4);
     this->x_pred.setZero(4);
@@ -24,6 +22,12 @@ UKF::UKF() {
     this->Q.setZero(4,4);
 }
 
+void UKF::readParams(YAML::Node config) {
+    // setup all commonly-used params.
+    Filter::readParams(config);
+    // setup all filter-specific params, if any.
+}
+
 void UKF::init(float x_0, float y_0, float yaw_0) {
     // set starting vehicle pose.
     this->x_t << x_0, y_0, cos(yaw_0), sin(yaw_0);
@@ -40,7 +44,7 @@ void UKF::init(float x_0, float y_0, float yaw_0) {
     this->isInit = true;
 }
 
-base_pkg::UKFState UKF::getState() {
+base_pkg::UKFState UKF::getUKFState() {
     // state length for convenience.
     int n = 2 * this->M + 4;
     // return the state as a message.
@@ -118,7 +122,7 @@ Eigen::VectorXd UKF::motionModel(Eigen::VectorXd x, float u_d, float u_th) {
 Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
     Eigen::VectorXd z_est = Eigen::VectorXd::Zero(2);
     float yaw = remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi);
-    if (this->ukfSlamMode) {
+    if (this->type == FilterChoice::UKF_SLAM) {
         // SLAM mode. lm_i is the index of this landmark in our state.
         // Generate measurement we expect from current estimates
         // of veh pose and landmark position.
@@ -139,7 +143,7 @@ Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
     return z_est;
 }
 
-void UKF::ukfIterate(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
+void UKF::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // perform a full iteration of UKF-SLAM for this timestep.
     // update timestep count.
     this->timestep += 1;
@@ -240,7 +244,7 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
         float r = lm_meas[l*3+1];
         float b = lm_meas[l*3+2];
         int lm_i = -1;
-        if (this->ukfSlamMode) {
+        if (this->type == FilterChoice::UKF_SLAM) {
             // check if we have seen this landmark before.
             for (int j=0; j<M; ++j) {
                 if (this->lm_IDs[j] == id) {
@@ -250,7 +254,7 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
             }
         }
         // if it's a new landmark, wait to handle it later.
-        if (this->ukfSlamMode && lm_i == -1) {
+        if (this->type == FilterChoice::UKF_SLAM && lm_i == -1) {
             new_landmark_indexes.push_back(l);
         } else {
             landmarkUpdate(lm_i, id, r, b);
@@ -274,7 +278,7 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
 void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
     // localization mode, or the landmark was found in the state.
     //////////// LANDMARK UPDATE ///////////
-    if (this->ukfSlamMode) {
+    if (this->type == FilterChoice::UKF_SLAM) {
         // get index of this landmark in the state.
         lm_i = lm_i*2+4;
     } else {

@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>ekf_pkg</name>
-  <version>0.1.0</version>
-  <description>Package to handle EKF SLAM.</description>
+  <name>localization_pkg</name>
+  <version>0.0.0</version>
+  <description>The localization package</description>
   <maintainer email="kevin.robb@alumni.ou.edu">Kevin Robb</maintainer>
   <license>MIT</license>
 
@@ -23,8 +23,15 @@
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
 
+  <build_depend>yaml-cpp</build_depend>
+  <build_export_depend>yaml-cpp</build_export_depend>
+  <exec_depend>yaml-cpp</exec_depend>
+
   <build_depend>base_pkg</build_depend>
   <exec_depend>base_pkg</exec_depend>
+
+  <!-- trying to get eigen working -->
+  <build_depend>cmake_modules</build_depend>
 
   <export>
   </export>

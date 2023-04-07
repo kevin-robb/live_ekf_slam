@@ -16,10 +16,10 @@ class Astar:
         Simulates the veh only having access to a small local map.
         """
         # choose ideal point at the desired distance ahead of the vehicle.
-        pt = (cur[0]+Astar.params["LOCAL_PLANNER_DIST"]*cos(cur[2]), cur[1]+Astar.params["LOCAL_PLANNER_DIST"]*sin(cur[2]))
+        pt = (cur[0]+Astar.config["path_planning"]["local_planner_dist"]*cos(cur[2]), cur[1]+Astar.config["path_planning"]["local_planner_dist"]*sin(cur[2]))
         goal = Astar.tf_ekf_to_map(pt)
         # cap this point to make sure it's on the map.
-        goal = [max(0, min(goal[0], Astar.params["OCC_MAP_SIZE"]-1)), max(0, min(goal[1], Astar.params["OCC_MAP_SIZE"]-1))]
+        goal = [max(0, min(goal[0], Astar.config["map"]["occ_map_size"]-1)), max(0, min(goal[1], Astar.config["map"]["occ_map_size"]-1))]
         # if this point is free, use it.
         if Astar.occ_map[goal[0]][goal[1]] == 1:
             return Astar.tf_map_to_ekf(goal)
@@ -39,7 +39,7 @@ class Astar:
                 # check each cell for occlusion and if we've already checked it.
                 nbr = Cell([cur_cell.i+chg[0], cur_cell.j+chg[1]], parent=cur_cell)
                 # skip if out of bounds.
-                if nbr.i < 0 or nbr.j < 0 or nbr.i >= Astar.params["OCC_MAP_SIZE"] or nbr.j >= Astar.params["OCC_MAP_SIZE"]: continue
+                if nbr.i < 0 or nbr.j < 0 or nbr.i >= Astar.config["map"]["occ_map_size"] or nbr.j >= Astar.config["map"]["occ_map_size"]: continue
                 
                 # stop if we've found a free cell to use as the goal.
                 if Astar.occ_map[nbr.i][nbr.j] == 1:
@@ -68,7 +68,7 @@ class Astar:
         # define start node.
         start_cell = Cell(Astar.tf_ekf_to_map(start))
         # make sure starting pose is on the map.
-        if start_cell.i < 0 or start_cell.j < 0 or start_cell.i >= Astar.params["OCC_MAP_SIZE"] or start_cell.j >= Astar.params["OCC_MAP_SIZE"]:
+        if start_cell.i < 0 or start_cell.j < 0 or start_cell.i >= Astar.config["map"]["occ_map_size"] or start_cell.j >= Astar.config["map"]["occ_map_size"]:
             print("Starting position for A* not within map bounds.")
             return
         # check if starting node (veh pose) is in collision.
@@ -95,7 +95,7 @@ class Astar:
             for chg in Astar.nbrs:
                 nbr = Cell([cur_cell.i+chg[0], cur_cell.j+chg[1]], parent=cur_cell)
                 # skip if out of bounds.
-                if nbr.i < 0 or nbr.j < 0 or nbr.i >= Astar.params["OCC_MAP_SIZE"] or nbr.j >= Astar.params["OCC_MAP_SIZE"]: continue
+                if nbr.i < 0 or nbr.j < 0 or nbr.i >= Astar.config["map"]["occ_map_size"] or nbr.j >= Astar.config["map"]["occ_map_size"]: continue
                 # skip if occluded, unless parent is occluded.
                 nbr.in_collision = Astar.occ_map[nbr.i][nbr.j] == 0
                 if nbr.in_collision and not nbr.parent.in_collision: continue
@@ -117,7 +117,7 @@ class Astar:
                     # there's no match, so proceed.
                     pass
                 # compute heuristic "cost-to-go"
-                if Astar.params["ASTAR_INCL_DIAGONALS"]:
+                if Astar.config["path_planning"]["astar_incl_diagonals"]:
                     # chebyshev heuristic
                     nbr.set_cost(h=max(abs(goal_cell.i - nbr.i), abs(goal_cell.j - nbr.j)))
                 else:
@@ -130,13 +130,13 @@ class Astar:
     @staticmethod
     def tf_map_to_ekf(pt):
         # transform x,y from occ map indices to ekf coords.
-        return [(pt[1] - Astar.params["SHIFT"]) * Astar.params["SCALE"], -(pt[0] - Astar.params["SHIFT"]) * Astar.params["SCALE"]]
+        return [(pt[1] - Astar.config_shift) * Astar.config_scale, -(pt[0] - Astar.config_shift) * Astar.config_scale]
         
 
     @staticmethod
     def tf_ekf_to_map(pt):
         # transform x,y from ekf coords to occ map indices.
-        return [int(Astar.params["SHIFT"] - pt[1] / Astar.params["SCALE"]), int(Astar.params["SHIFT"] + pt[0] / Astar.params["SCALE"])]
+        return [int(Astar.config_shift - pt[1] / Astar.config_scale), int(Astar.config_shift + pt[0] / Astar.config_scale)]
 
 
     @staticmethod

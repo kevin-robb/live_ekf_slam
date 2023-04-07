@@ -4,7 +4,7 @@
 Command vehicle to pursue path to goal point chosen by clicking the plot.
 Generate the next odom command based on current state estimate.
 """
-import rospy
+import rospy, rospkg, yaml, sys
 from base_pkg.msg import Command
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float32MultiArray
@@ -13,20 +13,6 @@ from base_pkg.msg import EKFState, UKFState #, PFState
 from cv_bridge import CvBridge
 from pure_pursuit import PurePursuit
 from astar import Astar
-
-# import params script.
-import rospkg
-import importlib.util, sys
-spec = importlib.util.spec_from_file_location("module.name", rospkg.RosPack().get_path('base_pkg')+"/src/import_params.py")
-module = importlib.util.module_from_spec(spec)
-sys.modules["module.name"] = module
-spec.loader.exec_module(module)
-# set params.
-params = module.Config.params
-PurePursuit.params = params
-Astar.params = params
-# set rel neighbors list for A* search.
-Astar.nbrs = [(0, -1), (0, 1), (-1, 0), (1, 0)] + ([(-1, -1), (-1, 1), (1, -1), (1, 1)] if params["ASTAR_INCL_DIAGONALS"] else [])
 
 ############ GLOBAL VARIABLES ###################
 cmd_pub = None; path_pub = None
@@ -41,7 +27,7 @@ def get_ekf_state(msg):
     # update current position.
     global cur
     cur = [msg.x_v, msg.y_v, msg.yaw_v]
-    if params["USE_LOCAL_PLANNER"] and msg.timestep % 5 == 0:
+    if use_local_planner and msg.timestep % 5 == 0:
         # choose arbitrary free point ahead to use as goal.
         goal = Astar.local_planner(cur)
         if goal is None:
@@ -56,10 +42,10 @@ def get_ekf_state(msg):
     # check size of path.
     path_len = len(PurePursuit.goal_queue)
     # call the desired navigation function.
-    if params["NAV_METHOD"] == "pp":
+    if config["path_planning"]["nav_method"] == "pp":
         # use pure pursuit.
         cmd_pub.publish(PurePursuit.get_next_cmd(cur))
-    elif params["NAV_METHOD"] in ["direct", "simple"]:
+    elif config["path_planning"]["nav_method"] in ["direct", "simple"]:
         # directly go to each point.
         cmd_pub.publish(PurePursuit.direct_nav(cur))
     else:
@@ -72,7 +58,7 @@ def get_ekf_state(msg):
 
 def get_goal_pt(msg):
     # check operating mode.
-    if params["USE_LOCAL_PLANNER"]:
+    if use_local_planner:
         rospy.logerr("Cannot select a goal point while running in local planner mode.")
         return
     # verify chosen pt is on the map and not in collision.
@@ -92,7 +78,7 @@ def find_path_to_goal(goal):
     Given a desired goal point, use A* to generate a path there.
     """
     # if running in "simple" mode, only add goal point rather than path planning.
-    if params["NAV_METHOD"] == "simple" or params["BLANK_MAP"]:
+    if config["path_planning"]["nav_method"] == "simple" or using_blank_map:
         PurePursuit.goal_queue.append(goal)
         return
     # determine starting pos for path.
@@ -127,26 +113,45 @@ def get_init_veh_pose(msg):
     cur = [msg.x, msg.y, msg.z]
 
 def main():
-    global cmd_pub, path_pub, params
+    global cmd_pub, path_pub
     rospy.init_node('goal_pursuit_node')
+
+    # read configs.
+    # find the filepath to the params file.
+    rospack = rospkg.RosPack()
+    global base_pkg_path, config
+    base_pkg_path = rospack.get_path('base_pkg')
+    # open the yaml and read all params.
+    with open(base_pkg_path+'/config/params.yaml', 'r') as file:
+        config = yaml.safe_load(file)
+
+    PurePursuit.config = config
+    Astar.config = config
+    # set rel neighbors list for A* search.
+    Astar.nbrs = [(0, -1), (0, 1), (-1, 0), (1, 0)] + ([(-1, -1), (-1, 1), (1, -1), (1, 1)] if config["path_planning"]["astar_incl_diagonals"] else [])
+    # occ map <-> lm coords transform params.
+    Astar.config_shift = config["map"]["occ_map_size"] / 2
+    Astar.config_scale = config["map"]["bound"] / Astar.config_shift
 
     # read command line args.
     if len(sys.argv) < 5:
         rospy.logerr("Required param (use_local_planner) and optional params (precompute_trajectory, tight_control, occ_map_img) not provided to goal_pursuit_node.")
         exit()
     else:
-        params["USE_LOCAL_PLANNER"] = sys.argv[1].lower() == "true"
+        global use_local_planner
+        use_local_planner = sys.argv[1].lower() == "true"
         precompute_trajectory = sys.argv[2].lower() == "true"
-        params["TIGHT_CONTROL"] = sys.argv[3].lower() == "true"
+        use_tight_control = sys.argv[3].lower() == "true"
         occ_map_img = sys.argv[4]
     # if traj was precomputed, this node is unnecessary.
     if precompute_trajectory:
         rospy.loginfo("goal_pursuit_node unneeded if trajectory was precomputed. Exiting.")
         exit()
     # if we're using the blank occ map, we don't need to do any A* planning.
-    params["BLANK_MAP"] = occ_map_img == "blank.jpg"
+    global using_blank_map
+    using_blank_map = occ_map_img == "blank.jpg"
     # set Pure Pursuit coefficients based on tight_control setting.
-    if params["TIGHT_CONTROL"]:
+    if use_tight_control:
         PurePursuit.get_control = PurePursuit.cmd_tight
     else:
         PurePursuit.get_control = PurePursuit.cmd_loose
@@ -168,7 +173,7 @@ def main():
     # publish planned path to the goal.
     path_pub = rospy.Publisher("/plan/path", Float32MultiArray, queue_size=1)
 
-    if not params["USE_LOCAL_PLANNER"]:
+    if not use_local_planner:
         # instruct the user to choose goal point(s).
         rospy.loginfo("Left-click on the plot to set the vehicle's goal position.")
 

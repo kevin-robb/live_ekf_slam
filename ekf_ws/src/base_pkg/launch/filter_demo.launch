@@ -1,12 +1,12 @@
 <launch>
     <arg name="occ_map_img" default="blank.jpg"/>
-    <arg name="landmark_map" default="grid"/> <!-- options: "random", "grid", ... -->
+    <arg name="landmark_map" default="random"/> <!-- options: "random", "grid", ... -->
     <arg name="precompute_trajectory" default="true"/>
     <arg name="tight_control" default="false"/>
-    
-    <!-- Particle Filter node -->
-    <node pkg="pf_pkg" type="pf_node.py" name="pf_node" output="screen" />
-    
+
+    <!-- Filter node, which will use filter specified in params.yaml -->
+    <node pkg="localization_pkg" type="localization_node" name="localization_node" output="screen" />
+
     <!-- Call main sim driver script. -->
     <include file="$(find base_pkg)/launch/sim_base.launch" >
         <arg name="occ_map_img" value="$(arg occ_map_img)"/>
