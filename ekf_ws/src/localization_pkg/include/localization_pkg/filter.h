@@ -14,6 +14,7 @@
 #include <eigen3/Eigen/Dense>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <eigen3/Eigen/Eigenvalues>
+#include <yaml-cpp/yaml.h>
 
 // Custom imports.
 #include "base_pkg/Command.h"
@@ -38,18 +39,17 @@ public:
     virtual void init(float x_0, float y_0, float yaw_0) = 0;
     virtual void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) = 0;
     // State calls needed to avoid errors :/
-    base_pkg::EKFState getEKFState() { base_pkg::EKFState s; return s; };
-    base_pkg::UKFState getUKFState() { base_pkg::UKFState s; return s; };
+    base_pkg::EKFState getEKFState() { throw std::runtime_error("Cannot call getEKFState for this filter."); base_pkg::EKFState s; return s; };
+    base_pkg::UKFState getUKFState() { throw std::runtime_error("Cannot call getUKFState for this filter."); base_pkg::UKFState s; return s; };
 
     bool isInit = false;
-    // true map for localization-only filters/modes.
+    // true set of landmark positions for localization-only filters/modes.
     std::vector<float> map;
 
 protected:
     // Standard configs/flags.
-    bool landmark_ID_is_known = false;
+    bool landmark_id_is_known = false;
     float min_landmark_separation; // two detections less than this distance apart will be considered the same landmark.
-
     // process noise.
     float v_d = 0;
     float v_th = 0;
@@ -69,6 +69,25 @@ protected:
     // predicted state distribution.
     Eigen::VectorXd x_pred;
     Eigen::MatrixXd P_pred;
+
+public:
+    void readParams(YAML::Node config) { // Read/setup commonly-used params.
+        // process noise.
+        this->V.setIdentity(2,2);
+        this->v_d = config["process_noise"]["mean"]["v_d"].as<float>();
+        this->v_th = config["process_noise"]["mean"]["v_th"].as<float>();
+        this->V(0,0) = config["process_noise"]["cov"]["V_00"].as<float>();
+        this->V(1,1) = config["process_noise"]["cov"]["V_11"].as<float>();
+        // sensing noise.
+        this->W.setIdentity(2,2);
+        this->w_r = config["sensing_noise"]["mean"]["w_r"].as<float>();
+        this->w_b = config["sensing_noise"]["mean"]["w_b"].as<float>();
+        this->V(0,0) = config["sensing_noise"]["cov"]["W_00"].as<float>();
+        this->V(1,1) = config["sensing_noise"]["cov"]["W_11"].as<float>();
+        // measurement constraints.
+        this->landmark_id_is_known = config["constraints"]["measurements"]["landmark_id_is_known"].as<bool>();
+        this->min_landmark_separation = config["constraints"]["measurements"]["min_landmark_separation"].as<float>();
+    }
 };
 
 // Extended Kalman Filter for SLAM.
@@ -77,6 +96,7 @@ public:
     FilterChoice type = FilterChoice::EKF_SLAM;
     EKF();
     ~EKF() {}; // Do nothing.
+    void readParams(YAML::Node config);
     void init(float x_0, float y_0, float yaw_0);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     base_pkg::EKFState getEKFState();
@@ -103,6 +123,7 @@ public:
     FilterChoice type = FilterChoice::UKF_SLAM;
     UKF();
     ~UKF() {}; // Do nothing.
+    void readParams(YAML::Node config);
     void init(float x_0, float y_0, float yaw_0);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     base_pkg::UKFState getUKFState();
@@ -149,6 +170,7 @@ public:
     FilterChoice type = FilterChoice::POSE_GRAPH_SLAM;
     PoseGraph();
     ~PoseGraph() {}; // Do nothing.
+    void readParams(YAML::Node config);
     void init(float x_0, float y_0, float yaw_0);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
 
@@ -156,4 +178,4 @@ protected:
 
 };
 
-#endif
+#endif // FILTER_INTERFACE_H

@@ -30,6 +30,7 @@ float readParams() {
 
     const float DT = config["DT"].as<float>();
 
+    // Setup filter as the chosen derived class type.
     const std::string filter_choice_str = config["FILTER"].as<std::string>();
     if (filter_choice_str == "ekf_slam") {
         filter = std::make_unique<EKF>();
@@ -45,7 +46,8 @@ float readParams() {
         exit(2);
     }
 
-    ///\todo: do all the imports in ekf_node and ukf_node.
+    // Setup params for the specified filter.
+    filter->readParams(config);
 
     return DT;
 }

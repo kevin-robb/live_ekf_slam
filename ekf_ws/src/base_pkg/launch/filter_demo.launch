@@ -1,0 +1,17 @@
+<launch>
+    <arg name="occ_map_img" default="blank.jpg"/>
+    <arg name="landmark_map" default="random"/> <!-- options: "random", "grid", ... -->
+    <arg name="precompute_trajectory" default="true"/>
+    <arg name="tight_control" default="false"/>
+
+    <!-- Filter node, which will use filter specified in params.yaml -->
+    <node pkg="localization_pkg" type="localization_node" name="localization_node" output="screen" />
+    
+    <!-- Call main sim driver script. -->
+    <include file="$(find base_pkg)/launch/sim_base.launch" >
+        <arg name="occ_map_img" value="$(arg occ_map_img)"/>
+        <arg name="landmark_map" value="$(arg landmark_map)"/>
+        <arg name="precompute_trajectory" value="$(arg precompute_trajectory)"/>
+        <arg name="tight_control" value="$(arg tight_control)"/>
+    </include>
+</launch>

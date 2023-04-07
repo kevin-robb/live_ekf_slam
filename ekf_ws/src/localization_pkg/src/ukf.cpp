@@ -2,9 +2,6 @@
 
 UKF::UKF() {
     // init the UKF object.
-    // set the noise covariance matrices.
-    this->V.setIdentity(2,2);
-    this->W.setIdentity(2,2);
     // initialize state distribution.
     this->x_t.resize(4);
     this->x_pred.setZero(4);
@@ -22,6 +19,12 @@ UKF::UKF() {
     this->X.setZero(4,9);
     // setup the expanding process noise matrix.
     this->Q.setZero(4,4);
+}
+
+void UKF::readParams(YAML::Node config) {
+    // setup all commonly-used params.
+    Filter::readParams(config);
+    // setup all filter-specific params, if any.
 }
 
 void UKF::init(float x_0, float y_0, float yaw_0) {

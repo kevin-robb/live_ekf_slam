@@ -5,6 +5,12 @@ PoseGraph::PoseGraph() {
     ///\todo: initialization and whatnot.
 }
 
+void PoseGraph::readParams(YAML::Node config) {
+    // setup all commonly-used params.
+    Filter::readParams(config);
+    // setup all filter-specific params, if any.
+}
+
 void PoseGraph::init(float x_0, float y_0, float yaw_0) {
     // set starting vehicle pose.
     ///\todo: change to using SE(2) representation for everything.
