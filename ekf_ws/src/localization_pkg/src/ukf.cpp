@@ -1,7 +1,8 @@
 #include "localization_pkg/filter.h"
 
 UKF::UKF() {
-    // init the UKF object.
+    // set filter type.
+    this->type = FilterChoice::UKF_SLAM;
     // initialize state distribution.
     this->x_t.resize(4);
     this->x_pred.setZero(4);

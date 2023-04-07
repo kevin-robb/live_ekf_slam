@@ -21,17 +21,16 @@ ros::Publisher statePub;
 // flag to wait for map to be received (for localization-only filters).
 bool loadedTrueMap = false;
 
-std::unique_ptr<Filter> filter = nullptr;
+std::unique_ptr<Filter> filter;
 
 float readParams() {
-    // read config parameters from file.
     std::string pkg_path = ros::package::getPath("base_pkg");
     YAML::Node config = YAML::LoadFile(pkg_path+"/config/params.yaml");
-
-    const float DT = config["DT"].as<float>();
+    // Get desired timer period.
+    float DT = config["dt"].as<float>();
 
     // Setup filter as the chosen derived class type.
-    const std::string filter_choice_str = config["FILTER"].as<std::string>();
+    std::string filter_choice_str = config["filter"].as<std::string>();
     if (filter_choice_str == "ekf_slam") {
         filter = std::make_unique<EKF>();
     } else if (filter_choice_str == "ukf_slam") {
@@ -42,8 +41,7 @@ float readParams() {
     } else if (filter_choice_str == "pose_graph") {
         filter = std::make_unique<PoseGraph>();
     } else {
-        std::cout << "Invalid filter choice in params.yaml." << std::endl << std::flush;
-        exit(2);
+        throw std::runtime_error("Invalid filter choice in params.yaml.");
     }
 
     // Setup params for the specified filter.
@@ -57,6 +55,10 @@ void initCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
     float x_0 = msg->x;
     float y_0 = msg->y;
     float yaw_0 = msg->z;
+    // wait for the params to be read and filter to be chosen.
+    while (filter->type == FilterChoice::NOT_SET) {
+        sleep(1);
+    }
     // init the filter.
     filter->init(x_0, y_0, yaw_0);
 }
@@ -118,14 +120,15 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "localization_node");
     ros::NodeHandle node("~");
 
-    // read config parameters.
-    float DT = readParams();
-    // get the initial veh pose and init the filter.
-    ros::Subscriber initSub = node.subscribe("/truth/init_veh_pose", 1, initCallback);
-
+    // Init subscribers as soon as possible to avoid missing data.
     // subscribe to filter inputs.
     ros::Subscriber cmdSub = node.subscribe("/command", 100, cmdCallback);
     ros::Subscriber lmMeasSub = node.subscribe("/landmark", 100, lmMeasCallback);
+    // get the initial veh pose and init the filter.
+    ros::Subscriber initSub = node.subscribe("/truth/init_veh_pose", 1, initCallback);
+
+    // read config parameters and setup the specific filter instance.
+    float DT = readParams();
 
     // publish localization state.
     // Not all filters will necessarily have the same (or any) state output.
@@ -140,6 +143,7 @@ int main(int argc, char **argv) {
             break;
         }
         default: {
+            throw std::runtime_error("Not setting up any state publisher.");
             ///\todo: need to publish something for state so the sim will keep going?
             break;
         }

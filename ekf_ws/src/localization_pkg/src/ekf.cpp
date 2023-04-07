@@ -2,6 +2,8 @@
 
 // init the EKF.
 EKF::EKF() {
+    // set filter type.
+    this->type = FilterChoice::EKF_SLAM;
     // initialize state distribution.
     this->x_t.resize(3);
     // starting pose will be set later.

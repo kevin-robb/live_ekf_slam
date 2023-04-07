@@ -24,6 +24,7 @@
 #define pi 3.14159265358979323846
 
 enum class FilterChoice {
+    NOT_SET = 0,
     EKF_SLAM,
     UKF_LOC,
     UKF_SLAM,
@@ -33,14 +34,14 @@ enum class FilterChoice {
 // Interface class for stuff used by all filters.
 class Filter {
 public:
-    FilterChoice type;
+    FilterChoice type = FilterChoice::NOT_SET;
     Filter() {}; // Do nothing.
     virtual ~Filter() {}; // Do nothing.
     virtual void init(float x_0, float y_0, float yaw_0) = 0;
     virtual void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) = 0;
     // State calls needed to avoid errors :/
-    base_pkg::EKFState getEKFState() { throw std::runtime_error("Cannot call getEKFState for this filter."); base_pkg::EKFState s; return s; };
-    base_pkg::UKFState getUKFState() { throw std::runtime_error("Cannot call getUKFState for this filter."); base_pkg::UKFState s; return s; };
+    virtual base_pkg::EKFState getEKFState() { throw std::runtime_error("Cannot call getEKFState for this filter."); base_pkg::EKFState s; return s; };
+    virtual base_pkg::UKFState getUKFState() { throw std::runtime_error("Cannot call getUKFState for this filter."); base_pkg::UKFState s; return s; };
 
     bool isInit = false;
     // true set of landmark positions for localization-only filters/modes.
@@ -76,14 +77,14 @@ public:
         this->V.setIdentity(2,2);
         this->v_d = config["process_noise"]["mean"]["v_d"].as<float>();
         this->v_th = config["process_noise"]["mean"]["v_th"].as<float>();
-        this->V(0,0) = config["process_noise"]["cov"]["V_00"].as<float>();
-        this->V(1,1) = config["process_noise"]["cov"]["V_11"].as<float>();
+        this->V(0,0) = config["process_noise"]["cov"]["V_00"].as<double>();
+        this->V(1,1) = config["process_noise"]["cov"]["V_11"].as<double>();
         // sensing noise.
         this->W.setIdentity(2,2);
         this->w_r = config["sensing_noise"]["mean"]["w_r"].as<float>();
         this->w_b = config["sensing_noise"]["mean"]["w_b"].as<float>();
-        this->V(0,0) = config["sensing_noise"]["cov"]["W_00"].as<float>();
-        this->V(1,1) = config["sensing_noise"]["cov"]["W_11"].as<float>();
+        this->V(0,0) = config["sensing_noise"]["cov"]["W_00"].as<double>();
+        this->V(1,1) = config["sensing_noise"]["cov"]["W_11"].as<double>();
         // measurement constraints.
         this->landmark_id_is_known = config["constraints"]["measurements"]["landmark_id_is_known"].as<bool>();
         this->min_landmark_separation = config["constraints"]["measurements"]["min_landmark_separation"].as<float>();
@@ -93,7 +94,6 @@ public:
 // Extended Kalman Filter for SLAM.
 class EKF: public Filter {
 public:
-    FilterChoice type = FilterChoice::EKF_SLAM;
     EKF();
     ~EKF() {}; // Do nothing.
     void readParams(YAML::Node config);
@@ -120,7 +120,6 @@ protected:
 // Unscented Kalman Filter for localization-only or SLAM.
 class UKF: public Filter {
 public:
-    FilterChoice type = FilterChoice::UKF_SLAM;
     UKF();
     ~UKF() {}; // Do nothing.
     void readParams(YAML::Node config);
@@ -167,7 +166,6 @@ protected:
 // Pose-Graph optimization for SLAM.
 class PoseGraph: public Filter {
 public:
-    FilterChoice type = FilterChoice::POSE_GRAPH_SLAM;
     PoseGraph();
     ~PoseGraph() {}; // Do nothing.
     void readParams(YAML::Node config);
