@@ -15,6 +15,7 @@
 #include <unsupported/Eigen/MatrixFunctions>
 #include <eigen3/Eigen/Eigenvalues>
 #include <yaml-cpp/yaml.h>
+#include <unordered_map>
 
 // Custom imports.
 #include "base_pkg/Command.h"
@@ -61,9 +62,9 @@ protected:
     Eigen::MatrixXd W;
 
     // State tracking.
-    int timestep = 0; // current timestep.
-    int M = 0; // number of landmarks being tracked.
-    std::vector<int> lm_IDs; // IDs of landmarks being tracked.
+    int timestep = 0; // current timestep (i.e., iteration index).
+    int M = 0; // number of landmarks being tracked (so far).
+    std::vector<int> lm_IDs; // IDs of landmarks being tracked. length should be M.
     // state distribution.
     Eigen::VectorXd x_t;
     Eigen::MatrixXd P_t;
@@ -171,9 +172,23 @@ public:
     void readParams(YAML::Node config);
     void init(float x_0, float y_0, float yaw_0);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
+    // PG-SLAM-specific functions.
+    Eigen::Matrix2d yawToMat(float theta); // Exponential map.
+    float matToYaw(Eigen::Matrix2d R_theta); // Log map.
+    Eigen::Matrix3d computeTransform(float fwd, float ang); // Convert a command or measurement into a relative transform matrix.
+    float vecDistance(Eigen::Vector2d v1, Eigen::Vector2d v2); // Compute distance between two 2D vectors.
+    void onLandmarkMeasurement(uint id, float range, float bearing); // Process a single landmark measurement.
+    void solvePoseGraph();
 
 protected:
-
+    // Graph nodes.
+    ///\note: There is a guaranteed connection from vehicle_poses[i] to vehicle_poses[i+1].
+    std::vector<Eigen::Matrix3d> vehicle_poses; // Full SE(2) vehicle pose estimate history. Index corresponds to iteration number.
+    ///\note: Each vehicle pose may have a connection to 0, 1, or more landmarks.
+    std::unordered_map<uint, Eigen::Vector2d> landmark_positions; // Landmark position estimates. Index corresponds to assigned landmark ID.
+    // Graph connections.
+    std::vector<Eigen::Matrix3d> commands; // SE(2) relative transformations implied by commanded motion. commands[i] is the transform from vehicle_poses[i] to vehicle_poses[i+1].
+    std::unordered_map<std::pair<uint, uint>, Eigen::Matrix3d> measurements; // SE(2) relative transformations implied by landmark measurements. measurements[i,j] is the transform from vehicle_poses[i] to landmark_positions[j]. There may be 0 or any number of measurements in each iteration, so a particular i may not exist as a key.
 };
 
 #endif // FILTER_INTERFACE_H
