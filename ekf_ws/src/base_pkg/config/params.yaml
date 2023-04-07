@@ -8,7 +8,7 @@
 
 # ----- Filter -----
 # options: ekf_slam, ukf_loc, ukf_slam, pose_graph
-filter: "ukf_loc"
+filter: "ekf_slam"
 
 # ----- Iteration Period -----
 dt: 0.05
@@ -54,11 +54,6 @@ sensing_noise:
 ukf:
   W_0: 0.2 # weight on mean sigma pt.
 
-# ----- Particle Filter -----
-particle_filter:
-  num_particles: 500
-  use_init_veh_pose: True # use knowledge of starting pose, or spawn particles randomly?
-
 # ----- Map -----
 map:
   bound: 10.0 # display area is +-bound in both x/y.
@@ -81,7 +76,7 @@ path_planning:
 # ----- Precomputed Trajectory Generation -----
 # (used if precompute_trajectory option is True in roslaunch)
 trajectory_gen:
-  num_timestamps: 2000
+  num_timesteps: 2000
   landmark_noise: 0.2 # noise to use for generating map for TSP solution.
   visitation_threshold: 3.0 # how close the veh must get to a lm to mark it as visited in TSP soln.
 

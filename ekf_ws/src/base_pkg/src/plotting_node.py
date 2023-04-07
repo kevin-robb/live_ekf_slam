@@ -4,7 +4,7 @@
 Create a live plot of the true and estimated states.
 """
 
-import rospy
+import rospy, rospkg, yaml
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from sensor_msgs.msg import Image
@@ -15,7 +15,6 @@ import numpy as np
 import atexit
 from math import cos, sin, pi, atan2, remainder, tau
 from cv_bridge import CvBridge
-from import_params import Config
 
 ############ GLOBAL VARIABLES ###################
 # store all plots objects we want to be able to remove later.
@@ -46,7 +45,7 @@ def cov_to_ellipse(P_v):
     vals = [abs(v) for v in vals]
     # get rotation angle.
     theta = np.arctan2(*vecs[:,0][::-1])
-    w, h = Config.params["COV_STD_DEV"] * 2 * np.sqrt(vals)
+    w, h = config["plotter"]["cov_std_dev"] * 2 * np.sqrt(vals)
     # create parametric ellipse.
     t = np.linspace(0, 2*pi, 100)
     ell = np.array([w*np.cos(t) , h*np.sin(t)])
@@ -66,14 +65,14 @@ def update_plot(filter:str, msg):
     ###################### TIMESTEP #####################
     if "timestep" in plots.keys():
         plots["timestep"].remove()
-    plots["timestep"] = plt.text(-Config.params["MAP_BOUND"], Config.params["MAP_BOUND"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
+    plots["timestep"] = plt.text(-config["map"]["bound"], config["map"]["bound"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
     #################### TRUE POSE #########################
-    if Config.params["SHOW_TRUE_TRAJ"] and msg.timestep <= len(true_poses):
+    if config["plotter"]["show_true_traj"] and msg.timestep <= len(true_poses):
         pose = true_poses[msg.timestep-1]
         # plot the current veh pos, & remove previous.
         if "veh_pos_true" in plots.keys():
             plots["veh_pos_true"].remove()
-        plots["veh_pos_true"] = plt.arrow(pose.x, pose.y, Config.params["ARROW_LEN"]*cos(pose.z), Config.params["ARROW_LEN"]*sin(pose.z), color="blue", width=0.1, zorder=2)
+        plots["veh_pos_true"] = plt.arrow(pose.x, pose.y, config["plotter"]["arrow_len"]*cos(pose.z), config["plotter"]["arrow_len"]*sin(pose.z), color="blue", width=0.1, zorder=2)
 
     ####################### EKF/UKF SLAM #########################
     if filter in ["ekf", "ukf"]:
@@ -82,18 +81,18 @@ def update_plot(filter:str, msg):
         n = int(len(msg.P)**(1/2))
         ################ VEH POS #################
         # plot current estimated veh pos.
-        if not Config.params["SHOW_ENTIRE_TRAJ"] and "veh_pos_est" in plots.keys():
+        if not config["plotter"]["show_entire_traj"] and "veh_pos_est" in plots.keys():
             plots["veh_pos_est"].remove()
             del plots["veh_pos_est"]
         # draw a single pt with arrow to represent current veh pose.
-        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, Config.params["ARROW_LEN"]*cos(msg.yaw_v), Config.params["ARROW_LEN"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
+        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
 
         ################ VEH COV ##################
-        if Config.params["SHOW_VEH_ELLIPSE"]:
+        if config["plotter"]["show_veh_ellipse"]:
             # compute parametric ellipse for veh covariance.
             veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
             # remove old ellipses.
-            if not Config.params["SHOW_ENTIRE_TRAJ"] and "veh_cov_est" in plots.keys():
+            if not config["plotter"]["show_entire_traj"] and "veh_cov_est" in plots.keys():
                 plots["veh_cov_est"].remove()
                 del plots["veh_cov_est"]
             # plot the ellipse.
@@ -110,7 +109,7 @@ def update_plot(filter:str, msg):
         plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
 
         ############## LANDMARK COV ###################
-        if Config.params["SHOW_LM_ELLIPSES"]:
+        if config["plotter"]["show_landmark_ellipses"]:
             # plot new landmark covariances.
             for i in range(len(msg.landmarks) // 3):
                 # replace previous if it's been plotted before.
@@ -131,7 +130,7 @@ def update_plot(filter:str, msg):
             veh_len = 3 if n_sig % 2 == 1 else 4
             ############## VEH POSE SIGMA POINTS #################
             # only show sigma points' veh pose, not landmark info.
-            if Config.params["PLOT_UKF_ARROWS"]:
+            if config["plotter"]["plot_ukf_arrows"]:
                 # plot as arrows (slow).
                 if "veh_sigma_pts" in plots.keys() and len(plots["veh_sigma_pts"].keys()) > 0:
                     for i in plots["veh_sigma_pts"].keys():
@@ -140,7 +139,7 @@ def update_plot(filter:str, msg):
                 # draw a pt with arrow for all sigma pts.
                 for i in range(0, 2*n_sig+1):
                     yaw = msg.X[i*n_sig+2] if veh_len == 3 else remainder(atan2(msg.X[i*n_sig+3], msg.X[i*n_sig+2]), tau)
-                    plots["veh_sigma_pts"][i] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], Config.params["ARROW_LEN"]*cos(yaw), Config.params["ARROW_LEN"]*sin(yaw), color="cyan", width=0.1)
+                    plots["veh_sigma_pts"][i] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], config["plotter"]["arrow_len"]*cos(yaw), config["plotter"]["arrow_len"]*sin(yaw), color="cyan", width=0.1)
             else: # just show x,y of pts.
                 X_x = [msg.X[i*n_sig] for i in range(0,2*n_sig+1)]
                 X_y = [msg.X[i*n_sig+1] for i in range(0,2*n_sig+1)]
@@ -152,7 +151,7 @@ def update_plot(filter:str, msg):
                 plots["veh_sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=2)
 
             ################# LANDMARK SIGMA POINTS ##################
-            if Config.params["SHOW_LM_SIG_PTS"]:
+            if config["plotter"]["show_landmark_sigma_pts"]:
                 # plot all landmark sigma pts.
                 X_lm_x = []; X_lm_y = []
                 for j in range(2*n_sig+1):
@@ -170,7 +169,7 @@ def update_plot(filter:str, msg):
     elif filter == "pf":
         plt.title("PF-Estimated Vehicle Pose")
         ########## PARTICLE SET ###############
-        if Config.params["PLOT_PF_ARROWS"]:
+        if config["plotter"]["plot_pf_arrows"]:
             # plot as arrows (slow).
             if "particle_set" in plots.keys() and len(plots["particle_set"].keys()) > 0:
                 for i in plots["particle_set"].keys():
@@ -178,7 +177,7 @@ def update_plot(filter:str, msg):
             plots["particle_set"] = {}
             # draw a pt with arrow for all particles.
             for i in range(len(msg.x)):
-                plots["particle_set"][i] = plt.arrow(msg.x[i], msg.y[i], Config.params["ARROW_LEN"]*cos(msg.yaw[i]), Config.params["ARROW_LEN"]*sin(msg.yaw[i]), color="red", width=0.1)
+                plots["particle_set"][i] = plt.arrow(msg.x[i], msg.y[i], config["plotter"]["arrow_len"]*cos(msg.yaw[i]), config["plotter"]["arrow_len"]*sin(msg.yaw[i]), color="red", width=0.1)
         else:
             # plot as points (faster).
             if "particle_set" in plots.keys():
@@ -187,8 +186,8 @@ def update_plot(filter:str, msg):
             plots["particle_set"] = plt.scatter([msg.x[i] for i in range(len(msg.x))], [msg.y[i] for i in range(len(msg.y))], s=8, color="red")
 
     # force desired window region.
-    plt.xlim(Config.params["DISPLAY_REGION"])
-    plt.ylim(Config.params["DISPLAY_REGION"])
+    plt.xlim(display_region)
+    plt.ylim(display_region)
     # do the plotting.
     plt.draw()
     plt.pause(0.00000000001)
@@ -221,17 +220,17 @@ def get_pf_state(msg):
 def save_plot(pkg_path):
     # save plot we've been building upon exit.
     # save to a file in pkg/plots directory.
-    if fname != "" and Config.params["SAVE_FINAL_MAP"]:
+    if fname != "" and config["plotter"]["save_final_map"]:
         plt.savefig(pkg_path+"/plots/"+fname+"_demo.png", format='png')
 
 def get_true_pose(msg):
-    if not Config.params["SHOW_TRUE_TRAJ"]: return
+    if not config["plotter"]["show_true_traj"]: return
     # save the messages to a queue so they can be shown with the corresponding estimate.
     global true_poses
     true_poses.append(msg)
 
 def get_true_landmark_map(msg):
-    if not Config.params["SHOW_TRUE_LM_MAP"]: return
+    if not config["plotter"]["show_true_landmark_map"]: return
     # rospy.loginfo("Ground truth map received by plotting node.")
     lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
     lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
@@ -245,7 +244,7 @@ def on_click(event):
         rospy.loginfo("Killing plotting_node on right click.")
         exit()
     elif event.button is MouseButton.LEFT:
-        if Config.params["LIST_CLICKED_POINTS"]:
+        if config["plotter"]["list_clicked_points"]:
             clicked_points.append((event.xdata, event.ydata))
             print(clicked_points)
         # publish new goal pt for the planner.
@@ -254,12 +253,12 @@ def on_click(event):
         get_planned_path(Float32MultiArray(data=[event.xdata, event.ydata]))
 
 def get_color_map(msg):
-    if not Config.params["SHOW_OCC_MAP"]: return
+    if not config["plotter"]["show_occ_map"]: return
     # get the true occupancy grid map image.
     bridge = CvBridge()
     color_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
     # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
-    edge = Config.params["MAP_BOUND"]
+    edge = config["map"]["bound"]
     plt.imshow(color_map, zorder=0, extent=[-edge, edge, -edge, edge])
 
 
@@ -283,11 +282,28 @@ def main():
     global goal_pub
     rospy.init_node('plotting_node')
 
+    # read configs.
+    # find the filepath to the params file.
+    rospack = rospkg.RosPack()
+    global base_pkg_path, config
+    base_pkg_path = rospack.get_path('base_pkg')
+    # open the yaml and read all params.
+    with open(base_pkg_path+'/config/params.yaml', 'r') as file:
+        config = yaml.safe_load(file)
+    
+    # compute any additional needed global configs.
+    global config_shift, config_scale, display_region
+    # occ map <-> lm coords transform params.
+    config_shift = config["map"]["occ_map_size"] / 2
+    config_scale = config["map"]["bound"] / config_shift
+    # size of region plotter will display.
+    display_region = [config["map"]["bound"] * config["plotter"]["display_region_mult"] * sign for sign in (-1, 1)]
+
     # make live plot bigger.
     plt.rcParams["figure.figsize"] = (9,9)
 
     # when the node exits, make the plot.
-    atexit.register(save_plot, Config.params["BASE_PKG_PATH"])
+    atexit.register(save_plot, base_pkg_path)
 
     # subscribe to the current state.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)

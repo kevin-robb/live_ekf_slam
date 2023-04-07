@@ -6,7 +6,7 @@
 
     <!-- Filter node, which will use filter specified in params.yaml -->
     <node pkg="localization_pkg" type="localization_node" name="localization_node" output="screen" />
-    
+
     <!-- Call main sim driver script. -->
     <include file="$(find base_pkg)/launch/sim_base.launch" >
         <arg name="occ_map_img" value="$(arg occ_map_img)"/>
