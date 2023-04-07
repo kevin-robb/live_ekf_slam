@@ -21,13 +21,6 @@ ros::Publisher statePub;
 // flag to wait for map to be received (for localization-only filters).
 bool loadedTrueMap = false;
 
-enum class FilterChoice {
-    EKF_SLAM,
-    UKF_LOC,
-    UKF_SLAM,
-    POSE_GRAPH_SLAM
-};
-FilterChoice filter_choice;
 std::unique_ptr<Filter> filter = nullptr;
 
 float readParams() {
@@ -39,16 +32,13 @@ float readParams() {
 
     const std::string filter_choice_str = config["FILTER"].as<std::string>();
     if (filter_choice_str == "ekf_slam") {
-        filter_choice = FilterChoice::EKF_SLAM;
         filter = std::make_unique<EKF>();
-    } else if (filter_choice_str == "ukf_loc") {
-        filter_choice = FilterChoice::UKF_LOC;
-        filter = std::make_unique<UKF>();
     } else if (filter_choice_str == "ukf_slam") {
-        filter_choice = FilterChoice::UKF_SLAM;
         filter = std::make_unique<UKF>();
+    } else if (filter_choice_str == "ukf_loc") {
+        filter = std::make_unique<UKF>();
+        filter->type = FilterChoice::UKF_LOC; // Override default of UKF_SLAM.
     } else if (filter_choice_str == "pose_graph") {
-        filter_choice = FilterChoice::POSE_GRAPH_SLAM;
         filter = std::make_unique<PoseGraph>();
     } else {
         std::cout << "Invalid filter choice in params.yaml." << std::endl << std::flush;
@@ -74,7 +64,7 @@ void iterate(const ros::TimerEvent& event) {
         // wait for filter to init and to get command and measurement.
         return;
     }
-    if (filter_choice == FilterChoice::UKF_LOC && !loadedTrueMap) {
+    if (filter->type == FilterChoice::UKF_LOC && !loadedTrueMap) {
         // for localization-only filters, wait to get the map.
         return;
     }
@@ -87,7 +77,7 @@ void iterate(const ros::TimerEvent& event) {
     filter->update(cmdMsg, lmMeasMsg);
 
     // Not all filters will necessarily have the same (or any) state output.
-    switch (filter_choice) {
+    switch (filter->type) {
         case FilterChoice::EKF_SLAM: {
             base_pkg::EKFState stateMsg = filter->getEKFState();
             statePub.publish(stateMsg);
@@ -137,7 +127,7 @@ int main(int argc, char **argv) {
 
     // publish localization state.
     // Not all filters will necessarily have the same (or any) state output.
-    switch (filter_choice) {
+    switch (filter->type) {
         case FilterChoice::EKF_SLAM: {
             statePub = node.advertise<base_pkg::EKFState>("/state/ekf", 1);
             break;

@@ -118,7 +118,7 @@ Eigen::VectorXd UKF::motionModel(Eigen::VectorXd x, float u_d, float u_th) {
 Eigen::VectorXd UKF::sensingModel(Eigen::VectorXd x, int lm_i) {
     Eigen::VectorXd z_est = Eigen::VectorXd::Zero(2);
     float yaw = remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi);
-    if (this->ukfSlamMode) {
+    if (this->type == FilterChoice::UKF_SLAM) {
         // SLAM mode. lm_i is the index of this landmark in our state.
         // Generate measurement we expect from current estimates
         // of veh pose and landmark position.
@@ -240,7 +240,7 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
         float r = lm_meas[l*3+1];
         float b = lm_meas[l*3+2];
         int lm_i = -1;
-        if (this->ukfSlamMode) {
+        if (this->type == FilterChoice::UKF_SLAM) {
             // check if we have seen this landmark before.
             for (int j=0; j<M; ++j) {
                 if (this->lm_IDs[j] == id) {
@@ -250,7 +250,7 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
             }
         }
         // if it's a new landmark, wait to handle it later.
-        if (this->ukfSlamMode && lm_i == -1) {
+        if (this->type == FilterChoice::UKF_SLAM && lm_i == -1) {
             new_landmark_indexes.push_back(l);
         } else {
             landmarkUpdate(lm_i, id, r, b);
@@ -274,7 +274,7 @@ void UKF::updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
 void UKF::landmarkUpdate(int lm_i, int id, float r, float b) {
     // localization mode, or the landmark was found in the state.
     //////////// LANDMARK UPDATE ///////////
-    if (this->ukfSlamMode) {
+    if (this->type == FilterChoice::UKF_SLAM) {
         // get index of this landmark in the state.
         lm_i = lm_i*2+4;
     } else {
