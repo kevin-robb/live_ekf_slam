@@ -4,20 +4,42 @@
 // macro to make eigen use exceptions instead of assertion fails.
 #define eigen_assert(X) do { if(!(X)) throw std::runtime_error(#X); } while(false);
 
-// Standard imports.
+// Standard C++ and ROS imports.
 #include <ros/ros.h>
 #include "geometry_msgs/Vector3.h"
 #include "std_msgs/Float32MultiArray.h"
 #include <vector>
 #include <cmath>
 #include <typeinfo>
+#include <yaml-cpp/yaml.h>
+#include <unordered_map>
+// Eigen.
 #include <eigen3/Eigen/Dense>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <eigen3/Eigen/Eigenvalues>
-#include <yaml-cpp/yaml.h>
-#include <unordered_map>
+// MiniSAM.
+// #include <minisam/core/Factor.h>
+// #include <minisam/core/FactorGraph.h>
+// #include <minisam/core/LossFunction.h>
+// #include <minisam/core/Variables.h>
+// #include <minisam/geometry/Sophus.h>  // include when use Sophus types in optimization
+// #include <minisam/nonlinear/LevenbergMarquardtOptimizer.h>
+// #include <minisam/nonlinear/MarginalCovariance.h>
+// #include <minisam/slam/BetweenFactor.h>
+// #include <minisam/slam/PriorFactor.h>
+// #include <iostream>
 
-// Custom imports.
+// GTSAM.
+#include <gtsam/geometry/Pose2.h>
+#include <gtsam/inference/Key.h>
+#include <gtsam/slam/BetweenFactor.h>
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/GaussNewtonOptimizer.h>
+#include <gtsam/nonlinear/Marginals.h>
+#include <gtsam/nonlinear/Values.h>
+#include <memory>
+
+// Custom message type imports.
 #include "base_pkg/Command.h"
 #include "base_pkg/EKFState.h"
 #include "base_pkg/UKFState.h"
@@ -177,18 +199,33 @@ public:
     float matToYaw(Eigen::Matrix2d R_theta); // Log map.
     Eigen::Matrix3d computeTransform(float fwd, float ang); // Convert a command or measurement into a relative transform matrix.
     float vecDistance(Eigen::Vector2d v1, Eigen::Vector2d v2); // Compute distance between two 2D vectors.
-    void onLandmarkMeasurement(uint id, float range, float bearing); // Process a single landmark measurement.
+    void onLandmarkMeasurement(int id, float range, float bearing); // Process a single landmark measurement.
     void solvePoseGraph();
 
 protected:
-    // Graph nodes.
-    ///\note: There is a guaranteed connection from vehicle_poses[i] to vehicle_poses[i+1].
-    std::vector<Eigen::Matrix3d> vehicle_poses; // Full SE(2) vehicle pose estimate history. Index corresponds to iteration number.
-    ///\note: Each vehicle pose may have a connection to 0, 1, or more landmarks.
-    std::unordered_map<uint, Eigen::Vector2d> landmark_positions; // Landmark position estimates. Index corresponds to assigned landmark ID.
-    // Graph connections.
-    std::vector<Eigen::Matrix3d> commands; // SE(2) relative transformations implied by commanded motion. commands[i] is the transform from vehicle_poses[i] to vehicle_poses[i+1].
-    std::unordered_map<std::pair<uint, uint>, Eigen::Matrix3d> measurements; // SE(2) relative transformations implied by landmark measurements. measurements[i,j] is the transform from vehicle_poses[i] to landmark_positions[j]. There may be 0 or any number of measurements in each iteration, so a particular i may not exist as a key.
+    // The pose graph that will be optimized to solve for full vehicle history.
+    gtsam::NonlinearFactorGraph graph;
+    // Noise models for connections.
+    std::shared_ptr<gtsam::noiseModel::Diagonal> process_noise_model;
+    std::shared_ptr<gtsam::noiseModel::Diagonal> sensing_noise_model;
+
+    // Estimates of all poses before running pose-graph optimization.
+    // This is the initial iterate used when running the algorithm.
+    ///\note: These can be the online estimates from another filter, or just dumb basic estimates from simple propagation by the odom commands each timestep.
+    gtsam::Values initial_estimate;
+
+    // Params for optimization algorithm.
+    float iteration_error_threshold;
+    int max_iterations;
+
+    // // Graph nodes.
+    // ///\note: There is a guaranteed connection from vehicle_poses[i] to vehicle_poses[i+1].
+    // std::vector<Eigen::Matrix3d> vehicle_poses; // Full SE(2) vehicle pose estimate history. Index corresponds to iteration number.
+    // ///\note: Each vehicle pose may have a connection to 0, 1, or more landmarks.
+    // std::unordered_map<uint, Eigen::Vector2d> landmark_positions; // Landmark position estimates. Index corresponds to assigned landmark ID.
+    // // Graph connections.
+    // std::vector<Eigen::Matrix3d> commands; // SE(2) relative transformations implied by commanded motion. commands[i] is the transform from vehicle_poses[i] to vehicle_poses[i+1].
+    // std::unordered_map<std::pair<uint, uint>, Eigen::Matrix3d> measurements; // SE(2) relative transformations implied by landmark measurements. measurements[i,j] is the transform from vehicle_poses[i] to landmark_positions[j]. There may be 0 or any number of measurements in each iteration, so a particular i may not exist as a key.
 };
 
 #endif // FILTER_INTERFACE_H

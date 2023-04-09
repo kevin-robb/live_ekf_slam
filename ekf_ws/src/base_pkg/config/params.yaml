@@ -50,9 +50,15 @@ sensing_noise:
     W_00: 0.01
     W_11: 0.00030461741978670857
 
-# ----- UKF -----
+# ----- UKF-Specific Parameters -----
 ukf:
   W_0: 0.2 # weight on mean sigma pt.
+
+# ----- Pose-Graph-SLAM-Specific Parameters -----
+pose_graph:
+  # Params for GTSAM's Gauss-Newton solver.
+  iteration_error_threshold: 0.00001 # Stop iterating once the change in error between steps is less than this value.
+  max_iterations: 100
 
 # ----- Map -----
 map:
