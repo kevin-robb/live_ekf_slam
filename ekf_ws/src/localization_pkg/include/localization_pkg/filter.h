@@ -17,18 +17,6 @@
 #include <eigen3/Eigen/Dense>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <eigen3/Eigen/Eigenvalues>
-// MiniSAM.
-// #include <minisam/core/Factor.h>
-// #include <minisam/core/FactorGraph.h>
-// #include <minisam/core/LossFunction.h>
-// #include <minisam/core/Variables.h>
-// #include <minisam/geometry/Sophus.h>  // include when use Sophus types in optimization
-// #include <minisam/nonlinear/LevenbergMarquardtOptimizer.h>
-// #include <minisam/nonlinear/MarginalCovariance.h>
-// #include <minisam/slam/BetweenFactor.h>
-// #include <minisam/slam/PriorFactor.h>
-// #include <iostream>
-
 // GTSAM.
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/inference/Key.h>
@@ -38,7 +26,6 @@
 #include <gtsam/nonlinear/Marginals.h>
 #include <gtsam/nonlinear/Values.h>
 #include <memory>
-
 // Custom message type imports.
 #include "base_pkg/Command.h"
 #include "base_pkg/EKFState.h"
@@ -51,7 +38,8 @@ enum class FilterChoice {
     EKF_SLAM,
     UKF_LOC,
     UKF_SLAM,
-    POSE_GRAPH_SLAM
+    POSE_GRAPH_SLAM,
+    NAIVE_COMMAND_PROPAGATION // No filtering will be done, but rather commands will be directly applied to the vehicle pose estimate. This can be used as a baseline for the initial pose graph iterate.
 };
 
 // Interface class for stuff used by all filters.
@@ -95,6 +83,7 @@ protected:
     Eigen::MatrixXd P_pred;
 
 public:
+    // Implementations of functions that are common among muiltiple filters.
     void readParams(YAML::Node config) { // Read/setup commonly-used params.
         // process noise.
         this->V.setIdentity(2,2);
@@ -111,6 +100,29 @@ public:
         // measurement constraints.
         this->landmark_id_is_known = config["constraints"]["measurements"]["landmark_id_is_known"].as<bool>();
         this->min_landmark_separation = config["constraints"]["measurements"]["min_landmark_separation"].as<float>();
+    }
+    Eigen::Matrix2d yawToMat(float theta) {
+        Eigen::Matrix2d result;
+        result.setIdentity(2,2);
+        result(0,0) = cos(theta);
+        result(0,1) = -sin(theta);
+        result(1,0) = sin(theta);
+        result(1,1) = cos(theta);
+        return result;
+    }
+    float matToYaw(Eigen::Matrix2d R_theta) {
+        return atan2(R_theta(1,0), R_theta(0,0));
+    }
+    Eigen::MatrixXd computeTransform(float fwd, float ang) {
+        Eigen::MatrixXd transform_mat;
+        transform_mat.setIdentity(3,3);
+        transform_mat.block(0,0,2,2) = yawToMat(ang);
+        transform_mat(0,2) = fwd;
+        return transform_mat;
+    }
+    float vecDistance(Eigen::Vector2d v1, Eigen::Vector2d v2) {
+        // compute euclidean distance between the two position vectors.
+        return sqrt((v1(0)-v2(0))*(v1(0)-v2(0)) + (v1(1)-v2(1))*(v1(1)-v2(1)));
     }
 };
 
@@ -197,10 +209,14 @@ public:
     // PG-SLAM-specific functions.
     Eigen::Matrix2d yawToMat(float theta); // Exponential map.
     float matToYaw(Eigen::Matrix2d R_theta); // Log map.
-    Eigen::Matrix3d computeTransform(float fwd, float ang); // Convert a command or measurement into a relative transform matrix.
+    Eigen::MatrixXd computeTransform(float fwd, float ang); // Convert a command or measurement into a relative transform matrix.
     float vecDistance(Eigen::Vector2d v1, Eigen::Vector2d v2); // Compute distance between two 2D vectors.
     void onLandmarkMeasurement(int id, float range, float bearing); // Process a single landmark measurement.
     void solvePoseGraph();
+
+    // The localization_node will handle running a second filter and letting us know its estimates.
+    FilterChoice filter_to_compare; // Filter to run simultaneously as naive estimate.
+    void updateNaiveVehPoseEstimate(float x, float y, float yaw);
 
 protected:
     // The pose graph that will be optimized to solve for full vehicle history.
@@ -211,21 +227,19 @@ protected:
 
     // Estimates of all poses before running pose-graph optimization.
     // This is the initial iterate used when running the algorithm.
-    ///\note: These can be the online estimates from another filter, or just dumb basic estimates from simple propagation by the odom commands each timestep.
     gtsam::Values initial_estimate;
 
     // Params for optimization algorithm.
     float iteration_error_threshold;
     int max_iterations;
 
-    // // Graph nodes.
-    // ///\note: There is a guaranteed connection from vehicle_poses[i] to vehicle_poses[i+1].
-    // std::vector<Eigen::Matrix3d> vehicle_poses; // Full SE(2) vehicle pose estimate history. Index corresponds to iteration number.
-    // ///\note: Each vehicle pose may have a connection to 0, 1, or more landmarks.
-    // std::unordered_map<uint, Eigen::Vector2d> landmark_positions; // Landmark position estimates. Index corresponds to assigned landmark ID.
-    // // Graph connections.
-    // std::vector<Eigen::Matrix3d> commands; // SE(2) relative transformations implied by commanded motion. commands[i] is the transform from vehicle_poses[i] to vehicle_poses[i+1].
-    // std::unordered_map<std::pair<uint, uint>, Eigen::Matrix3d> measurements; // SE(2) relative transformations implied by landmark measurements. measurements[i,j] is the transform from vehicle_poses[i] to landmark_positions[j]. There may be 0 or any number of measurements in each iteration, so a particular i may not exist as a key.
+    // Landmark measurements are used to generate loop closures between pairs of vehicle poses.
+    // Main vector key-value pairs are (landmark ID, vector).
+    // Vector for each landmark ID has key-value pairs (iteration #, transformation matrix).
+    // This matrix describes the measurement of this landmark from the vehicle at that iteration.
+    std::vector<std::unordered_map<int, Eigen::MatrixXd>> measurements;
+    // We also need to keep track of detected landmark positions in order to identify re-detections when the landmark ID is not provided.
+    std::vector<Eigen::Vector2d> lm_positions;
 };
 
 #endif // FILTER_INTERFACE_H
