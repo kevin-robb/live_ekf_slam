@@ -48,6 +48,7 @@ public:
     FilterChoice type = FilterChoice::NOT_SET;
     Filter() {}; // Do nothing.
     virtual ~Filter() {}; // Do nothing.
+    virtual void readParams(YAML::Node config) = 0;
     virtual void init(float x_0, float y_0, float yaw_0) = 0;
     virtual void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) = 0;
     // State calls needed to avoid errors :/
@@ -58,10 +59,18 @@ public:
     // true set of landmark positions for localization-only filters/modes.
     std::vector<float> map;
 
+    // Some filters may want a second filter to run in tandem for comparison. Must define here to avoid errors in localization_node.
+    FilterChoice filter_to_compare = FilterChoice::NOT_SET; // Filter to run simultaneously as naive estimate.
+    virtual void updateNaiveVehPoseEstimate(float x, float y, float yaw) { throw std::runtime_error("updateNaiveVehPoseEstimate is not defined for this filter."); };
+    // Similarly, some filters may not be able to be run as a secondary filter, since they don't run online.
+    virtual Eigen::Vector3d getStateVector() { throw std::runtime_error("getStateVector is not defined for this filter."); };
+
+
 protected:
     // Standard configs/flags.
     bool landmark_id_is_known = false;
     float min_landmark_separation; // two detections less than this distance apart will be considered the same landmark.
+
     // process noise.
     float v_d = 0;
     float v_th = 0;
@@ -84,7 +93,7 @@ protected:
 
 public:
     // Implementations of functions that are common among muiltiple filters.
-    void readParams(YAML::Node config) { // Read/setup commonly-used params.
+    void readCommonParams(YAML::Node config) { // Read/setup commonly-used params.
         // process noise.
         this->V.setIdentity(2,2);
         this->v_d = config["process_noise"]["mean"]["v_d"].as<float>();
@@ -134,6 +143,7 @@ public:
     void readParams(YAML::Node config);
     void init(float x_0, float y_0, float yaw_0);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
+    Eigen::Vector3d getStateVector();
     base_pkg::EKFState getEKFState();
 
 protected:
@@ -160,6 +170,7 @@ public:
     void readParams(YAML::Node config);
     void init(float x_0, float y_0, float yaw_0);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
+    Eigen::Vector3d getStateVector();
     base_pkg::UKFState getUKFState();
     Eigen::MatrixXd nearestSPD();
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
@@ -207,15 +218,10 @@ public:
     void init(float x_0, float y_0, float yaw_0);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     // PG-SLAM-specific functions.
-    Eigen::Matrix2d yawToMat(float theta); // Exponential map.
-    float matToYaw(Eigen::Matrix2d R_theta); // Log map.
-    Eigen::MatrixXd computeTransform(float fwd, float ang); // Convert a command or measurement into a relative transform matrix.
-    float vecDistance(Eigen::Vector2d v1, Eigen::Vector2d v2); // Compute distance between two 2D vectors.
     void onLandmarkMeasurement(int id, float range, float bearing); // Process a single landmark measurement.
     void solvePoseGraph();
 
     // The localization_node will handle running a second filter and letting us know its estimates.
-    FilterChoice filter_to_compare; // Filter to run simultaneously as naive estimate.
     void updateNaiveVehPoseEstimate(float x, float y, float yaw);
 
 protected:

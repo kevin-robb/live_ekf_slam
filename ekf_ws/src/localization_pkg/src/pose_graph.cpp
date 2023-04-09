@@ -12,7 +12,7 @@ PoseGraph::PoseGraph() {
 
 void PoseGraph::readParams(YAML::Node config) {
     // setup all commonly-used params.
-    Filter::readParams(config);
+    Filter::readCommonParams(config);
     // setup all filter-specific params, if any.
     std::string filter_to_compare_str = config["pose_graph"]["filter_to_compare"].as<std::string>();
     if (filter_to_compare_str == "ekf_slam") {
@@ -51,7 +51,7 @@ void PoseGraph::updateNaiveVehPoseEstimate(float x, float y, float yaw) {
     this->x_t << x, y, yaw;
 
     // Add to the estimate list for the pose-graph optimization starting iterate.
-    this->initial_estimate.insert(this->timestep, gtsam::Pose2(x, y, yaw));
+    this->initial_estimate.insert(this->timestep+1, gtsam::Pose2(x, y, yaw));
 }
 
 void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
@@ -126,6 +126,9 @@ void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
 void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // update timestep (i.e., iteration index).
     this->timestep += 1;
+
+    // do nothing for now as a test.
+    return;
 
     // use commanded motion to create a connection between previous and new vehicle pose.
     this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(this->timestep-1, this->timestep, gtsam::Pose2(cmdMsg->fwd, 0, cmdMsg->ang), process_noise_model);

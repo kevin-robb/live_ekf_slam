@@ -8,7 +8,7 @@
 
 # ----- Filter -----
 # options: ekf_slam, ukf_loc, ukf_slam, pose_graph
-filter: "ekf_slam"
+filter: "pose_graph"
 
 # ----- Iteration Period -----
 dt: 0.05

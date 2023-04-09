@@ -16,6 +16,10 @@ import atexit
 from math import cos, sin, pi, atan2, remainder, tau
 from cv_bridge import CvBridge
 
+# Suppress constant matplotlib warnings about thread safety.
+import warnings
+warnings.filterwarnings("ignore")
+
 ############ GLOBAL VARIABLES ###################
 # store all plots objects we want to be able to remove later.
 plots = {"lm_cov_est" : {}}

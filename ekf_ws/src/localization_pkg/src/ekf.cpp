@@ -22,7 +22,7 @@ EKF::EKF() {
 
 void EKF::readParams(YAML::Node config) {
     // setup all commonly-used params.
-    Filter::readParams(config);
+    Filter::readCommonParams(config);
     // setup all filter-specific params, if any.
 }
 
@@ -176,6 +176,15 @@ void EKF::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray
     this->x_t = this->x_pred;
     this->P_t = this->P_pred;
     /////////////// END OF EKF ITERATION ///////////////////
+}
+
+
+Eigen::Vector3d EKF::getStateVector() {
+    // Return the estimated vehicle pose as a vector (x,y,yaw).
+    Eigen::Vector3d cur_veh_pose;
+    cur_veh_pose.setZero(3);
+    cur_veh_pose << this->x_t(0), this->x_t(1), this->x_t(2);
+    return cur_veh_pose;
 }
 
 // return the state as a message.

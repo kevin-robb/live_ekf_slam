@@ -1,4 +1,5 @@
 #include "ros/ros.h"
+#include <ros/console.h>
 #include "geometry_msgs/Vector3.h"
 #include "std_msgs/Float32MultiArray.h"
 #include <queue>
@@ -21,7 +22,10 @@ ros::Publisher statePub;
 // flag to wait for map to be received (for localization-only filters).
 bool loadedTrueMap = false;
 
+// filter(s) to run.
 std::unique_ptr<Filter> filter;
+std::unique_ptr<Filter> filter_secondary; // Second filter to run, if filter->filter_to_compare != NOT_SET.
+
 
 float readParams() {
     std::string pkg_path = ros::package::getPath("base_pkg");
@@ -40,12 +44,45 @@ float readParams() {
         filter->type = FilterChoice::UKF_LOC; // Override default of UKF_SLAM.
     } else if (filter_choice_str == "pose_graph") {
         filter = std::make_unique<PoseGraph>();
+        ///\todo: create class for naive filter and add as option.
     } else {
         throw std::runtime_error("Invalid filter choice in params.yaml.");
     }
-
     // Setup params for the specified filter.
     filter->readParams(config);
+
+    // Setup secondary filter if applicable.
+    if (filter->filter_to_compare == filter->type) {
+        throw std::runtime_error("Cannot instantiate two instances of the same filter.");
+    }
+    switch (filter->filter_to_compare) {
+        // Define allowed secondary filters.
+        case FilterChoice::EKF_SLAM: {
+            filter_secondary = std::make_unique<EKF>();
+            break;
+        }
+        case FilterChoice::UKF_SLAM: {
+            filter_secondary = std::make_unique<UKF>();
+            break;
+        }
+        case FilterChoice::UKF_LOC: {
+            filter_secondary = std::make_unique<UKF>();
+            filter_secondary->type = FilterChoice::UKF_LOC; // Override default of UKF_SLAM.
+            break;
+        }
+        ///\todo: create class for naive filter and add as option.
+        default: {
+            // Do not instantiate secondary filter. Its type will remain NOT_SET.
+            if (filter->type == FilterChoice::POSE_GRAPH_SLAM) {
+                throw std::runtime_error("PGS requires a secondary filter.");
+            }
+            break;
+        }
+    }
+    // Setup params for the secondary filter, if applicable.
+    if (filter->filter_to_compare != FilterChoice::NOT_SET) {
+        filter_secondary->readParams(config);
+    }
 
     return DT;
 }
@@ -61,6 +98,11 @@ void initCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
     }
     // init the filter.
     filter->init(x_0, y_0, yaw_0);
+
+    // if a secondary filter is defined, init it too.
+    if (filter->filter_to_compare != FilterChoice::NOT_SET) {
+        filter_secondary->init(x_0, y_0, yaw_0);
+    }
 }
 
 void iterate(const ros::TimerEvent& event) {
@@ -77,6 +119,15 @@ void iterate(const ros::TimerEvent& event) {
     cmdQueue.pop();
     std_msgs::Float32MultiArray::ConstPtr lmMeasMsg = lmMeasQueue.front();
     lmMeasQueue.pop();
+
+    // first update the secondary filter (if applicable)
+    if (filter->filter_to_compare != FilterChoice::NOT_SET) {
+        filter_secondary->update(cmdMsg, lmMeasMsg);
+        // inform the primary filter of this result.
+        Eigen::Vector3d cur_veh_pose_est = filter_secondary->getStateVector();
+        filter->updateNaiveVehPoseEstimate(cur_veh_pose_est(0), cur_veh_pose_est(1), cur_veh_pose_est(2));
+    }
+
     // call the filter's update function.
     filter->update(cmdMsg, lmMeasMsg);
 
@@ -93,8 +144,28 @@ void iterate(const ros::TimerEvent& event) {
             break;
         }
         default: {
-            throw std::runtime_error("Not publishing anything for the state.");
-            ///\todo: need to publish something for state so the sim will keep going?
+            ///\note: Need to publish something for state so the sim will keep going (i think?).
+            if (filter->filter_to_compare != FilterChoice::NOT_SET) {
+                switch (filter_secondary->type) {
+                    case FilterChoice::EKF_SLAM: {
+                        base_pkg::EKFState stateMsg = filter_secondary->getEKFState();
+                        statePub.publish(stateMsg);
+                        break;
+                    }
+                    case FilterChoice::UKF_LOC ... FilterChoice::UKF_SLAM: {
+                        base_pkg::UKFState stateMsg = filter_secondary->getUKFState();
+                        statePub.publish(stateMsg);
+                        break;
+                    }
+                    default: {
+                        ROS_WARN_STREAM("LOC: Not publishing any state estimate.");
+                        break;
+                    }
+                }
+            } else {
+                ROS_WARN_STREAM("LOC: Not publishing any state estimate.");
+            }
+            // throw std::runtime_error("Not publishing anything for the state.");
             break;
         }
     }
@@ -142,8 +213,27 @@ int main(int argc, char **argv) {
             statePub = node.advertise<base_pkg::UKFState>("/state/ukf", 1);
             break;
         default:
-            throw std::runtime_error("Not setting up any state publisher.");
-            ///\todo: need to publish something for state so the sim will keep going?
+            ///\note: Need to publish something for state so the sim will keep going (i think?).
+            if (filter->filter_to_compare != FilterChoice::NOT_SET) {
+                ROS_WARN_STREAM("LOC: Setting up state publisher for secondary filter.");
+                switch (filter_secondary->type) {
+                    case FilterChoice::EKF_SLAM: {
+                        statePub = node.advertise<base_pkg::EKFState>("/state/ekf", 1);
+                        break;
+                    }
+                    case FilterChoice::UKF_LOC ... FilterChoice::UKF_SLAM: {
+                        statePub = node.advertise<base_pkg::UKFState>("/state/ukf", 1);
+                        break;
+                    }
+                    default: {
+                        ROS_WARN_STREAM("LOC: Secondary filter also has no viable state publisher.");
+                        break;
+                    }
+                }
+            } else {
+                ROS_WARN_STREAM("LOC: Not setting up any state publisher.");
+            }
+            // throw std::runtime_error("Not setting up any state publisher.");
             break;
     }
 

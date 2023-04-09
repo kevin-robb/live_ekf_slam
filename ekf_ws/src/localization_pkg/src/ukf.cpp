@@ -24,7 +24,7 @@ UKF::UKF() {
 
 void UKF::readParams(YAML::Node config) {
     // setup all commonly-used params.
-    Filter::readParams(config);
+    Filter::readCommonParams(config);
     // setup all filter-specific params, if any.
 }
 
@@ -42,6 +42,14 @@ void UKF::init(float x_0, float y_0, float yaw_0) {
     this->Q(3,3) = this->V(1,1) * sin(yaw);
     // set initialized flag.
     this->isInit = true;
+}
+
+Eigen::Vector3d UKF::getStateVector() {
+    // Return the estimated vehicle pose as a vector (x,y,yaw).
+    Eigen::Vector3d cur_veh_pose;
+    cur_veh_pose.setZero(3);
+    cur_veh_pose << this->x_t(0), this->x_t(1), remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi);
+    return cur_veh_pose;
 }
 
 base_pkg::UKFState UKF::getUKFState() {
