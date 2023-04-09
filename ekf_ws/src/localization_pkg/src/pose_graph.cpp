@@ -26,6 +26,7 @@ void PoseGraph::readParams(YAML::Node config) {
     } else {
         throw std::runtime_error("Invalid choice of pose_graph.filter_to_compare in params.yaml.");
     }
+    this->graph_size_threshold = config["pose_graph"]["graph_size_threshold"].as<int>();
     this->iteration_error_threshold = config["pose_graph"]["iteration_error_threshold"].as<float>();
     this->max_iterations = config["pose_graph"]["max_iterations"].as<int>();
 
@@ -38,7 +39,11 @@ void PoseGraph::init(float x_0, float y_0, float yaw_0) {
     // Add a prior on the first pose, setting it to the origin
     // A prior factor consists of a mean and a noise model (covariance matrix)
     auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.3, 0.3, 0.1));
+    ROS_INFO_STREAM("PGS: Adding prior for initial veh pose.");
     graph.addPrior(this->timestep, gtsam::Pose2(x_0, y_0, yaw_0), priorNoise);
+
+    ROS_INFO_STREAM("PGS: Adding prior as first naive estimate.");
+    this->initial_estimate.insert(this->timestep, gtsam::Pose2(x_0, y_0, yaw_0));
 
     // set initialized flag.
     this->isInit = true;
@@ -50,8 +55,11 @@ void PoseGraph::updateNaiveVehPoseEstimate(float x, float y, float yaw) {
     this->x_t.setZero(3);
     this->x_t << x, y, yaw;
 
-    // Add to the estimate list for the pose-graph optimization starting iterate.
-    this->initial_estimate.insert(this->timestep+1, gtsam::Pose2(x, y, yaw));
+    if (this->timestep <= this->graph_size_threshold) {
+        // Add to the estimate list for the pose-graph optimization starting iterate.
+        ROS_INFO_STREAM("PGS: Adding naive estimate.");
+        this->initial_estimate.insert(this->timestep+1, gtsam::Pose2(x, y, yaw));
+    } // else, we already ran optimization, so just exit.
 }
 
 void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
@@ -115,6 +123,7 @@ void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
         // Combine pair of measurement transforms to generate a single relationship for a graph connection.
         Eigen::MatrixXd connection_mat = inv_meas_mat * this->measurements[landmark_meas_index][iteration_number];
         // Create the loop closure connection.
+        ROS_INFO_STREAM("PGS: Adding loop closure connection.");
         this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(iteration_number, this->timestep, gtsam::Pose2(connection_mat), sensing_noise_model);
     }
 
@@ -127,10 +136,20 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
     // update timestep (i.e., iteration index).
     this->timestep += 1;
 
-    // do nothing for now as a test.
-    return;
+    // check stopping criteria.
+    if (this->timestep == this->graph_size_threshold) {
+        // run optimization algorithm and then exit.
+        ROS_INFO_STREAM("PGS: Solving the pose graph.");
+        solvePoseGraph();
+        return;
+    } else if (this->timestep > this->graph_size_threshold) {
+        // we already ran optimization, so just exit.
+        // ROS_WARN_STREAM("PGS: Already solved pose graph, so just exiting immediately.");
+        return;
+    }
 
     // use commanded motion to create a connection between previous and new vehicle pose.
+    ROS_INFO_STREAM("PGS: Adding command connection.");
     this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(this->timestep-1, this->timestep, gtsam::Pose2(cmdMsg->fwd, 0, cmdMsg->ang), process_noise_model);
 
     // process all measurements for this iteration, and generate loop closure constraints if applicable.
@@ -147,11 +166,6 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
         float b = lm_meas[l*3+2];
         onLandmarkMeasurement(id, r, b);
     }
-
-    ///\todo: Add "initial estimate" poses to a graph. These will come from running the EKF, UKF, or just doing some dumb propagation method.
-    float x_est, y_est, yaw_est;
-    this->initial_estimate.insert(this->timestep, gtsam::Pose2(x_est, y_est, yaw_est));
-
 }
 
 void PoseGraph::solvePoseGraph() {
@@ -176,4 +190,6 @@ void PoseGraph::solvePoseGraph() {
     for (int i = 0; i < this->timestep; ++i) {
         std::cout << "covariance of vehicle pose " << i << ":\n" << marginals.marginalCovariance(i) << std::endl;
     }
+
+    ///\todo: Save or display the results. Compare to naive estimates analytically and visually.
 }

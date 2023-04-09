@@ -6,6 +6,7 @@
 
 // Standard C++ and ROS imports.
 #include <ros/ros.h>
+#include <ros/console.h>
 #include "geometry_msgs/Vector3.h"
 #include "std_msgs/Float32MultiArray.h"
 #include <vector>
@@ -234,6 +235,9 @@ protected:
     // Estimates of all poses before running pose-graph optimization.
     // This is the initial iterate used when running the algorithm.
     gtsam::Values initial_estimate;
+
+    // Stopping criteria.
+    int graph_size_threshold;
 
     // Params for optimization algorithm.
     float iteration_error_threshold;
