@@ -102,14 +102,23 @@ def update_plot(filter:str, msg):
                 landmark_index = graph_before_optimization.meas_connections[2*j+1]
                 # plot a line between the specified vehicle pose and landmark.
                 plt.plot([graph_before_optimization.x_v[iter_veh_pose], lm_x[landmark_index]], [graph_before_optimization.x_y[iter_veh_pose], lm_y[landmark_index]], color="red", zorder=0)
+   
+        plt.title("Naive estimate of vehicle pose history")
+        plt.draw() # update the plot
+        plt.pause(3)
 
-        # do the plotting.
-        plt.draw()
-        plt.pause(0.00000000001)
+        # plot poses and connections in final resulting graph.
+        for i in range(graph_after_optimization.num_iterations):
+            # draw a single pt with arrow to represent each veh pose.
+            plt.arrow(graph_after_optimization.x_v[i], graph_after_optimization.y_v[i], config["plotter"]["arrow_len"]*cos(graph_after_optimization.yaw_v[i]), config["plotter"]["arrow_len"]*sin(graph_after_optimization.yaw_v[i]), facecolor="purple", width=0.1, zorder=5, edgecolor="black")
+        plt.plot(graph_after_optimization.x_v, graph_after_optimization.y_v, color="purple", zorder=0)
+
+        plt.title("Optimized estimate of vehicle pose history")
+        plt.draw() # update the plot
+        plt.pause(3)
 
         # exit this node when PGS viz is done.
-        rospy.sleep(5)
-        rospy.logwarn("PLT: skipping plot update loop.")
+        rospy.logwarn("PLT: skipping normal plot update loop.")
         return
     
     ###################### TIMESTEP #####################
