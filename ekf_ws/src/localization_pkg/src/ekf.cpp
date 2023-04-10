@@ -187,8 +187,13 @@ Eigen::Vector3d EKF::getStateVector() {
     return cur_veh_pose;
 }
 
-// return the state as a message.
-base_pkg::EKFState EKF::getEKFState() {
+void EKF::setupStatePublisher(ros::NodeHandle node) {
+    // Create a publisher for the proper state message type.
+    this->statePub = node.advertise<base_pkg::EKFState>("/state/ekf", 1);
+}
+
+void EKF::publishState() {
+    // Convert the EKF state to a ROS message and publish it.
     base_pkg::EKFState stateMsg;
     // timestep.
     stateMsg.timestep = this->timestep;
@@ -213,5 +218,6 @@ base_pkg::EKFState EKF::getEKFState() {
         }
     }
     stateMsg.P = p;
-    return stateMsg;
+    // publish it.
+    this->statePub.publish(stateMsg);
 }

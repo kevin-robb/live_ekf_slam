@@ -16,8 +16,6 @@
 // define queues for messages.
 std::queue<base_pkg::Command::ConstPtr> cmdQueue;
 std::queue<std_msgs::Float32MultiArray::ConstPtr> lmMeasQueue;
-// define state publisher.
-ros::Publisher statePub;
 
 // flag to wait for map to be received (for localization-only filters).
 bool loadedTrueMap = false;
@@ -131,43 +129,12 @@ void iterate(const ros::TimerEvent& event) {
     // call the filter's update function.
     filter->update(cmdMsg, lmMeasMsg);
 
-    // Not all filters will necessarily have the same (or any) state output.
-    switch (filter->type) {
-        case FilterChoice::EKF_SLAM: {
-            base_pkg::EKFState stateMsg = filter->getEKFState();
-            statePub.publish(stateMsg);
-            break;
-        }
-        case FilterChoice::UKF_LOC ... FilterChoice::UKF_SLAM: {
-            base_pkg::UKFState stateMsg = filter->getUKFState();
-            statePub.publish(stateMsg);
-            break;
-        }
-        default: {
-            ///\note: Need to publish something for state so the sim will keep going (i think?).
-            if (filter->filter_to_compare != FilterChoice::NOT_SET) {
-                switch (filter_secondary->type) {
-                    case FilterChoice::EKF_SLAM: {
-                        base_pkg::EKFState stateMsg = filter_secondary->getEKFState();
-                        statePub.publish(stateMsg);
-                        break;
-                    }
-                    case FilterChoice::UKF_LOC ... FilterChoice::UKF_SLAM: {
-                        base_pkg::UKFState stateMsg = filter_secondary->getUKFState();
-                        statePub.publish(stateMsg);
-                        break;
-                    }
-                    default: {
-                        ROS_WARN_STREAM("LOC: Not publishing any state estimate.");
-                        break;
-                    }
-                }
-            } else {
-                ROS_WARN_STREAM("LOC: Not publishing any state estimate.");
-            }
-            // throw std::runtime_error("Not publishing anything for the state.");
-            break;
-        }
+    ///\note: Not all filters will necessarily have the same (or any) state output.
+    // Priotitize publishing secondary filter's state, since the main filter doesn't produce an online estimate.
+    if (filter->filter_to_compare != FilterChoice::NOT_SET) {
+        filter_secondary->publishState();
+    } else {
+        filter->publishState();
     }
 }
 
@@ -204,37 +171,11 @@ int main(int argc, char **argv) {
     float DT = readParams();
 
     // publish localization state.
-    // Not all filters will necessarily have the same (or any) state output.
-    switch (filter->type) {
-        case FilterChoice::EKF_SLAM:
-            statePub = node.advertise<base_pkg::EKFState>("/state/ekf", 1);
-            break;
-        case FilterChoice::UKF_LOC ... FilterChoice::UKF_SLAM:
-            statePub = node.advertise<base_pkg::UKFState>("/state/ukf", 1);
-            break;
-        default:
-            ///\note: Need to publish something for state so the sim will keep going (i think?).
-            if (filter->filter_to_compare != FilterChoice::NOT_SET) {
-                ROS_WARN_STREAM("LOC: Setting up state publisher for secondary filter.");
-                switch (filter_secondary->type) {
-                    case FilterChoice::EKF_SLAM: {
-                        statePub = node.advertise<base_pkg::EKFState>("/state/ekf", 1);
-                        break;
-                    }
-                    case FilterChoice::UKF_LOC ... FilterChoice::UKF_SLAM: {
-                        statePub = node.advertise<base_pkg::UKFState>("/state/ukf", 1);
-                        break;
-                    }
-                    default: {
-                        ROS_WARN_STREAM("LOC: Secondary filter also has no viable state publisher.");
-                        break;
-                    }
-                }
-            } else {
-                ROS_WARN_STREAM("LOC: Not setting up any state publisher.");
-            }
-            // throw std::runtime_error("Not setting up any state publisher.");
-            break;
+    filter->setupStatePublisher(node);
+    // if there is a secondary node, set up its publisher too.
+    if (filter->filter_to_compare != FilterChoice::NOT_SET) {
+        ROS_WARN_STREAM("LOC: Setting up state publisher for secondary filter.");
+        filter_secondary->setupStatePublisher(node);
     }
 
     // timer to update filter at set frequency.

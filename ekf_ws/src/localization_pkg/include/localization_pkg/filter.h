@@ -31,6 +31,7 @@
 #include "base_pkg/Command.h"
 #include "base_pkg/EKFState.h"
 #include "base_pkg/UKFState.h"
+#include "base_pkg/PoseGraphState.h"
 
 #define pi 3.14159265358979323846
 
@@ -52,9 +53,11 @@ public:
     virtual void readParams(YAML::Node config) = 0;
     virtual void init(float x_0, float y_0, float yaw_0) = 0;
     virtual void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) = 0;
-    // State calls needed to avoid errors :/
-    virtual base_pkg::EKFState getEKFState() { throw std::runtime_error("Cannot call getEKFState for this filter."); base_pkg::EKFState s; return s; };
-    virtual base_pkg::UKFState getUKFState() { throw std::runtime_error("Cannot call getUKFState for this filter."); base_pkg::UKFState s; return s; };
+
+    // Publish the current filter state to the proper ROS topic & message type.
+    ros::Publisher statePub; // Will be defined as the correct type by the individual filter.
+    virtual void setupStatePublisher(ros::NodeHandle node) = 0;
+    virtual void publishState() = 0;
 
     bool isInit = false;
     // true set of landmark positions for localization-only filters/modes.
@@ -144,8 +147,10 @@ public:
     void readParams(YAML::Node config);
     void init(float x_0, float y_0, float yaw_0);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
+
     Eigen::Vector3d getStateVector();
-    base_pkg::EKFState getEKFState();
+    void setupStatePublisher(ros::NodeHandle node);
+    void publishState();
 
 protected:
     // jacobians and such.
@@ -171,8 +176,6 @@ public:
     void readParams(YAML::Node config);
     void init(float x_0, float y_0, float yaw_0);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
-    Eigen::Vector3d getStateVector();
-    base_pkg::UKFState getUKFState();
     Eigen::MatrixXd nearestSPD();
     Eigen::VectorXd motionModel(Eigen::VectorXd x, float u_d, float u_th);
     Eigen::VectorXd sensingModel(Eigen::VectorXd x, int lm_i);
@@ -180,6 +183,10 @@ public:
     void updateStage(std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
     void landmarkUpdate(int lm_i, int id, float r, float b);
     void landmarkInsertion(int id, float r, float b);
+
+    Eigen::Vector3d getStateVector();
+    void setupStatePublisher(ros::NodeHandle node);
+    void publishState();
 
 protected:
     Eigen::MatrixXd Q; // expanding process noise matrix for cov summation.
@@ -225,6 +232,10 @@ public:
     // The localization_node will handle running a second filter and letting us know its estimates.
     void updateNaiveVehPoseEstimate(float x, float y, float yaw);
 
+    void setupStatePublisher(ros::NodeHandle node);
+    ros::Publisher statePubSecondary; // We want to publish both the initial pose graph from the naive filter's estimates as well as the optimized graph, so we need two publishers.
+    void publishState();
+
 protected:
     // The pose graph that will be optimized to solve for full vehicle history.
     gtsam::NonlinearFactorGraph graph;
@@ -235,9 +246,12 @@ protected:
     // Estimates of all poses before running pose-graph optimization.
     // This is the initial iterate used when running the algorithm.
     gtsam::Values initial_estimate;
+    // Estimated full pose history after running PG optimization.
+    gtsam::Values result;
 
     // Stopping criteria.
     int graph_size_threshold;
+    bool solved_pose_graph = false; // Don't publish pose graph until it's been solved.
 
     // Params for optimization algorithm.
     float iteration_error_threshold;

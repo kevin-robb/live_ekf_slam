@@ -8,7 +8,7 @@ import rospy, rospkg, yaml
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from sensor_msgs.msg import Image
-from base_pkg.msg import EKFState, UKFState, PFState
+from base_pkg.msg import EKFState, UKFState, PoseGraphState
 from matplotlib.backend_bases import MouseButton
 from matplotlib import pyplot as plt
 import numpy as np
@@ -31,6 +31,10 @@ goal_pub = None
 clicked_points = []
 # queue of true poses so we only show the one corresponding to the current estimate.
 true_poses = []
+
+# PoseGraphState messages received by plotting_node.
+graph_before_optimization = None
+graph_after_optimization = None
 #################################################
 
 
@@ -65,6 +69,48 @@ def cov_to_ellipse(P_v):
 def update_plot(filter:str, msg):
     # draw everything for this timestep.
     global plots
+
+    # if we detect that pose-graph-slam has finished, kill the current plot and switch to that one.
+    if graph_before_optimization is not None and graph_after_optimization is not None:
+        # kill the current plot.
+        rospy.logwarn("PLT: killing current plot.")
+        plt.clf()
+        # start the pose-graph plot.
+        rospy.logwarn("PLT: starting PGS-Viz loop.")
+
+        """
+        Plot the graph encoded in a PoseGraphState message.
+        """
+        # plot all landmark position estimates.
+        if len(graph_before_optimization.landmarks) > 0: # there might be none.
+            lm_x = [graph_before_optimization.landmarks[i] for i in range(0,len(graph_before_optimization.landmarks),2)]
+            lm_y = [graph_before_optimization.landmarks[i] for i in range(1,len(graph_before_optimization.landmarks),2)]
+            plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
+
+        # plot all vehicle poses.
+        for i in range(graph_before_optimization.num_iterations):
+            # draw a single pt with arrow to represent each veh pose.
+            plt.arrow(graph_before_optimization.x_v[i], graph_before_optimization.y_v[i], config["plotter"]["arrow_len"]*cos(graph_before_optimization.yaw_v[i]), config["plotter"]["arrow_len"]*sin(graph_before_optimization.yaw_v[i]), facecolor="blue", width=0.1, zorder=4, edgecolor="black")
+
+        # plot all connections.
+        # we know a connection exists between every vehicle pose and the pose on the immediate previous/next iterations.
+        plt.plot(graph_before_optimization.x_v, graph_before_optimization.y_v, color="blue", zorder=0)
+        # measurement connections are not fully-connected, but rather encoded in the message.
+        if len(graph_before_optimization.meas_connections) > 0: # there could possibly be none.
+            for j in range(len(graph_before_optimization.meas_connections) // 2):
+                iter_veh_pose = graph_before_optimization.meas_connections[2*j]
+                landmark_index = graph_before_optimization.meas_connections[2*j+1]
+                # plot a line between the specified vehicle pose and landmark.
+                plt.plot([graph_before_optimization.x_v[iter_veh_pose], lm_x[landmark_index]], [graph_before_optimization.x_y[iter_veh_pose], lm_y[landmark_index]], color="red", zorder=0)
+
+        # do the plotting.
+        plt.draw()
+        plt.pause(0.00000000001)
+
+        # exit this node when PGS viz is done.
+        rospy.sleep(5)
+        rospy.logwarn("PLT: skipping plot update loop.")
+        return
     
     ###################### TIMESTEP #####################
     if "timestep" in plots.keys():
@@ -168,27 +214,6 @@ def update_plot(filter:str, msg):
                 # plot sigma points.
                 plots["lm_sigma_pts"] = plt.scatter(X_lm_x, X_lm_y, s=30, color="tab:cyan", zorder=1)
 
-
-    ############## PARTICLE FILTER LOCALIZATION #####################
-    elif filter == "pf":
-        plt.title("PF-Estimated Vehicle Pose")
-        ########## PARTICLE SET ###############
-        if config["plotter"]["plot_pf_arrows"]:
-            # plot as arrows (slow).
-            if "particle_set" in plots.keys() and len(plots["particle_set"].keys()) > 0:
-                for i in plots["particle_set"].keys():
-                    plots["particle_set"][i].remove()
-            plots["particle_set"] = {}
-            # draw a pt with arrow for all particles.
-            for i in range(len(msg.x)):
-                plots["particle_set"][i] = plt.arrow(msg.x[i], msg.y[i], config["plotter"]["arrow_len"]*cos(msg.yaw[i]), config["plotter"]["arrow_len"]*sin(msg.yaw[i]), color="red", width=0.1)
-        else:
-            # plot as points (faster).
-            if "particle_set" in plots.keys():
-                plots["particle_set"].remove()
-            # draw entire particle set at once.
-            plots["particle_set"] = plt.scatter([msg.x[i] for i in range(len(msg.x))], [msg.y[i] for i in range(len(msg.y))], s=8, color="red")
-
     # force desired window region.
     plt.xlim(display_region)
     plt.ylim(display_region)
@@ -213,13 +238,18 @@ def get_ukf_state(msg):
     # update the plot.
     update_plot("ukf", msg)
 
-# get the state published by the PF.
-def get_pf_state(msg):
-    global fname
-    # set filename for PF output.
-    fname = "pf"
-    # update the plot.
-    update_plot("pf", msg)
+# get the factor graphs published by Pose Graph SLAM filter.
+def get_pose_graph_initial(msg):
+    # set this graph for our one-time plotter.
+    global graph_before_optimization
+    graph_before_optimization = msg
+    rospy.loginfo("PLT: plotting node got PGS initial.")
+
+def get_pose_graph_result(msg):
+    # set this graph for our one-time plotter.
+    global graph_after_optimization
+    graph_after_optimization = msg
+    rospy.loginfo("PLT: plotting node got PGS result.")
 
 def save_plot(pkg_path):
     # save plot we've been building upon exit.
@@ -312,7 +342,8 @@ def main():
     # subscribe to the current state.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)
     rospy.Subscriber("/state/ukf", UKFState, get_ukf_state, queue_size=1)
-    rospy.Subscriber("/state/pf", PFState, get_pf_state, queue_size=1)
+    rospy.Subscriber("/state/pose_graph/initial", PoseGraphState, get_pose_graph_initial, queue_size=1)
+    rospy.Subscriber("/state/pose_graph/result", PoseGraphState, get_pose_graph_result, queue_size=1)
     # subscribe to ground truth.
     rospy.Subscriber("/truth/veh_pose", Vector3, get_true_pose, queue_size=1)
     rospy.Subscriber("/truth/landmarks", Float32MultiArray, get_true_landmark_map, queue_size=1)

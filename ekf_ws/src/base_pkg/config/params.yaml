@@ -101,7 +101,6 @@ plotter:
   # display params
   arrow_len: 0.1 # length of pose arrow.
   cov_std_dev: 1 # number of std dev to include in cov ellipses.
-  plot_pf_arrows: False # show individual heading for all PF particles
   plot_ukf_arrows: True # show individual heading for all UKF sigma points
   show_landmark_sigma_pts: True # for UKF, show sigma points for landmarks as well as vehicle.
   display_region_mult: 1.0 # amount to multiply map.bound by to get the display region.

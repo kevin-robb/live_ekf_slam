@@ -55,7 +55,7 @@ void PoseGraph::updateNaiveVehPoseEstimate(float x, float y, float yaw) {
     this->x_t.setZero(3);
     this->x_t << x, y, yaw;
 
-    if (this->timestep <= this->graph_size_threshold) {
+    if (!this->solved_pose_graph) {
         // Add to the estimate list for the pose-graph optimization starting iterate.
         ROS_INFO_STREAM("PGS: Adding naive estimate.");
         this->initial_estimate.insert(this->timestep+1, gtsam::Pose2(x, y, yaw));
@@ -133,18 +133,22 @@ void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
 
 // Update the graph with the new information for this iteration.
 void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
+    // check stopping criteria.
+    if (this->solved_pose_graph) {
+        // we already ran optimization, so just exit.
+        // ROS_WARN_STREAM("PGS: Already solved pose graph, so just exiting immediately.");
+        return;
+    }
     // update timestep (i.e., iteration index).
     this->timestep += 1;
 
-    // check stopping criteria.
-    if (this->timestep == this->graph_size_threshold) {
+    ///\todo: maybe should have a better way to initiate all this besides a preset increment amount.
+    if (this->timestep >= this->graph_size_threshold) {
         // run optimization algorithm and then exit.
-        ROS_INFO_STREAM("PGS: Solving the pose graph.");
+        ROS_INFO_STREAM("PGS: Attempting to solve the pose graph.");
         solvePoseGraph();
-        return;
-    } else if (this->timestep > this->graph_size_threshold) {
-        // we already ran optimization, so just exit.
-        // ROS_WARN_STREAM("PGS: Already solved pose graph, so just exiting immediately.");
+        // Publish the pose graph before and after optimization so the plotting_node can visualize the difference.
+        publishState();
         return;
     }
 
@@ -181,15 +185,77 @@ void PoseGraph::solvePoseGraph() {
     // Create the optimizer ...
     gtsam::GaussNewtonOptimizer optimizer(this->graph, this->initial_estimate, parameters);
     // ... and optimize
-    gtsam::Values result = optimizer.optimize();
-    result.print("Final Result:\n");
+    this->result = optimizer.optimize();
+    this->result.print("Final Result:\n");
 
     // Calculate and print marginal covariances for all variables
     std::cout.precision(3);
-    gtsam::Marginals marginals(graph, result);
+    gtsam::Marginals marginals(graph, this->result);
     for (int i = 0; i < this->timestep; ++i) {
         std::cout << "covariance of vehicle pose " << i << ":\n" << marginals.marginalCovariance(i) << std::endl;
     }
 
-    ///\todo: Save or display the results. Compare to naive estimates analytically and visually.
+    this->solved_pose_graph = true;
+}
+
+void PoseGraph::setupStatePublisher(ros::NodeHandle node) {
+    // Create a publisher for the proper state message type.
+    this->statePubSecondary = node.advertise<base_pkg::PoseGraphState>("/state/pose_graph/initial", 1);
+    this->statePub = node.advertise<base_pkg::PoseGraphState>("/state/pose_graph/result", 1);
+}
+
+void PoseGraph::publishState() {
+    // Convert the entire pose graph to a ROS message and publish it.
+    ///\note: This happens only once, as opposed to other filters which output continuously.
+    base_pkg::PoseGraphState stateMsg;
+    stateMsg.num_iterations = this->timestep; // number of iterations before the pose graph was solved.
+    // encode vehicle pose history BEFORE pose-graph optimization was run.
+    std::vector<float> x_vec_initial;
+    std::vector<float> y_vec_initial;
+    std::vector<float> yaw_vec_initial;
+    for (int i=0; i<this->timestep; ++i) {
+        ///\todo: get pose corresponding to iteration i.
+        gtsam::Pose2 veh_pose_i = this->initial_estimate.at<gtsam::Pose2>(i);
+        gtsam::Vector3 veh_pose_coords = gtsam::Pose2::Logmap(veh_pose_i);
+        x_vec_initial.push_back(veh_pose_coords(0));
+        y_vec_initial.push_back(veh_pose_coords(1));
+        yaw_vec_initial.push_back(veh_pose_coords(2));
+    }
+    stateMsg.x_v = x_vec_initial;
+    stateMsg.y_v = y_vec_initial;
+    stateMsg.yaw_v = yaw_vec_initial;
+
+    // all landmarks.
+    stateMsg.M = this->M; // number of landmarks detected.
+    std::vector<float> lm;
+    for (int i=0; i<this->M; ++i) {
+        lm.push_back(this->lm_positions[i](0));
+        lm.push_back(this->lm_positions[i](1));
+    }
+    stateMsg.landmarks = lm;
+
+    ///\todo: encode measurement connections.
+
+
+    // publish this as the initial pose graph.
+    this->statePubSecondary.publish(stateMsg);
+
+    // replace the vehicle pose history with the solution to the pose graph optimization.
+    std::vector<float> x_vec_result;
+    std::vector<float> y_vec_result;
+    std::vector<float> yaw_vec_result;
+    for (int i=0; i<this->timestep; ++i) {
+        ///\todo: get pose corresponding to iteration i.
+        gtsam::Pose2 veh_pose_i = this->result.at<gtsam::Pose2>(i);
+        gtsam::Vector3 veh_pose_coords = gtsam::Pose2::Logmap(veh_pose_i);
+        x_vec_result.push_back(veh_pose_coords(0));
+        y_vec_result.push_back(veh_pose_coords(1));
+        yaw_vec_result.push_back(veh_pose_coords(2));
+    }
+    stateMsg.x_v = x_vec_result;
+    stateMsg.y_v = y_vec_result;
+    stateMsg.yaw_v = yaw_vec_result;
+
+    // publish it.
+    this->statePub.publish(stateMsg);
 }

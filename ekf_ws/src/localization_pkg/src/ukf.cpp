@@ -52,7 +52,13 @@ Eigen::Vector3d UKF::getStateVector() {
     return cur_veh_pose;
 }
 
-base_pkg::UKFState UKF::getUKFState() {
+void UKF::setupStatePublisher(ros::NodeHandle node) {
+    // Create a publisher for the proper state message type.
+    this->statePub = node.advertise<base_pkg::UKFState>("/state/ukf", 1);
+}
+
+void UKF::publishState() {
+    // Convert the UKF state to a ROS message and publish it.
     // state length for convenience.
     int n = 2 * this->M + 4;
     // return the state as a message.
@@ -93,7 +99,8 @@ base_pkg::UKFState UKF::getUKFState() {
     stateMsg.X = sigma_pts;
     // stateMsg.X_pred = sigma_pts_propagated;
 
-    return stateMsg;
+    // publish it.
+    this->statePub.publish(stateMsg);
 }
 
 Eigen::MatrixXd UKF::nearestSPD() {
