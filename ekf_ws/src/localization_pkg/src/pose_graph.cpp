@@ -168,11 +168,8 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
     int num_landmarks = (int) (lm_meas.size() / 3);
     // if there is at least one detection, handle each individually.
     for (int l=0; l<num_landmarks; ++l) {
-        // extract the landmark details. only use the ID if we're allowed to. otherwise, do data association.
-        int id = -1;
-        if (this->landmark_id_is_known) {
-            int id = (int) lm_meas[l*3];
-        }
+        // extract the landmark details and create a graph connection.
+        int id = (int)lm_meas[l*3]; // will only be used if this->landmark_ID_is_known. otherwise, function will do data association.
         float r = lm_meas[l*3+1];
         float b = lm_meas[l*3+2];
         onLandmarkMeasurement(id, r, b);
@@ -197,7 +194,7 @@ void PoseGraph::solvePoseGraph() {
     // Create the optimizer instance and run it.
     gtsam::GaussNewtonOptimizer optimizer(this->graph, this->initial_estimate, parameters);
     this->result = optimizer.optimize();
-    
+
     if (this->verbose) {
         this->result.print("Final Result:\n");
     

@@ -89,7 +89,6 @@ def update_plot(filter:str, msg):
     # if we detect that pose-graph-slam has finished, kill the current plot and switch to that one.
     if config["filter"].lower() == "pose_graph" and graph_before_optimization is not None:
         # Plot the graph encoded in a PoseGraphState message.
-        rospy.logwarn("PLT: plotting pose graph subplot.")
 
         # plot all landmark position estimates.
         remove_plot("init_pg_landmarks")
@@ -254,8 +253,9 @@ def get_ukf_state(msg):
 def get_pose_graph_initial(msg):
     # set this graph for our one-time plotter.
     global graph_before_optimization
+    if graph_before_optimization is None:
+        rospy.loginfo("PLT: plotting node got first pose graph state message.")
     graph_before_optimization = msg
-    rospy.loginfo("PLT: plotting node got PGS initial.")
 
 def get_pose_graph_result(msg):
     # set this graph for our one-time plotter.
@@ -276,8 +276,9 @@ def get_true_pose(msg):
     true_poses.append(msg)
 
 def get_true_landmark_map(msg):
-    if not config["plotter"]["show_true_landmark_map"]: return
-    # rospy.loginfo("Ground truth map received by plotting node.")
+    if not config["plotter"]["show_true_landmark_map"]:
+        return
+    rospy.loginfo("Ground truth map received by plotting node.")
     lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
     lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
     # plot the true landmark positions to compare to estimates.
@@ -289,7 +290,7 @@ def on_click(event):
     # global clicked_points
     if event.button is MouseButton.RIGHT:
         # kill the node.
-        rospy.loginfo("Killing plotting_node on right click.")
+        rospy.logwarn("Killing plotting_node on right click.")
         exit()
     elif event.button is MouseButton.LEFT:
         if config["plotter"]["list_clicked_points"]:
