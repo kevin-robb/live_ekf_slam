@@ -1,6 +1,6 @@
 Header header
-# total number of iterations (i.e., number of vehicle poses in full history).
-int32 num_iterations
+# total number of iterations that have elapsed (i.e., number of vehicle poses in full history).
+int32 timestep
 # vechicle pose components for all iterations.
 float32[] x_v
 float32[] y_v

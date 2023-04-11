@@ -194,7 +194,7 @@ void PoseGraph::publishState() {
     // Convert the entire pose graph to a ROS message and publish it.
     base_pkg::PoseGraphState stateMsg;
     // Set params that are the same for the pose graph both before and after optimization.
-    stateMsg.num_iterations = this->timestep; // number of iterations before the pose graph was solved.
+    stateMsg.timestep = this->timestep; // number of iterations before the pose graph was solved.
     stateMsg.M = this->M; // number of landmarks detected.
     ///\todo: encode measurement connections.
     stateMsg.meas_connections = this->msg_measurement_connections;

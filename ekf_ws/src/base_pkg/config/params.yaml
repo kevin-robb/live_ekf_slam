@@ -57,7 +57,7 @@ ukf:
 # ----- Pose-Graph-SLAM-Specific Parameters -----
 pose_graph:
   filter_to_compare: "ekf_slam" # Other filter to run in tandem and use for initial pose-graph estimate. Options are ekf_slam, ukf_loc, ukf_slam, naive.
-  graph_size_threshold: 50 # After this many vehicle poses have been added to the pose graph (equivalently, this many iterations have passed), stop the filter & run optimization on the pose graph.
+  graph_size_threshold: 150 # After this many vehicle poses have been added to the pose graph (equivalently, this many iterations have passed), stop the filter & run optimization on the pose graph.
   # Params for GTSAM's Gauss-Newton solver.
   iteration_error_threshold: 0.00001 # Stop iterating once the change in error between steps is less than this value.
   max_iterations: 100 # max iterations to run optimization algorithm.
