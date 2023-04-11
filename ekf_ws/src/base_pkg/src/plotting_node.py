@@ -9,19 +9,17 @@ from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from sensor_msgs.msg import Image
 from base_pkg.msg import EKFState, UKFState, PoseGraphState
-from matplotlib.backend_bases import MouseButton
-from matplotlib import pyplot as plt
-from matplotlib import gridspec
 import numpy as np
 import atexit
 from math import cos, sin, pi, atan2, remainder, tau
 from cv_bridge import CvBridge
 
+from matplotlib.backend_bases import MouseButton
+from matplotlib import pyplot as plt
+from matplotlib import gridspec
 # Suppress constant matplotlib warnings about thread safety.
 import warnings
 warnings.filterwarnings("ignore")
-
-# plt.switch_backend('agg') # non-GUI thread that stops exceptions but also prevents display :/
 
 ############ GLOBAL VARIABLES ###################
 # store all plots objects we want to be able to remove later.
@@ -83,179 +81,181 @@ def cov_to_ellipse(P_v):
         ell_rot[:,i] = np.dot(R_ell,ell[:,i])
     return ell_rot
 
-def update_kf_plot(msg, type:str):
-    """
-    Perform necessary plot updates for a new state message from the ekf or ukf (combined as they are very similar).
-    @param msg - EKFState or UKFState message.
-    @param type - either "ekf" or "ukf", specifying the message/filter type.
-    """
-    if type not in ["ekf", "ukf"]:
-        rospy.logerr("PLT: update_kf_plot called with invalid type {:}.".format(type))
-        return
-
-    global plots
-    sim_viz_fig.title.set_text(type.upper()+"-Estimated Trajectory and Landmarks")
-    #################### TIMESTEP ######################
-    remove_plot("timestep")
-    plots["timestep"] = sim_viz_fig.text(-config["map"]["bound"], config["map"]["bound"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
-
-    #################### TRUE POSE #########################
-    if config["plotter"]["show_true_traj"] and msg.timestep <= len(true_poses):
-        pose = true_poses[msg.timestep-1]
-        # plot the current veh pos, & remove previous.
-        remove_plot("veh_pos_true")
-        plots["veh_pos_true"] = sim_viz_fig.arrow(pose.x, pose.y, config["plotter"]["arrow_len"]*cos(pose.z), config["plotter"]["arrow_len"]*sin(pose.z), color="blue", width=0.1, zorder=2)
-
-    ################ VEH POS #################
-    # compute length of state to use throughout. n = 3+2M
-    n = int(len(msg.P)**(1/2))
-    # plot current estimated veh pos.
-    if not config["plotter"]["show_entire_traj"]:
-        remove_plot("veh_pos_est")
-    # draw a single pt with arrow to represent current veh pose.
-    plots["veh_pos_est"] = sim_viz_fig.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
-
-    ################ VEH COV ##################
-    if config["plotter"]["show_veh_ellipse"]:
-        # compute parametric ellipse for veh covariance.
-        veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
-        # remove old ellipses.
-        if not config["plotter"]["show_entire_traj"]:
-            remove_plot("veh_cov_est")
-        # plot the ellipse.
-        plots["veh_cov_est"], = sim_viz_fig.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
-
-    ############## LANDMARK EST ##################
-    lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
-    lm_y = [msg.landmarks[i] for i in range(2,len(msg.landmarks),3)]
-    # remove old landmark estimates.
-    remove_plot("lm_pos_est")
-    # plot new landmark estimates.
-    plots["lm_pos_est"] = sim_viz_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
-
-    ############## LANDMARK COV ###################
-    if config["plotter"]["show_landmark_ellipses"]:
-        # plot new landmark covariances.
-        for i in range(len(msg.landmarks) // 3):
-            # replace previous if it's been plotted before.
-            lm_id = msg.landmarks[i*3] 
-            remove_plot("lm_cov_est_{:}".format(lm_id))
-            # extract 2x2 cov for this landmark.
-            lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
-            # plot its ellipse.
-            plots["lm_cov_est_{:}".format(lm_id)], = sim_viz_fig.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
-    
-    ############## UKF SIGMA POINTS ##################
-    if type == "ukf":
-        # extract length of vectors in sigma pts (not necessarily = n).
-        n_sig = int(((1+8*len(msg.X))**(1/2) - 1) / 4) # soln to n*(2n+1)=len.
-        # check if we're using UKF with 3x1 or 4x1 veh state.
-        veh_len = 3 if n_sig % 2 == 1 else 4
-
-        ############## VEH POSE SIGMA POINTS #################
-        # only show sigma points' veh pose, not landmark info.
-        if config["plotter"]["plot_ukf_arrows"]:
-            # plot as arrows (slow).
-            # draw a pt with arrow for all sigma pts.
-            for i in range(0, 2*n_sig+1):
-                remove_plot("veh_sigma_pts_{:}".format(i))
-                yaw = msg.X[i*n_sig+2] if veh_len == 3 else remainder(atan2(msg.X[i*n_sig+3], msg.X[i*n_sig+2]), tau)
-                plots["veh_sigma_pts_{:}".format(i)] = sim_viz_fig.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], config["plotter"]["arrow_len"]*cos(yaw), config["plotter"]["arrow_len"]*sin(yaw), color="cyan", width=0.1)
-        else: # just show x,y of pts.
-            X_x = [msg.X[i*n_sig] for i in range(0,2*n_sig+1)]
-            X_y = [msg.X[i*n_sig+1] for i in range(0,2*n_sig+1)]
-            # remove old points.
-            remove_plot("veh_sigma_pts")
-            # plot sigma points.
-            plots["veh_sigma_pts"] = sim_viz_fig.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=2)
-
-        ################# LANDMARK SIGMA POINTS ##################
-        if config["plotter"]["show_landmark_sigma_pts"]:
-            # plot all landmark sigma pts.
-            X_lm_x = []; X_lm_y = []
-            for j in range(2*n_sig+1):
-                X_lm_x += [msg.X[j*n_sig+i] for i in range(veh_len,n_sig,2)]
-                X_lm_y += [msg.X[j*n_sig+i+1] for i in range(veh_len,n_sig,2)]
-            # remove old points.
-            remove_plot("lm_sigma_pts")
-            # plot sigma points.
-            plots["lm_sigma_pts"] = sim_viz_fig.scatter(X_lm_x, X_lm_y, s=30, color="tab:cyan", zorder=1)
-
-
-def update_pose_graph_plot(msg, type:str):
-    """
-    Plot the graph encoded in a PoseGraphState message for a new factor graph.
-    @param msg - PoseGraphState message.
-    @param type - either "init" or "result", specifying the message/filter type.
-    """
-    if type not in ["init", "result"]:
-        rospy.logerr("PLT: update_pose_graph_plot called with invalid type {:}.".format(type))
-        return
-
-    global plots
-    # set title.
-    if type == "init":
-        pose_graph_fig.title.set_text("Naive estimate of vehicle pose history")
-    else:
-        pose_graph_fig.title.set_text("Optimized estimate of vehicle pose history")
-    
-    # TODO want to plot result graph on top of init graph, so increase all zorders.
-    # layer_offset = 0 if type == "init" else 10
-    # TODO want to change colors for init vs result graph.
-    
-    ############# VEHICLE POSE HISTORY ###################
-    remove_plot(type+"_pg_veh_pose_history")
-    arrow_x_components = [config["plotter"]["arrow_len"]*cos(msg.yaw_v[i]) for i in range(msg.timestep)]
-    arrow_y_components = [config["plotter"]["arrow_len"]*sin(msg.yaw_v[i]) for i in range(msg.timestep)]
-    plots[type+"_pg_veh_pose_history"] = pose_graph_fig.quiver(msg.x_v, msg.y_v, arrow_x_components, arrow_y_components, color="blue", width=0.1, zorder=1, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
-
-    ############### LANDMARK POSITIONS ###################
-    remove_plot(type+"_pg_landmarks")
-    if msg.M > 0: # verify there is at least one landmark.
-        lm_x = [msg.landmarks[i] for i in range(0,2*msg.M,2)]
-        lm_y = [msg.landmarks[i] for i in range(1,2*msg.M,2)]
-        plots[type+"_pg_landmarks"] = pose_graph_fig.scatter(lm_x, lm_y, s=30, color="orange", edgecolors="black", zorder=2)
-
-    ############### ADJACENT POSE CONNECTIONS ###############
-    # we know a connection exists between every vehicle pose and the pose on the immediate previous/next iterations.
-    remove_plot(type+"_pg_cmd_connections")
-    plots[type+"_pg_cmd_connections"] = pose_graph_fig.plot(msg.x_v, msg.y_v, color="blue", zorder=0)
-
-    ############## MEASUREMENT CONNECTIONS ####################
-    for j in range(len(msg.meas_connections) // 2):
-        i_veh = msg.meas_connections[2*j] - 1 # vehicle index is one lower than its iteration number.
-        i_lm = msg.meas_connections[2*j+1] # landmark index.
-        # plot a line between the specified vehicle pose and landmark.
-        remove_plot(type+"_pg_meas_connection_{:}".format(j))
-        plots[type+"_pg_meas_connection_{:}".format(j)] = pose_graph_fig.plot([msg.x_v[i_veh], lm_x[i_lm]], [msg.y_v[i_veh], lm_y[i_lm]], color="red", zorder=0)
-
-
 def update_plot(event):
     """
     Update viz with any new messages that have arrived since the last iteration.
     """
+    global plots
     global msg_ekf, msg_ukf, msg_pose_graph_init, msg_pose_graph_result
     # NOTE we make a local copy of each and clear its global counterpart to avoid:
     # (a) the msg being changed while we're in the middle of plotting it, and 
     # (b) so we don't "update" the plot if a new message has not arrived since we last plotted it.
     
     # Run each update function one at a time.
+    msg = None
+    type = None
     if msg_ekf is not None:
-        msg_ekf_copy = msg_ekf
+        msg = msg_ekf
         msg_ekf = None
-        update_kf_plot(msg_ekf_copy, "ekf")
+        type = "ekf"
     if msg_ukf is not None:
-        msg_ukf_copy = msg_ukf
+        msg = msg_ukf
         msg_ukf = None
-        update_kf_plot(msg_ukf_copy, "ekf")
+        type = "ukf"
+
+    if msg is not None:
+        """
+        Perform necessary plot updates for a new state message from the ekf or ukf (combined as they are very similar).
+        @param msg - EKFState or UKFState message.
+        @param type - either "ekf" or "ukf", specifying the message/filter type.
+        """
+        if type not in ["ekf", "ukf"]:
+            rospy.logerr("PLT: update_kf_plot called with invalid type {:}.".format(type))
+            return
+
+        sim_viz_fig.title.set_text(type.upper()+"-Estimate")
+        #################### TIMESTEP ######################
+        remove_plot("timestep")
+        plots["timestep"] = sim_viz_fig.text(-config["map"]["bound"], config["map"]["bound"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
+
+        #################### TRUE POSE #########################
+        if config["plotter"]["show_true_traj"] and msg.timestep <= len(true_poses):
+            pose = true_poses[msg.timestep-1]
+            # plot the current veh pos, & remove previous.
+            remove_plot("veh_pos_true")
+            plots["veh_pos_true"] = sim_viz_fig.arrow(pose.x, pose.y, config["plotter"]["arrow_len"]*cos(pose.z), config["plotter"]["arrow_len"]*sin(pose.z), color="blue", width=0.1, zorder=2)
+
+        ################ VEH POS #################
+        # compute length of state to use throughout. n = 3+2M
+        n = int(len(msg.P)**(1/2))
+        # plot current estimated veh pos.
+        if not config["plotter"]["show_entire_traj"]:
+            remove_plot("veh_pos_est")
+        # draw a single pt with arrow to represent current veh pose.
+        plots["veh_pos_est"] = sim_viz_fig.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
+
+        ################ VEH COV ##################
+        if config["plotter"]["show_veh_ellipse"]:
+            # compute parametric ellipse for veh covariance.
+            veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
+            # remove old ellipses.
+            if not config["plotter"]["show_entire_traj"]:
+                remove_plot("veh_cov_est")
+            # plot the ellipse.
+            plots["veh_cov_est"], = sim_viz_fig.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
+
+        ############## LANDMARK EST ##################
+        lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
+        lm_y = [msg.landmarks[i] for i in range(2,len(msg.landmarks),3)]
+        # remove old landmark estimates.
+        remove_plot("lm_pos_est")
+        # plot new landmark estimates.
+        plots["lm_pos_est"] = sim_viz_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
+
+        ############## LANDMARK COV ###################
+        if config["plotter"]["show_landmark_ellipses"]:
+            # plot new landmark covariances.
+            for i in range(len(msg.landmarks) // 3):
+                # replace previous if it's been plotted before.
+                lm_id = msg.landmarks[i*3] 
+                remove_plot("lm_cov_est_{:}".format(lm_id))
+                # extract 2x2 cov for this landmark.
+                lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
+                # plot its ellipse.
+                plots["lm_cov_est_{:}".format(lm_id)], = sim_viz_fig.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
+        
+        ############## UKF SIGMA POINTS ##################
+        if type == "ukf":
+            # extract length of vectors in sigma pts (not necessarily = n).
+            n_sig = int(((1+8*len(msg.X))**(1/2) - 1) / 4) # soln to n*(2n+1)=len.
+            # check if we're using UKF with 3x1 or 4x1 veh state.
+            veh_len = 3 if n_sig % 2 == 1 else 4
+
+            ############## VEH POSE SIGMA POINTS #################
+            # only show sigma points' veh pose, not landmark info.
+            if config["plotter"]["plot_ukf_arrows"]:
+                # plot as arrows (slow).
+                # draw a pt with arrow for all sigma pts.
+                for i in range(0, 2*n_sig+1):
+                    remove_plot("veh_sigma_pts_{:}".format(i))
+                    yaw = msg.X[i*n_sig+2] if veh_len == 3 else remainder(atan2(msg.X[i*n_sig+3], msg.X[i*n_sig+2]), tau)
+                    plots["veh_sigma_pts_{:}".format(i)] = sim_viz_fig.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], config["plotter"]["arrow_len"]*cos(yaw), config["plotter"]["arrow_len"]*sin(yaw), color="cyan", width=0.1)
+            else: # just show x,y of pts.
+                X_x = [msg.X[i*n_sig] for i in range(0,2*n_sig+1)]
+                X_y = [msg.X[i*n_sig+1] for i in range(0,2*n_sig+1)]
+                # remove old points.
+                remove_plot("veh_sigma_pts")
+                # plot sigma points.
+                plots["veh_sigma_pts"] = sim_viz_fig.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=2)
+
+            ################# LANDMARK SIGMA POINTS ##################
+            if config["plotter"]["show_landmark_sigma_pts"]:
+                # plot all landmark sigma pts.
+                X_lm_x = []; X_lm_y = []
+                for j in range(2*n_sig+1):
+                    X_lm_x += [msg.X[j*n_sig+i] for i in range(veh_len,n_sig,2)]
+                    X_lm_y += [msg.X[j*n_sig+i+1] for i in range(veh_len,n_sig,2)]
+                # remove old points.
+                remove_plot("lm_sigma_pts")
+                # plot sigma points.
+                plots["lm_sigma_pts"] = sim_viz_fig.scatter(X_lm_x, X_lm_y, s=30, color="tab:cyan", zorder=1)
+                
+    msg = None
+    type = None
     if msg_pose_graph_init is not None:
-        msg_pose_graph_init_copy = msg_pose_graph_init
+        msg = msg_pose_graph_init
         msg_pose_graph_init = None
-        update_pose_graph_plot(msg_pose_graph_init_copy, "init")
+        type = "init"
     if msg_pose_graph_result is not None:
-        msg_pose_graph_result_copy = msg_pose_graph_result
+        msg = msg_pose_graph_result
         msg_pose_graph_result = None
-        update_pose_graph_plot(msg_pose_graph_result_copy, "result")
+        type = "result"
+
+    if msg is not None:
+        """
+        Plot the graph encoded in a PoseGraphState message for a new factor graph.
+        @param msg - PoseGraphState message.
+        @param type - either "init" or "result", specifying the message/filter type.
+        """
+        if type not in ["init", "result"]:
+            rospy.logerr("PLT: update_pose_graph_plot called with invalid type {:}.".format(type))
+            return
+
+        # set title.
+        if type == "init":
+            pose_graph_fig.title.set_text("Before Optimization")
+        else:
+            pose_graph_fig.title.set_text("After Optimization")
+        
+        # TODO want to plot result graph on top of init graph, so increase all zorders.
+        # layer_offset = 0 if type == "init" else 10
+        # TODO want to change colors for init vs result graph.
+        
+        ############# VEHICLE POSE HISTORY ###################
+        remove_plot(type+"_pg_veh_pose_history")
+        arrow_x_components = [config["plotter"]["arrow_len"]*cos(msg.yaw_v[i]) for i in range(msg.timestep)]
+        arrow_y_components = [config["plotter"]["arrow_len"]*sin(msg.yaw_v[i]) for i in range(msg.timestep)]
+        plots[type+"_pg_veh_pose_history"] = pose_graph_fig.quiver(msg.x_v, msg.y_v, arrow_x_components, arrow_y_components, color="blue", width=0.1, zorder=1, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
+
+        ############### LANDMARK POSITIONS ###################
+        remove_plot(type+"_pg_landmarks")
+        if msg.M > 0: # verify there is at least one landmark.
+            lm_x = [msg.landmarks[i] for i in range(0,2*msg.M,2)]
+            lm_y = [msg.landmarks[i] for i in range(1,2*msg.M,2)]
+            plots[type+"_pg_landmarks"] = pose_graph_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=2)
+
+        ############### ADJACENT POSE CONNECTIONS ###############
+        # we know a connection exists between every vehicle pose and the pose on the immediate previous/next iterations.
+        remove_plot(type+"_pg_cmd_connections")
+        plots[type+"_pg_cmd_connections"] = pose_graph_fig.plot(msg.x_v, msg.y_v, color="blue", zorder=0)
+
+        ############## MEASUREMENT CONNECTIONS ####################
+        for j in range(len(msg.meas_connections) // 2):
+            i_veh = msg.meas_connections[2*j] - 1 # vehicle index is one lower than its iteration number.
+            i_lm = msg.meas_connections[2*j+1] # landmark index.
+            # plot a line between the specified vehicle pose and landmark.
+            remove_plot(type+"_pg_meas_connection_{:}".format(j))
+            plots[type+"_pg_meas_connection_{:}".format(j)] = pose_graph_fig.plot([msg.x_v[i_veh], lm_x[i_lm]], [msg.y_v[i_veh], lm_y[i_lm]], color="red", zorder=0)
     
     # force desired window region (prevents axes expanding when vehicle comes close to an edge of the plot).
     plt.xlim(display_region)
@@ -263,7 +263,6 @@ def update_plot(event):
     # Update the viz with our changes.
     plt.draw()
     plt.pause(0.00000000001)
-
 
 # get the state published by the EKF.
 def get_ekf_state(msg):
@@ -316,7 +315,7 @@ def get_true_landmark_map(msg):
     # plot the true landmark positions to compare to estimates.
     sim_viz_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=2)
     if config["filter"].lower() == "pose_graph":
-        pose_graph_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=2)
+        pose_graph_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=1)
 
 def on_click(event):
     # global clicked_points
@@ -334,7 +333,8 @@ def on_click(event):
         get_planned_path(Float32MultiArray(data=[event.xdata, event.ydata]))
 
 def get_color_map(msg):
-    if not config["plotter"]["show_occ_map"]: return
+    if not config["plotter"]["show_occ_map"]:
+        return
     # get the true occupancy grid map image.
     bridge = CvBridge()
     color_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
@@ -431,11 +431,11 @@ def main():
     # allow user to click on the plot to set the goal position or kill the node.
     plt.connect('button_press_event', on_click)
 
-    # Start the plot display.
-    plt.show()
-
     # Setup a timer for the plot update loop.
     rospy.Timer(rospy.Duration(config["dt"]), update_plot)
+
+    # Start the plot display.
+    plt.show()
 
     rospy.spin()
 
