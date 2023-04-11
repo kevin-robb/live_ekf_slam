@@ -133,7 +133,7 @@ public:
         transform_mat(0,2) = fwd;
         return transform_mat;
     }
-    float vecDistance(Eigen::Vector2d v1, Eigen::Vector2d v2) {
+    float vecDistance(Eigen::Vector3d v1, Eigen::Vector3d v2) {
         // compute euclidean distance between the two position vectors.
         return sqrt((v1(0)-v2(0))*(v1(0)-v2(0)) + (v1(1)-v2(1))*(v1(1)-v2(1)));
     }
@@ -232,7 +232,6 @@ public:
     // The localization_node will handle running a second filter and letting us know its estimates.
     void updateNaiveVehPoseEstimate(float x, float y, float yaw);
 
-    void setupStatePublisher(ros::NodeHandle node);
     ros::Publisher statePubSecondary; // We want to publish both the initial pose graph from the naive filter's estimates as well as the optimized graph, so we need two publishers.
     void publishState();
 
@@ -243,10 +242,10 @@ protected:
     std::shared_ptr<gtsam::noiseModel::Diagonal> process_noise_model;
     std::shared_ptr<gtsam::noiseModel::Diagonal> sensing_noise_model;
 
-    // Estimates of all poses before running pose-graph optimization.
+    // Estimates of all poses & landmarks before running pose-graph optimization.
     // This is the initial iterate used when running the algorithm.
     gtsam::Values initial_estimate;
-    // Estimated full pose history after running PG optimization.
+    // Estimated full pose history & landmarks after running PG optimization.
     gtsam::Values result;
 
     // Stopping criteria.
@@ -257,16 +256,36 @@ protected:
     float iteration_error_threshold;
     int max_iterations;
 
-    // Landmark measurements are used to generate loop closures between pairs of vehicle poses.
-    // Main vector key-value pairs are (landmark ID, vector).
-    // Vector for each landmark ID has key-value pairs (iteration #, transformation matrix).
-    // This matrix describes the measurement of this landmark from the vehicle at that iteration.
-    std::vector<std::unordered_map<int, Eigen::MatrixXd>> measurements;
-    // We also need to keep track of detected landmark positions in order to identify re-detections when the landmark ID is not provided.
-    std::vector<Eigen::Vector2d> lm_positions;
-
     // Desired logging behavior.
     bool verbose = false;
+
+    // Current estimated vehicle pose from the naive filter.
+    // This is used for determining landmark measurements.
+    gtsam::Pose2 cur_veh_pose_estimate;
+
+    //////// Basic helper functions //////////////
+    uint64_t timestep_to_veh_pose_key(int timestep) {
+        if (timestep < 0) { // Invalid.
+            throw std::runtime_error("Called timestep_to_veh_pose_key() with invalid timestep.");
+        }
+        // Create a key that does not conflict with landmark keys.
+        return (uint64_t)timestep * 2;
+    }
+
+    uint64_t landmark_id_to_key(int landmark_id) {
+        if (landmark_id < 0) { // Invalid.
+            throw std::runtime_error("Called landmark_id_to_key() with invalid landmark_id.");
+        }
+        // Create a key for the landmark that does not conflict with any vehicle poses.
+        return (uint64_t)landmark_id * 2 + 1;
+    }
+
+public:
+    void setupStatePublisher(ros::NodeHandle node) {
+        // Create a publisher for the proper state message type.
+        this->statePubSecondary = node.advertise<base_pkg::PoseGraphState>("/state/pose_graph/initial", 1);
+        this->statePub = node.advertise<base_pkg::PoseGraphState>("/state/pose_graph/result", 1);
+    }
 };
 
 #endif // FILTER_INTERFACE_H

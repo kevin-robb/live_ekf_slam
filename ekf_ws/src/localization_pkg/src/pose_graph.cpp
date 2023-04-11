@@ -53,87 +53,50 @@ void PoseGraph::init(float x_0, float y_0, float yaw_0) {
 void PoseGraph::updateNaiveVehPoseEstimate(float x, float y, float yaw) {
     // Update our current naive belief of the vehicle pose.
     ///\note: This estimate may come from another filter such as the EKF, or could be a basic propagation with no filtering.
-    this->x_t.setZero(3);
-    this->x_t << x, y, yaw;
+    // Save this estimate directly as a pose matrix.
+    this->cur_veh_pose_estimate = gtsam::Pose2(x, y, yaw);
 
-    if (!this->solved_pose_graph) {
-        // Add to the estimate list for the pose-graph optimization starting iterate.
-        if (this->verbose) {
-            ROS_INFO_STREAM("PGS: Adding naive estimate.");
-        }
-        this->initial_estimate.insert(this->timestep+1, gtsam::Pose2(x, y, yaw));
-    } // else, we already ran optimization, so just exit.
+    // This will be added as a node in the pose graph during the update() loop.
 }
 
 void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
-    // convert this measurement into a transformation matrix from the current vehicle pose.
-    Eigen::MatrixXd meas_mat = Filter::computeTransform(range, bearing);
-    // determine measured location of landmark according to this and most recent vehicle pose.
-    Eigen::MatrixXd cur_veh_pose;
-    cur_veh_pose.setIdentity(3,3);
-    cur_veh_pose.block(0,0,2,2) = Filter::yawToMat(this->x_t(2));
-    cur_veh_pose(0,2) = this->x_t(0);
-    cur_veh_pose(1,2) = this->x_t(1);
-    Eigen::MatrixXd meas_lm_pose = meas_mat * cur_veh_pose;
-    // convert this pose to a simple x,y position, since landmarks have no discernable orientation.
-    Eigen::Vector2d meas_landmark_pos(meas_lm_pose(0,2), meas_lm_pose(1,2));
+    // Use GTSAM's datatypes to convert this measurement into a transformation matrix.
+    gtsam::Pose2 veh_to_landmark = gtsam::Pose2(range, 0.0, bearing);
 
-    int landmark_meas_index = -1;
+    //////////// Determine landmark ID /////////////////////
+    int lm_index = -1;
     if (this->landmark_id_is_known) {
         // Check if the landmark with this ID has been detected before.
         for (int i=0; i < this->M; ++i) {
             if (this->lm_IDs[i] == id) {
                 // We have detected this landmark before, so note the index.
-                landmark_meas_index = i;
+                lm_index = i;
                 break;
             }
         }
     } else {
-        // the ID is not given, so check all landmarks to see if this is close to one we've seen before.
-        for (int l=0; l<this->M; ++l) {
-            int lm_id = this->lm_IDs[l];
-            if (Filter::vecDistance(meas_landmark_pos, this->lm_positions[lm_id]) < this->min_landmark_separation) {
-                // Declare that we have detected this landmark before, so note the index.
-                landmark_meas_index = lm_id;
-                break;
-            }
-        }
+        throw std::runtime_error("PGS with unknown landmark ID is not yet supported.");
     }
 
-    if (landmark_meas_index == -1) {
-        // This is the first detection of this landmark.
-        landmark_meas_index = this->M;
-        if (this->landmark_id_is_known) {
-            this->lm_IDs.push_back(id);
-        } else {
-            this->lm_IDs.push_back(landmark_meas_index);
-        }
+    if (lm_index == -1) {
+        // This is the first detection of this landmark. Add its ID to the list.
+        this->lm_IDs.push_back(id);
         this->M++;
-        this->lm_positions.push_back(meas_landmark_pos);
-        // Create the vector that will store all measurement transforms.
-        std::unordered_map<int, Eigen::MatrixXd> meas_vec;
-        this->measurements.push_back(meas_vec);
-    }
-    
-    // save this measured landmark position.
-    ///\todo: maybe update our estimate of this landmark's position somehow (if this isn't the first detection), rather than simply overwriting it?
-    this->lm_positions[landmark_meas_index] = meas_landmark_pos;
 
-    ///\todo: if we've detected a previously-seen landmark, generate a loop-closure constraint with every previous vehicle pose that observed this landmark.
-    Eigen::MatrixXd inv_meas_mat = meas_mat.inverse();
-    for (auto& meas_map: this->measurements[landmark_meas_index]) {
-        int iteration_number = meas_map.first;
-        // Combine pair of measurement transforms to generate a single relationship for a graph connection.
-        Eigen::MatrixXd connection_mat = inv_meas_mat * this->measurements[landmark_meas_index][iteration_number];
-        // Create the loop closure connection.
+        // Compute this landmark's global position.
+        gtsam::Pose2 global_landmark_pose = veh_to_landmark * this->cur_veh_pose_estimate;
+        gtsam::Vector3 global_landmark_position_3 = gtsam::Pose2::Logmap(global_landmark_pose);
+        gtsam::Vector2 global_landmark_position_2 = gtsam::Vector2(global_landmark_position_3(0), global_landmark_position_3(1));
+
+        // Add this landmark as a node in the graph.
         if (this->verbose) {
-            ROS_INFO_STREAM("PGS: Adding loop closure connection.");
+            ROS_INFO_STREAM("PGS: Adding naive estimate for landmark " << id);
         }
-        this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(iteration_number, this->timestep, gtsam::Pose2(connection_mat), sensing_noise_model);
+        this->initial_estimate.insert(landmark_id_to_key(id), global_landmark_position_2);
     }
 
-    // Add this new measurement to the map for this landmark.
-    this->measurements[landmark_meas_index][this->timestep] = meas_mat;
+    // Add a connection to the graph between the current vehicle pose and the detected landmark.
+    this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(timestep_to_veh_pose_key(this->timestep), landmark_id_to_key(id), veh_to_landmark, this->sensing_noise_model);
 }
 
 // Update the graph with the new information for this iteration.
@@ -144,13 +107,10 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
         // ROS_WARN_STREAM("PGS: Already solved pose graph, so just exiting immediately.");
         return;
     }
-    // update timestep (i.e., iteration index).
-    this->timestep += 1;
 
     ///\todo: maybe should have a better way to initiate all this besides a preset increment amount.
     if (this->timestep >= this->graph_size_threshold) {
         // run optimization algorithm and then exit.
-        ROS_INFO_STREAM("PGS: Attempting to solve the pose graph.");
         solvePoseGraph();
         // Publish the pose graph before and after optimization so the plotting_node can visualize the difference.
         publishState();
@@ -161,7 +121,16 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
     if (this->verbose) {
         ROS_INFO_STREAM("PGS: Adding command connection.");
     }
-    this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(this->timestep-1, this->timestep, gtsam::Pose2(cmdMsg->fwd, 0, cmdMsg->ang), process_noise_model);
+    this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(timestep_to_veh_pose_key(this->timestep), timestep_to_veh_pose_key(this->timestep+1), gtsam::Pose2(cmdMsg->fwd, 0, cmdMsg->ang), this->process_noise_model);
+
+    // update timestep (i.e., iteration index).
+    this->timestep += 1;
+
+    // add the current naive pose estimate as a node in the pose graph.
+    if (this->verbose) {
+        ROS_INFO_STREAM("PGS: Adding naive estimate as a new node.");
+    }
+    this->initial_estimate.insert(timestep_to_veh_pose_key(this->timestep), this->cur_veh_pose_estimate);
 
     // process all measurements for this iteration, and generate loop closure constraints if applicable.
     std::vector<float> lm_meas = lmMeasMsg->data;
@@ -180,6 +149,7 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
 }
 
 void PoseGraph::solvePoseGraph() {
+    ROS_INFO_STREAM("PGS: Attempting to solve the pose graph.");
     if (this->verbose) {
         // print the pose graph and our initial estimate of all vehicle poses.
         this->graph.print("\nFactor Graph:\n");
@@ -193,7 +163,9 @@ void PoseGraph::solvePoseGraph() {
     parameters.maxIterations = this->max_iterations;
     // Create the optimizer instance and run it.
     gtsam::GaussNewtonOptimizer optimizer(this->graph, this->initial_estimate, parameters);
+    ROS_INFO_STREAM("PGS: Defined optimizer.");
     this->result = optimizer.optimize();
+    ROS_INFO_STREAM("PGS: Ran optimization.");
 
     if (this->verbose) {
         this->result.print("Final Result:\n");
@@ -205,28 +177,28 @@ void PoseGraph::solvePoseGraph() {
             std::cout << "covariance of vehicle pose " << i << ":\n" << marginals.marginalCovariance(i) << std::endl;
         }
     }
+    ROS_INFO_STREAM("PGS: Finished solving pose graph.");
 
     this->solved_pose_graph = true;
 }
 
-void PoseGraph::setupStatePublisher(ros::NodeHandle node) {
-    // Create a publisher for the proper state message type.
-    this->statePubSecondary = node.advertise<base_pkg::PoseGraphState>("/state/pose_graph/initial", 1);
-    this->statePub = node.advertise<base_pkg::PoseGraphState>("/state/pose_graph/result", 1);
-}
-
 void PoseGraph::publishState() {
     // Convert the entire pose graph to a ROS message and publish it.
-    ///\note: This happens only once, as opposed to other filters which output continuously.
     base_pkg::PoseGraphState stateMsg;
+    // Set params that are the same for the pose graph both before and after optimization.
     stateMsg.num_iterations = this->timestep; // number of iterations before the pose graph was solved.
-    // encode vehicle pose history BEFORE pose-graph optimization was run.
+    stateMsg.M = this->M; // number of landmarks detected.
+    ///\todo: encode measurement connections.
+
+
+    // Set params specific to pose graph BEFORE optimization.
+    // vehicle pose history before pose-graph optimization was run.
     std::vector<float> x_vec_initial;
     std::vector<float> y_vec_initial;
     std::vector<float> yaw_vec_initial;
     for (int i=0; i<this->timestep; ++i) {
-        ///\todo: get pose corresponding to iteration i.
-        gtsam::Pose2 veh_pose_i = this->initial_estimate.at<gtsam::Pose2>(i);
+        // get pose corresponding to iteration i.
+        gtsam::Pose2 veh_pose_i = this->initial_estimate.at<gtsam::Pose2>(timestep_to_veh_pose_key(i));
         gtsam::Vector3 veh_pose_coords = gtsam::Pose2::Logmap(veh_pose_i);
         x_vec_initial.push_back(veh_pose_coords(0));
         y_vec_initial.push_back(veh_pose_coords(1));
@@ -236,17 +208,15 @@ void PoseGraph::publishState() {
     stateMsg.y_v = y_vec_initial;
     stateMsg.yaw_v = yaw_vec_initial;
 
-    // all landmarks.
-    stateMsg.M = this->M; // number of landmarks detected.
-    std::vector<float> lm;
+    // all landmark positions before pose-graph optimization was run.
+    std::vector<float> lm_initial;
     for (int i=0; i<this->M; ++i) {
-        lm.push_back(this->lm_positions[i](0));
-        lm.push_back(this->lm_positions[i](1));
+        int j = this->lm_IDs[i]; // Convert from landmark index to ID.
+        gtsam::Vector2 lm_pos_j = this->initial_estimate.at<gtsam::Vector2>(landmark_id_to_key(j));
+        lm_initial.push_back(lm_pos_j(0));
+        lm_initial.push_back(lm_pos_j(1));
     }
-    stateMsg.landmarks = lm;
-
-    ///\todo: encode measurement connections.
-
+    stateMsg.landmarks = lm_initial;
 
     // publish this as the initial pose graph.
     this->statePubSecondary.publish(stateMsg);
@@ -258,8 +228,9 @@ void PoseGraph::publishState() {
         std::vector<float> y_vec_result;
         std::vector<float> yaw_vec_result;
         for (int i=0; i<this->timestep; ++i) {
-            ///\todo: get pose corresponding to iteration i.
-            gtsam::Pose2 veh_pose_i = this->result.at<gtsam::Pose2>(i);
+            ROS_INFO_STREAM("PGS: Trying to retrieve veh pose for i=" << i);
+            // get pose corresponding to iteration i.
+            gtsam::Pose2 veh_pose_i = this->result.at<gtsam::Pose2>(timestep_to_veh_pose_key(i));
             gtsam::Vector3 veh_pose_coords = gtsam::Pose2::Logmap(veh_pose_i);
             x_vec_result.push_back(veh_pose_coords(0));
             y_vec_result.push_back(veh_pose_coords(1));
@@ -268,6 +239,17 @@ void PoseGraph::publishState() {
         stateMsg.x_v = x_vec_result;
         stateMsg.y_v = y_vec_result;
         stateMsg.yaw_v = yaw_vec_result;
+
+        // all landmark positions after pose-graph optimization was run.
+        std::vector<float> lm_result;
+        for (int i=0; i<this->M; ++i) {
+            int j = this->lm_IDs[i]; // Convert from landmark index to ID.
+            ROS_INFO_STREAM("PGS: Trying to retrieve landmark pos for i=" << i << ", j=" << j);
+            gtsam::Vector2 lm_pos_j = this->initial_estimate.at<gtsam::Vector2>(landmark_id_to_key(j));
+            lm_result.push_back(lm_pos_j(0));
+            lm_result.push_back(lm_pos_j(1));
+        }
+        stateMsg.landmarks = lm_result;
 
         // publish it.
         this->statePub.publish(stateMsg);
