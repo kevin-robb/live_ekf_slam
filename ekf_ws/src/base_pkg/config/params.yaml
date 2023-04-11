@@ -31,7 +31,7 @@ constraints:
     fov_max: 3.141592653589793
   measurements:
     # limitations on measurements:
-    landmark_id_is_known: False # if true, filter will use the known landmark IDs.
+    landmark_id_is_known: True # if true, filter will use the known landmark IDs.
     min_landmark_separation: 0.1 # landmarks detected closer together than this are assumed to be the same.
 
 # ----- Noise Profiles -----

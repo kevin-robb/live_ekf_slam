@@ -37,6 +37,20 @@ graph_before_optimization = None
 graph_after_optimization = None
 #################################################
 
+def remove_plot(name):
+    """
+    Remove the plot if it already exists. Otherwise do nothing.
+    """
+    if name in plots.keys():
+        try:
+            # this works for stuff like scatter(), arrow()
+            plots[name].remove()
+        except:
+            # the first way doesn't work for plt.plot()
+            line = plots[name].pop(0)
+            line.remove()
+        # remove the key.
+        del plots[name]
 
 def cov_to_ellipse(P_v):
     """
@@ -70,67 +84,73 @@ def update_plot(filter:str, msg):
     # draw everything for this timestep.
     global plots
 
+    ###################### POSE GRAPH #####################
     # if we detect that pose-graph-slam has finished, kill the current plot and switch to that one.
-    if graph_before_optimization is not None and graph_after_optimization is not None:
+    if graph_before_optimization is not None:
         # kill the current plot.
         rospy.logwarn("PLT: killing current plot.")
         plt.clf()
         # start the pose-graph plot.
-        rospy.logwarn("PLT: starting PGS-Viz loop.")
+        rospy.logwarn("PLT: plotting pose graph instead of live sim.")
 
         """
         Plot the graph encoded in a PoseGraphState message.
         """
         # plot all landmark position estimates.
+        remove_plot("init_pg_landmarks")
         if len(graph_before_optimization.landmarks) > 0: # there might be none.
             lm_x = [graph_before_optimization.landmarks[i] for i in range(0,len(graph_before_optimization.landmarks),2)]
             lm_y = [graph_before_optimization.landmarks[i] for i in range(1,len(graph_before_optimization.landmarks),2)]
-            plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
+            plots["init_pg_landmarks"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=6)
 
         # plot all vehicle poses.
-        for i in range(graph_before_optimization.num_iterations):
-            # draw a single pt with arrow to represent each veh pose.
-            plt.arrow(graph_before_optimization.x_v[i], graph_before_optimization.y_v[i], config["plotter"]["arrow_len"]*cos(graph_before_optimization.yaw_v[i]), config["plotter"]["arrow_len"]*sin(graph_before_optimization.yaw_v[i]), facecolor="blue", width=0.1, zorder=4, edgecolor="black")
+        remove_plot("init_pg_veh_pose_history")
+        arrow_x_components = [config["plotter"]["arrow_len"]*cos(graph_before_optimization.yaw_v[i]) for i in range(graph_before_optimization.num_iterations)]
+        arrow_y_components = [config["plotter"]["arrow_len"]*sin(graph_before_optimization.yaw_v[i]) for i in range(graph_before_optimization.num_iterations)]
+        plots["init_pg_veh_pose_history"] = plt.quiver(graph_before_optimization.x_v, graph_before_optimization.y_v, arrow_x_components, arrow_y_components, color="blue", width=0.1, zorder=4, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
 
         # plot all connections.
         # we know a connection exists between every vehicle pose and the pose on the immediate previous/next iterations.
-        plt.plot(graph_before_optimization.x_v, graph_before_optimization.y_v, color="blue", zorder=0)
+        remove_plot("init_pg_cmd_connections")
+        plots["init_pg_cmd_connections"] = plt.plot(graph_before_optimization.x_v, graph_before_optimization.y_v, color="blue", zorder=0)
         # measurement connections are not fully-connected, but rather encoded in the message.
-        if len(graph_before_optimization.meas_connections) > 0: # there could possibly be none.
-            for j in range(len(graph_before_optimization.meas_connections) // 2):
-                iter_veh_pose = graph_before_optimization.meas_connections[2*j]
-                landmark_index = graph_before_optimization.meas_connections[2*j+1]
-                # plot a line between the specified vehicle pose and landmark.
-                plt.plot([graph_before_optimization.x_v[iter_veh_pose], lm_x[landmark_index]], [graph_before_optimization.x_y[iter_veh_pose], lm_y[landmark_index]], color="red", zorder=0)
+        for j in range(len(graph_before_optimization.meas_connections) // 2): # there might be none.
+            iter_veh_pose = graph_before_optimization.meas_connections[2*j]
+            landmark_index = graph_before_optimization.meas_connections[2*j+1]
+            # plot a line between the specified vehicle pose and landmark.
+            plt.plot([graph_before_optimization.x_v[iter_veh_pose], lm_x[landmark_index]], [graph_before_optimization.x_y[iter_veh_pose], lm_y[landmark_index]], color="red", zorder=0)
    
         plt.title("Naive estimate of vehicle pose history")
         plt.draw() # update the plot
         plt.pause(3)
 
-        # plot poses and connections in final resulting graph.
-        for i in range(graph_after_optimization.num_iterations):
-            # draw a single pt with arrow to represent each veh pose.
-            plt.arrow(graph_after_optimization.x_v[i], graph_after_optimization.y_v[i], config["plotter"]["arrow_len"]*cos(graph_after_optimization.yaw_v[i]), config["plotter"]["arrow_len"]*sin(graph_after_optimization.yaw_v[i]), facecolor="purple", width=0.1, zorder=5, edgecolor="black")
-        plt.plot(graph_after_optimization.x_v, graph_after_optimization.y_v, color="purple", zorder=0)
+        if graph_after_optimization is not None:
+            # plot poses and connections in final resulting graph.
+            remove_plot("result_pg_veh_pose_history")
+            arrow_x_components = [config["plotter"]["arrow_len"]*cos(graph_after_optimization.yaw_v[i]) for i in range(graph_after_optimization.num_iterations)]
+            arrow_y_components = [config["plotter"]["arrow_len"]*sin(graph_after_optimization.yaw_v[i]) for i in range(graph_after_optimization.num_iterations)]
+            plots["result_pg_veh_pose_history"] = plt.quiver(graph_after_optimization.x_v, graph_after_optimization.y_v, arrow_x_components, arrow_y_components, color="purple", width=0.1, zorder=5, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
 
-        plt.title("Optimized estimate of vehicle pose history")
-        plt.draw() # update the plot
-        plt.pause(3)
+            remove_plot("result_pg_cmd_connections")
+            plots["result_pg_cmd_connections"] = plt.plot(graph_after_optimization.x_v, graph_after_optimization.y_v, color="purple", zorder=1)
 
-        # exit this node when PGS viz is done.
+            # TODO if we end up optimizing landmark positions too, plot those as well, since they may be different. since they're the same as init currently, don't bother plotting them.
+
+            plt.title("Optimized estimate of vehicle pose history")
+            plt.draw() # update the plot
+            plt.pause(3)
+
         rospy.logwarn("PLT: skipping normal plot update loop.")
         return
     
     ###################### TIMESTEP #####################
-    if "timestep" in plots.keys():
-        plots["timestep"].remove()
+    remove_plot("timestep")
     plots["timestep"] = plt.text(-config["map"]["bound"], config["map"]["bound"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
     #################### TRUE POSE #########################
     if config["plotter"]["show_true_traj"] and msg.timestep <= len(true_poses):
         pose = true_poses[msg.timestep-1]
         # plot the current veh pos, & remove previous.
-        if "veh_pos_true" in plots.keys():
-            plots["veh_pos_true"].remove()
+        remove_plot("veh_pos_true")
         plots["veh_pos_true"] = plt.arrow(pose.x, pose.y, config["plotter"]["arrow_len"]*cos(pose.z), config["plotter"]["arrow_len"]*sin(pose.z), color="blue", width=0.1, zorder=2)
 
     ####################### EKF/UKF SLAM #########################
@@ -140,9 +160,8 @@ def update_plot(filter:str, msg):
         n = int(len(msg.P)**(1/2))
         ################ VEH POS #################
         # plot current estimated veh pos.
-        if not config["plotter"]["show_entire_traj"] and "veh_pos_est" in plots.keys():
-            plots["veh_pos_est"].remove()
-            del plots["veh_pos_est"]
+        if not config["plotter"]["show_entire_traj"]:
+            remove_plot("veh_pos_est")
         # draw a single pt with arrow to represent current veh pose.
         plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
 
@@ -151,9 +170,8 @@ def update_plot(filter:str, msg):
             # compute parametric ellipse for veh covariance.
             veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
             # remove old ellipses.
-            if not config["plotter"]["show_entire_traj"] and "veh_cov_est" in plots.keys():
-                plots["veh_cov_est"].remove()
-                del plots["veh_cov_est"]
+            if not config["plotter"]["show_entire_traj"]:
+                remove_plot("veh_cov_est")
             # plot the ellipse.
             plots["veh_cov_est"], = plt.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
 
@@ -161,9 +179,7 @@ def update_plot(filter:str, msg):
         lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
         lm_y = [msg.landmarks[i] for i in range(2,len(msg.landmarks),3)]
         # remove old landmark estimates.
-        if "lm_pos_est" in plots.keys():
-            plots["lm_pos_est"].remove()
-            del plots["lm_pos_est"]
+        remove_plot("lm_pos_est")
         # plot new landmark estimates.
         plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
 
@@ -173,13 +189,11 @@ def update_plot(filter:str, msg):
             for i in range(len(msg.landmarks) // 3):
                 # replace previous if it's been plotted before.
                 lm_id = msg.landmarks[i*3] 
-                if lm_id in plots["lm_cov_est"].keys():
-                    plots["lm_cov_est"][lm_id].remove()
-                    del plots["lm_cov_est"][lm_id]
+                remove_plot("lm_cov_est_{:}".format(lm_id))
                 # extract 2x2 cov for this landmark.
                 lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
                 # plot its ellipse.
-                plots["lm_cov_est"][lm_id], = plt.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
+                plots["lm_cov_est_{:}".format(lm_id)], = plt.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
         
         ############## UKF SIGMA POINTS ##################
         if filter == "ukf":
@@ -191,21 +205,16 @@ def update_plot(filter:str, msg):
             # only show sigma points' veh pose, not landmark info.
             if config["plotter"]["plot_ukf_arrows"]:
                 # plot as arrows (slow).
-                if "veh_sigma_pts" in plots.keys() and len(plots["veh_sigma_pts"].keys()) > 0:
-                    for i in plots["veh_sigma_pts"].keys():
-                        plots["veh_sigma_pts"][i].remove()
-                plots["veh_sigma_pts"] = {}
                 # draw a pt with arrow for all sigma pts.
                 for i in range(0, 2*n_sig+1):
+                    remove_plot("veh_sigma_pts_{:}".format(i))
                     yaw = msg.X[i*n_sig+2] if veh_len == 3 else remainder(atan2(msg.X[i*n_sig+3], msg.X[i*n_sig+2]), tau)
-                    plots["veh_sigma_pts"][i] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], config["plotter"]["arrow_len"]*cos(yaw), config["plotter"]["arrow_len"]*sin(yaw), color="cyan", width=0.1)
+                    plots["veh_sigma_pts_{:}".format(i)] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], config["plotter"]["arrow_len"]*cos(yaw), config["plotter"]["arrow_len"]*sin(yaw), color="cyan", width=0.1)
             else: # just show x,y of pts.
                 X_x = [msg.X[i*n_sig] for i in range(0,2*n_sig+1)]
                 X_y = [msg.X[i*n_sig+1] for i in range(0,2*n_sig+1)]
                 # remove old points.
-                if "veh_sigma_pts" in plots.keys():
-                    plots["veh_sigma_pts"].remove()
-                    del plots["veh_sigma_pts"]
+                remove_plot("veh_sigma_pts")
                 # plot sigma points.
                 plots["veh_sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=2)
 
@@ -217,9 +226,7 @@ def update_plot(filter:str, msg):
                     X_lm_x += [msg.X[j*n_sig+i] for i in range(veh_len,n_sig,2)]
                     X_lm_y += [msg.X[j*n_sig+i+1] for i in range(veh_len,n_sig,2)]
                 # remove old points.
-                if "lm_sigma_pts" in plots.keys():
-                    plots["lm_sigma_pts"].remove()
-                    del plots["lm_sigma_pts"]
+                remove_plot("lm_sigma_pts")
                 # plot sigma points.
                 plots["lm_sigma_pts"] = plt.scatter(X_lm_x, X_lm_y, s=30, color="tab:cyan", zorder=1)
 
@@ -308,13 +315,9 @@ def get_color_map(msg):
 def get_planned_path(msg):
     global plots
     # get the set of points that A* determined to get to the clicked goal.
-    # remove and update the path if we've drawn it already.
-    if "planned_path" in plots.keys():
-        plots["planned_path"].remove()
-        del plots["planned_path"]
-    if "goal_pt" in plots.keys():
-            plots["goal_pt"].remove()
-            del plots["goal_pt"]
+    # remove and update the path if we've drawn it previously.
+    remove_plot("planned_path")
+    remove_plot("goal_pt")
     # only draw if the path is non-empty.
     if len(msg.data) > 1:
         plots["planned_path"] = plt.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
