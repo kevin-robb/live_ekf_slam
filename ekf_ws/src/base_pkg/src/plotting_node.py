@@ -11,6 +11,7 @@ from sensor_msgs.msg import Image
 from base_pkg.msg import EKFState, UKFState, PoseGraphState
 from matplotlib.backend_bases import MouseButton
 from matplotlib import pyplot as plt
+from matplotlib import gridspec
 import numpy as np
 import atexit
 from math import cos, sin, pi, atan2, remainder, tau
@@ -86,76 +87,71 @@ def update_plot(filter:str, msg):
 
     ###################### POSE GRAPH #####################
     # if we detect that pose-graph-slam has finished, kill the current plot and switch to that one.
-    if graph_before_optimization is not None:
-        # kill the current plot.
-        rospy.logwarn("PLT: killing current plot.")
-        plt.clf()
-        # start the pose-graph plot.
-        rospy.logwarn("PLT: plotting pose graph instead of live sim.")
+    if config["filter"].lower() == "pose_graph" and graph_before_optimization is not None:
+        # Plot the graph encoded in a PoseGraphState message.
+        rospy.logwarn("PLT: plotting pose graph subplot.")
 
-        """
-        Plot the graph encoded in a PoseGraphState message.
-        """
         # plot all landmark position estimates.
         remove_plot("init_pg_landmarks")
         if len(graph_before_optimization.landmarks) > 0: # there might be none.
             lm_x = [graph_before_optimization.landmarks[i] for i in range(0,len(graph_before_optimization.landmarks),2)]
             lm_y = [graph_before_optimization.landmarks[i] for i in range(1,len(graph_before_optimization.landmarks),2)]
-            plots["init_pg_landmarks"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=6)
+            plots["init_pg_landmarks"] = pose_graph_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=6)
 
         # plot all vehicle poses.
         remove_plot("init_pg_veh_pose_history")
         arrow_x_components = [config["plotter"]["arrow_len"]*cos(graph_before_optimization.yaw_v[i]) for i in range(graph_before_optimization.num_iterations)]
         arrow_y_components = [config["plotter"]["arrow_len"]*sin(graph_before_optimization.yaw_v[i]) for i in range(graph_before_optimization.num_iterations)]
-        plots["init_pg_veh_pose_history"] = plt.quiver(graph_before_optimization.x_v, graph_before_optimization.y_v, arrow_x_components, arrow_y_components, color="blue", width=0.1, zorder=4, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
+        plots["init_pg_veh_pose_history"] = pose_graph_fig.quiver(graph_before_optimization.x_v, graph_before_optimization.y_v, arrow_x_components, arrow_y_components, color="blue", width=0.1, zorder=4, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
 
         # plot all connections.
         # we know a connection exists between every vehicle pose and the pose on the immediate previous/next iterations.
         remove_plot("init_pg_cmd_connections")
-        plots["init_pg_cmd_connections"] = plt.plot(graph_before_optimization.x_v, graph_before_optimization.y_v, color="blue", zorder=0)
+        plots["init_pg_cmd_connections"] = pose_graph_fig.plot(graph_before_optimization.x_v, graph_before_optimization.y_v, color="blue", zorder=0)
         # measurement connections are not fully-connected, but rather encoded in the message.
         for j in range(len(graph_before_optimization.meas_connections) // 2): # there might be none.
             iter_veh_pose = graph_before_optimization.meas_connections[2*j]
             landmark_index = graph_before_optimization.meas_connections[2*j+1]
             # plot a line between the specified vehicle pose and landmark.
-            plt.plot([graph_before_optimization.x_v[iter_veh_pose], lm_x[landmark_index]], [graph_before_optimization.x_y[iter_veh_pose], lm_y[landmark_index]], color="red", zorder=0)
+            pose_graph_fig.plot([graph_before_optimization.x_v[iter_veh_pose], lm_x[landmark_index]], [graph_before_optimization.x_y[iter_veh_pose], lm_y[landmark_index]], color="red", zorder=0)
    
-        plt.title("Naive estimate of vehicle pose history")
-        plt.draw() # update the plot
-        plt.pause(3)
-
-        if graph_after_optimization is not None:
+        if graph_after_optimization is None:
+            pose_graph_fig.title.set_text("Naive estimate of vehicle pose history")
+            plt.draw() # update the plot
+            plt.pause(0.000001)
+        else:
             # plot poses and connections in final resulting graph.
             remove_plot("result_pg_veh_pose_history")
             arrow_x_components = [config["plotter"]["arrow_len"]*cos(graph_after_optimization.yaw_v[i]) for i in range(graph_after_optimization.num_iterations)]
             arrow_y_components = [config["plotter"]["arrow_len"]*sin(graph_after_optimization.yaw_v[i]) for i in range(graph_after_optimization.num_iterations)]
-            plots["result_pg_veh_pose_history"] = plt.quiver(graph_after_optimization.x_v, graph_after_optimization.y_v, arrow_x_components, arrow_y_components, color="purple", width=0.1, zorder=5, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
+            plots["result_pg_veh_pose_history"] = pose_graph_fig.quiver(graph_after_optimization.x_v, graph_after_optimization.y_v, arrow_x_components, arrow_y_components, color="purple", width=0.1, zorder=5, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
 
             remove_plot("result_pg_cmd_connections")
-            plots["result_pg_cmd_connections"] = plt.plot(graph_after_optimization.x_v, graph_after_optimization.y_v, color="purple", zorder=1)
+            plots["result_pg_cmd_connections"] = pose_graph_fig.plot(graph_after_optimization.x_v, graph_after_optimization.y_v, color="purple", zorder=1)
 
             # TODO if we end up optimizing landmark positions too, plot those as well, since they may be different. since they're the same as init currently, don't bother plotting them.
 
-            plt.title("Optimized estimate of vehicle pose history")
+            pose_graph_fig.title.set_text("Optimized estimate of vehicle pose history")
             plt.draw() # update the plot
-            plt.pause(3)
+            plt.pause(0.00000000001)
 
-        rospy.logwarn("PLT: skipping normal plot update loop.")
-        return
+            plt.waitforbuttonpress(-1) # wait forever until a user clicks the plot.
+            rospy.logwarn("PLT: skipping normal plot update loop.")
+            return
     
     ###################### TIMESTEP #####################
     remove_plot("timestep")
-    plots["timestep"] = plt.text(-config["map"]["bound"], config["map"]["bound"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
+    plots["timestep"] = sim_viz_fig.text(-config["map"]["bound"], config["map"]["bound"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
     #################### TRUE POSE #########################
     if config["plotter"]["show_true_traj"] and msg.timestep <= len(true_poses):
         pose = true_poses[msg.timestep-1]
         # plot the current veh pos, & remove previous.
         remove_plot("veh_pos_true")
-        plots["veh_pos_true"] = plt.arrow(pose.x, pose.y, config["plotter"]["arrow_len"]*cos(pose.z), config["plotter"]["arrow_len"]*sin(pose.z), color="blue", width=0.1, zorder=2)
+        plots["veh_pos_true"] = sim_viz_fig.arrow(pose.x, pose.y, config["plotter"]["arrow_len"]*cos(pose.z), config["plotter"]["arrow_len"]*sin(pose.z), color="blue", width=0.1, zorder=2)
 
     ####################### EKF/UKF SLAM #########################
     if filter in ["ekf", "ukf"]:
-        plt.title(filter.upper()+"-Estimated Trajectory and Landmarks")
+        sim_viz_fig.title.set_text(filter.upper()+"-Estimated Trajectory and Landmarks")
         # compute length of state to use throughout. n = 3+2M
         n = int(len(msg.P)**(1/2))
         ################ VEH POS #################
@@ -163,7 +159,7 @@ def update_plot(filter:str, msg):
         if not config["plotter"]["show_entire_traj"]:
             remove_plot("veh_pos_est")
         # draw a single pt with arrow to represent current veh pose.
-        plots["veh_pos_est"] = plt.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
+        plots["veh_pos_est"] = sim_viz_fig.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
 
         ################ VEH COV ##################
         if config["plotter"]["show_veh_ellipse"]:
@@ -173,7 +169,7 @@ def update_plot(filter:str, msg):
             if not config["plotter"]["show_entire_traj"]:
                 remove_plot("veh_cov_est")
             # plot the ellipse.
-            plots["veh_cov_est"], = plt.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
+            plots["veh_cov_est"], = sim_viz_fig.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
 
         ############## LANDMARK EST ##################
         lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
@@ -181,7 +177,7 @@ def update_plot(filter:str, msg):
         # remove old landmark estimates.
         remove_plot("lm_pos_est")
         # plot new landmark estimates.
-        plots["lm_pos_est"] = plt.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
+        plots["lm_pos_est"] = sim_viz_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
 
         ############## LANDMARK COV ###################
         if config["plotter"]["show_landmark_ellipses"]:
@@ -193,7 +189,7 @@ def update_plot(filter:str, msg):
                 # extract 2x2 cov for this landmark.
                 lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
                 # plot its ellipse.
-                plots["lm_cov_est_{:}".format(lm_id)], = plt.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
+                plots["lm_cov_est_{:}".format(lm_id)], = sim_viz_fig.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
         
         ############## UKF SIGMA POINTS ##################
         if filter == "ukf":
@@ -209,14 +205,14 @@ def update_plot(filter:str, msg):
                 for i in range(0, 2*n_sig+1):
                     remove_plot("veh_sigma_pts_{:}".format(i))
                     yaw = msg.X[i*n_sig+2] if veh_len == 3 else remainder(atan2(msg.X[i*n_sig+3], msg.X[i*n_sig+2]), tau)
-                    plots["veh_sigma_pts_{:}".format(i)] = plt.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], config["plotter"]["arrow_len"]*cos(yaw), config["plotter"]["arrow_len"]*sin(yaw), color="cyan", width=0.1)
+                    plots["veh_sigma_pts_{:}".format(i)] = sim_viz_fig.arrow(msg.X[i*n_sig], msg.X[i*n_sig+1], config["plotter"]["arrow_len"]*cos(yaw), config["plotter"]["arrow_len"]*sin(yaw), color="cyan", width=0.1)
             else: # just show x,y of pts.
                 X_x = [msg.X[i*n_sig] for i in range(0,2*n_sig+1)]
                 X_y = [msg.X[i*n_sig+1] for i in range(0,2*n_sig+1)]
                 # remove old points.
                 remove_plot("veh_sigma_pts")
                 # plot sigma points.
-                plots["veh_sigma_pts"] = plt.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=2)
+                plots["veh_sigma_pts"] = sim_viz_fig.scatter(X_x, X_y, s=30, color="tab:cyan", zorder=2)
 
             ################# LANDMARK SIGMA POINTS ##################
             if config["plotter"]["show_landmark_sigma_pts"]:
@@ -228,9 +224,9 @@ def update_plot(filter:str, msg):
                 # remove old points.
                 remove_plot("lm_sigma_pts")
                 # plot sigma points.
-                plots["lm_sigma_pts"] = plt.scatter(X_lm_x, X_lm_y, s=30, color="tab:cyan", zorder=1)
+                plots["lm_sigma_pts"] = sim_viz_fig.scatter(X_lm_x, X_lm_y, s=30, color="tab:cyan", zorder=1)
 
-    # force desired window region.
+    # force desired window region (prevents axes expanding when vehicle comes close to an edge of the plot).
     plt.xlim(display_region)
     plt.ylim(display_region)
     # do the plotting.
@@ -285,7 +281,9 @@ def get_true_landmark_map(msg):
     lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
     lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
     # plot the true landmark positions to compare to estimates.
-    plt.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=2)
+    sim_viz_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=2)
+    if config["filter"].lower() == "pose_graph":
+        pose_graph_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=2)
 
 def on_click(event):
     # global clicked_points
@@ -309,7 +307,7 @@ def get_color_map(msg):
     color_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
     # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
     edge = config["map"]["bound"]
-    plt.imshow(color_map, zorder=0, extent=[-edge, edge, -edge, edge])
+    sim_viz_fig.imshow(color_map, zorder=0, extent=[-edge, edge, -edge, edge])
 
 
 def get_planned_path(msg):
@@ -320,9 +318,9 @@ def get_planned_path(msg):
     remove_plot("goal_pt")
     # only draw if the path is non-empty.
     if len(msg.data) > 1:
-        plots["planned_path"] = plt.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
+        plots["planned_path"] = sim_viz_fig.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
         # show the goal point (end of path).
-        plots["goal_pt"] = plt.scatter(msg.data[-2], msg.data[-1], color="yellow", edgecolors="black", s=40, zorder=2)
+        plots["goal_pt"] = sim_viz_fig.scatter(msg.data[-2], msg.data[-1], color="yellow", edgecolors="black", s=40, zorder=2)
 
 def main():
     global goal_pub
@@ -369,16 +367,36 @@ def main():
 
 
     # startup the plot.
-    plt.figure()
-    # set constant plot params.
-    plt.axis("equal")
-    plt.xlabel("x (m)")
-    plt.ylabel("y (m)")
-    # allow user to click on the plot to set the goal position.
+    global sim_viz_fig, pose_graph_fig
+    if config["filter"].lower() == "pose_graph":
+        global fig
+        fig = plt.figure() 
+        # create 1 row of 2 plots, with a 1:1 size ratio for them.
+        gs = gridspec.GridSpec(1, 2, width_ratios=[1, 1]) 
+        sim_viz_fig = plt.subplot(gs[0])
+        plt.title("Ground truth and online filter progress")
+        # force desired window region.
+        plt.xlim(display_region)
+        plt.ylim(display_region)
+        pose_graph_fig = plt.subplot(gs[1])
+        plt.title("Pose graph progress")
+        # force desired window region.
+        plt.xlim(display_region)
+        plt.ylim(display_region)
+
+        sim_viz_fig.set_aspect('equal')
+        pose_graph_fig.set_aspect('equal')
+    else:
+        # Will not be plotting a pose graph, so only open one plot window.
+        plt.figure()
+        sim_viz_fig = plt.subplot()
+        plt.axis("equal")
+        plt.xlabel("x (m)")
+        plt.ylabel("y (m)")
+    
+    # allow user to click on the plot to set the goal position or kill the node.
     plt.connect('button_press_event', on_click)
     plt.show()
-
-    
 
     rospy.spin()
 

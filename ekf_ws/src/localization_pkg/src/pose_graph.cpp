@@ -29,6 +29,7 @@ void PoseGraph::readParams(YAML::Node config) {
     this->graph_size_threshold = config["pose_graph"]["graph_size_threshold"].as<int>();
     this->iteration_error_threshold = config["pose_graph"]["iteration_error_threshold"].as<float>();
     this->max_iterations = config["pose_graph"]["max_iterations"].as<int>();
+    this->verbose = config["pose_graph"]["verbose"].as<bool>();
 
     // define noise models for both types of connections.
     this->process_noise_model = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(this->V(0,0), this->V(0,0), this->V(1,1)));
@@ -57,7 +58,9 @@ void PoseGraph::updateNaiveVehPoseEstimate(float x, float y, float yaw) {
 
     if (!this->solved_pose_graph) {
         // Add to the estimate list for the pose-graph optimization starting iterate.
-        ROS_INFO_STREAM("PGS: Adding naive estimate.");
+        if (this->verbose) {
+            ROS_INFO_STREAM("PGS: Adding naive estimate.");
+        }
         this->initial_estimate.insert(this->timestep+1, gtsam::Pose2(x, y, yaw));
     } // else, we already ran optimization, so just exit.
 }
@@ -123,7 +126,9 @@ void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
         // Combine pair of measurement transforms to generate a single relationship for a graph connection.
         Eigen::MatrixXd connection_mat = inv_meas_mat * this->measurements[landmark_meas_index][iteration_number];
         // Create the loop closure connection.
-        ROS_INFO_STREAM("PGS: Adding loop closure connection.");
+        if (this->verbose) {
+            ROS_INFO_STREAM("PGS: Adding loop closure connection.");
+        }
         this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(iteration_number, this->timestep, gtsam::Pose2(connection_mat), sensing_noise_model);
     }
 
@@ -153,7 +158,9 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
     }
 
     // use commanded motion to create a connection between previous and new vehicle pose.
-    ROS_INFO_STREAM("PGS: Adding command connection.");
+    if (this->verbose) {
+        ROS_INFO_STREAM("PGS: Adding command connection.");
+    }
     this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(this->timestep-1, this->timestep, gtsam::Pose2(cmdMsg->fwd, 0, cmdMsg->ang), process_noise_model);
 
     // process all measurements for this iteration, and generate loop closure constraints if applicable.
@@ -170,29 +177,36 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
         float b = lm_meas[l*3+2];
         onLandmarkMeasurement(id, r, b);
     }
+
+    // Publish the progress building the pose graph so far.
+    publishState();
 }
 
 void PoseGraph::solvePoseGraph() {
-    // print the pose graph and our initial estimate of all vehicle poses.
-    this->graph.print("\nFactor Graph:\n");
-    this->initial_estimate.print("\nInitial Estimate:\n");
+    if (this->verbose) {
+        // print the pose graph and our initial estimate of all vehicle poses.
+        this->graph.print("\nFactor Graph:\n");
+        this->initial_estimate.print("\nInitial Estimate:\n");
+    }
 
     // Optimize the initial values using a Gauss-Newton nonlinear optimizer
     // The optimizer accepts an optional set of configuration parameters.
     gtsam::GaussNewtonParams parameters;
     parameters.relativeErrorTol = this->iteration_error_threshold;
     parameters.maxIterations = this->max_iterations;
-    // Create the optimizer ...
+    // Create the optimizer instance and run it.
     gtsam::GaussNewtonOptimizer optimizer(this->graph, this->initial_estimate, parameters);
-    // ... and optimize
     this->result = optimizer.optimize();
-    this->result.print("Final Result:\n");
-
-    // Calculate and print marginal covariances for all variables
-    std::cout.precision(3);
-    gtsam::Marginals marginals(graph, this->result);
-    for (int i = 0; i < this->timestep; ++i) {
-        std::cout << "covariance of vehicle pose " << i << ":\n" << marginals.marginalCovariance(i) << std::endl;
+    
+    if (this->verbose) {
+        this->result.print("Final Result:\n");
+    
+        // Calculate and print marginal covariances for all variables
+        std::cout.precision(3);
+        gtsam::Marginals marginals(graph, this->result);
+        for (int i = 0; i < this->timestep; ++i) {
+            std::cout << "covariance of vehicle pose " << i << ":\n" << marginals.marginalCovariance(i) << std::endl;
+        }
     }
 
     this->solved_pose_graph = true;
@@ -240,22 +254,25 @@ void PoseGraph::publishState() {
     // publish this as the initial pose graph.
     this->statePubSecondary.publish(stateMsg);
 
-    // replace the vehicle pose history with the solution to the pose graph optimization.
-    std::vector<float> x_vec_result;
-    std::vector<float> y_vec_result;
-    std::vector<float> yaw_vec_result;
-    for (int i=0; i<this->timestep; ++i) {
-        ///\todo: get pose corresponding to iteration i.
-        gtsam::Pose2 veh_pose_i = this->result.at<gtsam::Pose2>(i);
-        gtsam::Vector3 veh_pose_coords = gtsam::Pose2::Logmap(veh_pose_i);
-        x_vec_result.push_back(veh_pose_coords(0));
-        y_vec_result.push_back(veh_pose_coords(1));
-        yaw_vec_result.push_back(veh_pose_coords(2));
-    }
-    stateMsg.x_v = x_vec_result;
-    stateMsg.y_v = y_vec_result;
-    stateMsg.yaw_v = yaw_vec_result;
+    // if we've solved the pose graph, publish the result too.
+    if (this->solved_pose_graph) {
+        // replace the vehicle pose history with the solution to the pose graph optimization.
+        std::vector<float> x_vec_result;
+        std::vector<float> y_vec_result;
+        std::vector<float> yaw_vec_result;
+        for (int i=0; i<this->timestep; ++i) {
+            ///\todo: get pose corresponding to iteration i.
+            gtsam::Pose2 veh_pose_i = this->result.at<gtsam::Pose2>(i);
+            gtsam::Vector3 veh_pose_coords = gtsam::Pose2::Logmap(veh_pose_i);
+            x_vec_result.push_back(veh_pose_coords(0));
+            y_vec_result.push_back(veh_pose_coords(1));
+            yaw_vec_result.push_back(veh_pose_coords(2));
+        }
+        stateMsg.x_v = x_vec_result;
+        stateMsg.y_v = y_vec_result;
+        stateMsg.yaw_v = yaw_vec_result;
 
-    // publish it.
-    this->statePub.publish(stateMsg);
+        // publish it.
+        this->statePub.publish(stateMsg);
+    }
 }

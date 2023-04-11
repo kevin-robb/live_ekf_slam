@@ -264,6 +264,9 @@ protected:
     std::vector<std::unordered_map<int, Eigen::MatrixXd>> measurements;
     // We also need to keep track of detected landmark positions in order to identify re-detections when the landmark ID is not provided.
     std::vector<Eigen::Vector2d> lm_positions;
+
+    // Desired logging behavior.
+    bool verbose = false;
 };
 
 #endif // FILTER_INTERFACE_H

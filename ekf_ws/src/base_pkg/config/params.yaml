@@ -61,6 +61,7 @@ pose_graph:
   # Params for GTSAM's Gauss-Newton solver.
   iteration_error_threshold: 0.00001 # Stop iterating once the change in error between steps is less than this value.
   max_iterations: 100 # max iterations to run optimization algorithm.
+  verbose: False # if true, spam the console with a ton of logs.
 
 # ----- Map -----
 map:
@@ -105,3 +106,4 @@ plotter:
   show_landmark_sigma_pts: True # for UKF, show sigma points for landmarks as well as vehicle.
   display_region_mult: 1.0 # amount to multiply map.bound by to get the display region.
   list_clicked_points: False # utility to display coords of all clicked points, for manually creating landmark maps.
+  # for pose graph display.
