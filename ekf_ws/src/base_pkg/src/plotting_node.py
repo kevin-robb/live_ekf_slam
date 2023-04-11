@@ -107,12 +107,14 @@ def update_plot(filter:str, msg):
         # we know a connection exists between every vehicle pose and the pose on the immediate previous/next iterations.
         remove_plot("init_pg_cmd_connections")
         plots["init_pg_cmd_connections"] = pose_graph_fig.plot(graph_before_optimization.x_v, graph_before_optimization.y_v, color="blue", zorder=0)
+
         # measurement connections are not fully-connected, but rather encoded in the message.
         for j in range(len(graph_before_optimization.meas_connections) // 2): # there might be none.
-            iter_veh_pose = graph_before_optimization.meas_connections[2*j]
+            iter_veh_pose = graph_before_optimization.meas_connections[2*j] - 1
             landmark_index = graph_before_optimization.meas_connections[2*j+1]
             # plot a line between the specified vehicle pose and landmark.
-            pose_graph_fig.plot([graph_before_optimization.x_v[iter_veh_pose], lm_x[landmark_index]], [graph_before_optimization.x_y[iter_veh_pose], lm_y[landmark_index]], color="red", zorder=0)
+            remove_plot("init_pg_meas_connection_{:}".format(j))
+            plots["init_pg_meas_connection_{:}".format(j)] = pose_graph_fig.plot([graph_before_optimization.x_v[iter_veh_pose], lm_x[landmark_index]], [graph_before_optimization.y_v[iter_veh_pose], lm_y[landmark_index]], color="red", zorder=0)
    
         if graph_after_optimization is None:
             pose_graph_fig.title.set_text("Naive estimate of vehicle pose history")
@@ -128,7 +130,8 @@ def update_plot(filter:str, msg):
             remove_plot("result_pg_cmd_connections")
             plots["result_pg_cmd_connections"] = pose_graph_fig.plot(graph_after_optimization.x_v, graph_after_optimization.y_v, color="purple", zorder=1)
 
-            # TODO if we end up optimizing landmark positions too, plot those as well, since they may be different. since they're the same as init currently, don't bother plotting them.
+            # TODO plot resulting landmark positions and meas connections.
+
 
             pose_graph_fig.title.set_text("Optimized estimate of vehicle pose history")
             plt.draw() # update the plot

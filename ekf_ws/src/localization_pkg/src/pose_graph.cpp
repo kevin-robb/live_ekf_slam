@@ -33,37 +33,35 @@ void PoseGraph::readParams(YAML::Node config) {
 
     // define noise models for both types of connections.
     this->process_noise_model = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(this->V(0,0), this->V(0,0), this->V(1,1)));
-    this->sensing_noise_model = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(this->W(0,0), this->W(0,0), this->W(1,1)));
+    ///\note: BearingRangeFactor has bearing first and range second, so we swap the usual order for this project.
+    this->sensing_noise_model = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(this->W(1,1), this->W(0,0)));
 }
 
 void PoseGraph::init(float x_0, float y_0, float yaw_0) {
-    // Add a prior on the first pose, setting it to the origin
-    // A prior factor consists of a mean and a noise model (covariance matrix)
-    auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.3, 0.3, 0.1));
+    // Ensure timesteps start at 0.
+    this->timestep = 0;
+    // Set the current veh pose.
+    this->cur_veh_pose_estimate = gtsam::Pose2(x_0, y_0, yaw_0);
+
+    // Add this pose as the first node in the factor graph.
+    ROS_INFO_STREAM("PGS: Adding initial vehicle pose as first naive estimate to the pose graph.");
+    this->initial_estimate.insert(timestep_to_veh_pose_key(this->timestep), this->cur_veh_pose_estimate);
+
+    // We must assign some noise model for the prior.
+    // auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.3, 0.3, 0.1));
+    ///\note: Since we are certain the initial pose is correct (since it is directly used as the origin for everything in the project), there is no noise assigned to it. This ensures that during optimization, the initial pose cannot be changed.
+    auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.0, 0.0, 0.0));
+
+    // Set this pose as the prior for our factor graph.
     ROS_INFO_STREAM("PGS: Adding prior for initial veh pose.");
-    graph.addPrior(this->timestep, gtsam::Pose2(x_0, y_0, yaw_0), priorNoise);
+    graph.addPrior(timestep_to_veh_pose_key(this->timestep), this->cur_veh_pose_estimate, priorNoise);
 
-    ROS_INFO_STREAM("PGS: Adding prior as first naive estimate.");
-    this->initial_estimate.insert(this->timestep, gtsam::Pose2(x_0, y_0, yaw_0));
-
-    // set initialized flag.
+    // Set initialized flag.
     this->isInit = true;
 }
 
-void PoseGraph::updateNaiveVehPoseEstimate(float x, float y, float yaw) {
-    // Update our current naive belief of the vehicle pose.
-    ///\note: This estimate may come from another filter such as the EKF, or could be a basic propagation with no filtering.
-    // Save this estimate directly as a pose matrix.
-    this->cur_veh_pose_estimate = gtsam::Pose2(x, y, yaw);
-
-    // This will be added as a node in the pose graph during the update() loop.
-}
-
 void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
-    // Use GTSAM's datatypes to convert this measurement into a transformation matrix.
-    gtsam::Pose2 veh_to_landmark = gtsam::Pose2(range, 0.0, bearing);
-
-    //////////// Determine landmark ID /////////////////////
+    ///////////////// Determine landmark ID/index /////////////////////
     int lm_index = -1;
     if (this->landmark_id_is_known) {
         // Check if the landmark with this ID has been detected before.
@@ -78,11 +76,15 @@ void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
         throw std::runtime_error("PGS with unknown landmark ID is not yet supported.");
     }
 
+    /////////// Add landmark itself (if needed) ////////////////////
     if (lm_index == -1) {
         // This is the first detection of this landmark. Add its ID to the list.
         this->lm_IDs.push_back(id);
+        lm_index = this->M;
         this->M++;
 
+        // Use GTSAM's datatypes to convert this measurement into a transformation matrix.
+        gtsam::Pose2 veh_to_landmark = gtsam::Pose2(range, 0.0, bearing);
         // Compute this landmark's global position.
         gtsam::Pose2 global_landmark_pose = veh_to_landmark * this->cur_veh_pose_estimate;
         gtsam::Vector3 global_landmark_position_3 = gtsam::Pose2::Logmap(global_landmark_pose);
@@ -95,8 +97,14 @@ void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
         this->initial_estimate.insert(landmark_id_to_key(id), global_landmark_position_2);
     }
 
+    ///////////////// Add vehicle->landmark connection /////////////////////////
     // Add a connection to the graph between the current vehicle pose and the detected landmark.
-    this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(timestep_to_veh_pose_key(this->timestep), landmark_id_to_key(id), veh_to_landmark, this->sensing_noise_model);
+    ///\note: gtsam::Vector2 and gtsam::Point2 are identical.
+    this->graph.emplace_shared<gtsam::BearingRangeFactor<gtsam::Pose2, gtsam::Vector2>>(timestep_to_veh_pose_key(this->timestep), landmark_id_to_key(id), gtsam::Rot2(bearing), range, this->sensing_noise_model);
+    // this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(timestep_to_veh_pose_key(this->timestep), landmark_id_to_key(id), veh_to_landmark, this->sensing_noise_model);
+    // Record this connection so we don't have to re-interpret the factor graph every iteration to generate state messages.
+    this->msg_measurement_connections.push_back(this->timestep);
+    this->msg_measurement_connections.push_back(lm_index);
 }
 
 // Update the graph with the new information for this iteration.
@@ -189,7 +197,7 @@ void PoseGraph::publishState() {
     stateMsg.num_iterations = this->timestep; // number of iterations before the pose graph was solved.
     stateMsg.M = this->M; // number of landmarks detected.
     ///\todo: encode measurement connections.
-
+    stateMsg.meas_connections = this->msg_measurement_connections;
 
     // Set params specific to pose graph BEFORE optimization.
     // vehicle pose history before pose-graph optimization was run.
@@ -199,10 +207,9 @@ void PoseGraph::publishState() {
     for (int i=0; i<this->timestep; ++i) {
         // get pose corresponding to iteration i.
         gtsam::Pose2 veh_pose_i = this->initial_estimate.at<gtsam::Pose2>(timestep_to_veh_pose_key(i));
-        gtsam::Vector3 veh_pose_coords = gtsam::Pose2::Logmap(veh_pose_i);
-        x_vec_initial.push_back(veh_pose_coords(0));
-        y_vec_initial.push_back(veh_pose_coords(1));
-        yaw_vec_initial.push_back(veh_pose_coords(2));
+        x_vec_initial.push_back(veh_pose_i.x());
+        y_vec_initial.push_back(veh_pose_i.y());
+        yaw_vec_initial.push_back(veh_pose_i.theta());
     }
     stateMsg.x_v = x_vec_initial;
     stateMsg.y_v = y_vec_initial;
@@ -228,13 +235,11 @@ void PoseGraph::publishState() {
         std::vector<float> y_vec_result;
         std::vector<float> yaw_vec_result;
         for (int i=0; i<this->timestep; ++i) {
-            ROS_INFO_STREAM("PGS: Trying to retrieve veh pose for i=" << i);
             // get pose corresponding to iteration i.
             gtsam::Pose2 veh_pose_i = this->result.at<gtsam::Pose2>(timestep_to_veh_pose_key(i));
-            gtsam::Vector3 veh_pose_coords = gtsam::Pose2::Logmap(veh_pose_i);
-            x_vec_result.push_back(veh_pose_coords(0));
-            y_vec_result.push_back(veh_pose_coords(1));
-            yaw_vec_result.push_back(veh_pose_coords(2));
+            x_vec_result.push_back(veh_pose_i.x());
+            y_vec_result.push_back(veh_pose_i.y());
+            yaw_vec_result.push_back(veh_pose_i.theta());
         }
         stateMsg.x_v = x_vec_result;
         stateMsg.y_v = y_vec_result;
@@ -244,7 +249,6 @@ void PoseGraph::publishState() {
         std::vector<float> lm_result;
         for (int i=0; i<this->M; ++i) {
             int j = this->lm_IDs[i]; // Convert from landmark index to ID.
-            ROS_INFO_STREAM("PGS: Trying to retrieve landmark pos for i=" << i << ", j=" << j);
             gtsam::Vector2 lm_pos_j = this->initial_estimate.at<gtsam::Vector2>(landmark_id_to_key(j));
             lm_result.push_back(lm_pos_j(0));
             lm_result.push_back(lm_pos_j(1));

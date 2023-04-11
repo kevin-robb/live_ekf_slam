@@ -20,8 +20,10 @@
 #include <eigen3/Eigen/Eigenvalues>
 // GTSAM.
 #include <gtsam/geometry/Pose2.h>
+#include <gtsam/geometry/Point2.h>
 #include <gtsam/inference/Key.h>
 #include <gtsam/slam/BetweenFactor.h>
+#include <gtsam/sam/BearingRangeFactor.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/GaussNewtonOptimizer.h>
 #include <gtsam/nonlinear/Marginals.h>
@@ -229,10 +231,6 @@ public:
     void onLandmarkMeasurement(int id, float range, float bearing); // Process a single landmark measurement.
     void solvePoseGraph();
 
-    // The localization_node will handle running a second filter and letting us know its estimates.
-    void updateNaiveVehPoseEstimate(float x, float y, float yaw);
-
-    ros::Publisher statePubSecondary; // We want to publish both the initial pose graph from the naive filter's estimates as well as the optimized graph, so we need two publishers.
     void publishState();
 
 protected:
@@ -263,6 +261,13 @@ protected:
     // This is used for determining landmark measurements.
     gtsam::Pose2 cur_veh_pose_estimate;
 
+    // Stuff to help with pgs-specific message publishing.
+    // We want to publish both the initial pose graph from the naive filter's estimates as well as the optimized graph, so we need two publishers.
+    ros::Publisher statePubSecondary;
+    // Encoded graph connections between vehicle poses and landmarks. This is just used for drawing lines in the visualization.
+    // list of connections takes the form [i_1,j_1,...,i_k,j_k] where i_t is an iteration number representing a vehicle pose, and j_m is a particular landmark index.
+    std::vector<int> msg_measurement_connections; 
+
     //////// Basic helper functions //////////////
     uint64_t timestep_to_veh_pose_key(int timestep) {
         if (timestep < 0) { // Invalid.
@@ -285,6 +290,15 @@ public:
         // Create a publisher for the proper state message type.
         this->statePubSecondary = node.advertise<base_pkg::PoseGraphState>("/state/pose_graph/initial", 1);
         this->statePub = node.advertise<base_pkg::PoseGraphState>("/state/pose_graph/result", 1);
+    }
+
+    // The localization_node will handle running a second filter and letting us know its estimates.
+    void updateNaiveVehPoseEstimate(float x, float y, float yaw) {
+        // Update our current naive belief of the vehicle pose.
+        ///\note: This estimate may come from another filter such as the EKF, or could be a basic propagation with no filtering.
+        // Save this estimate directly as a pose matrix.
+        this->cur_veh_pose_estimate = gtsam::Pose2(x, y, yaw);
+        // This will be added as a node in the pose graph during the update() loop.
     }
 };
 
