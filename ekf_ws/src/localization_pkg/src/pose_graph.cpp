@@ -8,6 +8,9 @@ PoseGraph::PoseGraph() {
     // set filter type.
     this->type = FilterChoice::POSE_GRAPH_SLAM;
     ///\todo: initialization and whatnot.
+
+    // initialize state distribution.
+    this->x_t.resize(3);
 }
 
 void PoseGraph::readParams(YAML::Node config) {
@@ -89,6 +92,10 @@ void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
         gtsam::Pose2 global_landmark_pose = veh_to_landmark * this->cur_veh_pose_estimate;
         gtsam::Vector3 global_landmark_position_3 = gtsam::Pose2::Logmap(global_landmark_pose);
         gtsam::Vector2 global_landmark_position_2 = gtsam::Vector2(global_landmark_position_3(0), global_landmark_position_3(1));
+        ///\todo: This gives completely wrong landmark positions.
+        // Use my less fancy way that definitely works.
+        global_landmark_position_2(0) = this->x_t(0) + range*cos(this->x_t(2)+bearing);
+        global_landmark_position_2(1) = this->x_t(1) + range*sin(this->x_t(2)+bearing);
 
         // Add this landmark as a node in the graph.
         if (this->verbose) {

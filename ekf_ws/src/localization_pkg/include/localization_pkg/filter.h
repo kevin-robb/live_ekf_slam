@@ -297,6 +297,7 @@ public:
         // Update our current naive belief of the vehicle pose.
         ///\note: This estimate may come from another filter such as the EKF, or could be a basic propagation with no filtering.
         // Save this estimate directly as a pose matrix.
+        this->x_t << x, y, yaw;
         this->cur_veh_pose_estimate = gtsam::Pose2(x, y, yaw);
         // This will be added as a node in the pose graph during the update() loop.
     }
