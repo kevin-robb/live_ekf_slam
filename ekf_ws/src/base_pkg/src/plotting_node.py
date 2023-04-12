@@ -8,7 +8,7 @@ import rospy, rospkg, yaml
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from sensor_msgs.msg import Image
-from base_pkg.msg import EKFState, UKFState, PoseGraphState
+from base_pkg.msg import EKFState, UKFState, PoseGraphState, NaiveState
 import numpy as np
 import atexit
 from math import cos, sin, pi, atan2, remainder, tau
@@ -37,6 +37,7 @@ msg_ekf = None
 msg_ukf = None
 msg_pose_graph_init = None
 msg_pose_graph_result = None
+msg_naive = None
 #################################################
 
 def remove_plot(name):
@@ -86,7 +87,7 @@ def update_plot(event):
     Update viz with any new messages that have arrived since the last iteration.
     """
     global plots
-    global msg_ekf, msg_ukf, msg_pose_graph_init, msg_pose_graph_result
+    global msg_ekf, msg_ukf, msg_pose_graph_init, msg_pose_graph_result, msg_naive
     # NOTE we make a local copy of each and clear its global counterpart to avoid:
     # (a) the msg being changed while we're in the middle of plotting it, and 
     # (b) so we don't "update" the plot if a new message has not arrived since we last plotted it.
@@ -94,6 +95,10 @@ def update_plot(event):
     # Run each update function one at a time.
     msg = None
     type = None
+    if msg_naive is not None:
+        msg = msg_naive
+        msg_naive = None
+        type = "naive"
     if msg_ekf is not None:
         msg = msg_ekf
         msg_ekf = None
@@ -106,10 +111,10 @@ def update_plot(event):
     if msg is not None:
         """
         Perform necessary plot updates for a new state message from the ekf or ukf (combined as they are very similar).
-        @param msg - EKFState or UKFState message.
-        @param type - either "ekf" or "ukf", specifying the message/filter type.
+        @param msg - EKFState, UKFState, or NaiveState message.
+        @param type - either "ekf", "ukf", or "naive", specifying the message/filter type.
         """
-        if type not in ["ekf", "ukf"]:
+        if type not in ["ekf", "ukf", "naive"]:
             rospy.logerr("PLT: update_kf_plot called with invalid type {:}.".format(type))
             return
 
@@ -126,43 +131,45 @@ def update_plot(event):
             plots["veh_pos_true"] = sim_viz_fig.arrow(pose.x, pose.y, config["plotter"]["arrow_len"]*cos(pose.z), config["plotter"]["arrow_len"]*sin(pose.z), color="blue", width=0.1, zorder=2)
 
         ################ VEH POS #################
-        # compute length of state to use throughout. n = 3+2M
-        n = int(len(msg.P)**(1/2))
         # plot current estimated veh pos.
         if not config["plotter"]["show_entire_traj"]:
             remove_plot("veh_pos_est")
         # draw a single pt with arrow to represent current veh pose.
         plots["veh_pos_est"] = sim_viz_fig.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
 
-        ################ VEH COV ##################
-        if config["plotter"]["show_veh_ellipse"]:
-            # compute parametric ellipse for veh covariance.
-            veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
-            # remove old ellipses.
-            if not config["plotter"]["show_entire_traj"]:
-                remove_plot("veh_cov_est")
-            # plot the ellipse.
-            plots["veh_cov_est"], = sim_viz_fig.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
+        ################ COVARIANCES ##################
+        if type in ["ekf", "ukf"]:
+            # compute length of state to use throughout. n = 3+2M
+            n = int(len(msg.P)**(1/2))
+            ################ VEH COV ##################
+            if config["plotter"]["show_veh_ellipse"]:
+                # compute parametric ellipse for veh covariance.
+                veh_ell = cov_to_ellipse(np.array([[msg.P[0],msg.P[1]], [msg.P[n],msg.P[n+1]]]))
+                # remove old ellipses.
+                if not config["plotter"]["show_entire_traj"]:
+                    remove_plot("veh_cov_est")
+                # plot the ellipse.
+                plots["veh_cov_est"], = sim_viz_fig.plot(msg.x_v+veh_ell[0,:] , msg.y_v+veh_ell[1,:],'lightgrey', zorder=1)
 
-        ############## LANDMARK EST ##################
-        lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
-        lm_y = [msg.landmarks[i] for i in range(2,len(msg.landmarks),3)]
-        # remove old landmark estimates.
-        remove_plot("lm_pos_est")
-        # plot new landmark estimates.
-        plots["lm_pos_est"] = sim_viz_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
+            ############## LANDMARK EST ##################
+            lm_x = [msg.landmarks[i] for i in range(1,len(msg.landmarks),3)]
+            lm_y = [msg.landmarks[i] for i in range(2,len(msg.landmarks),3)]
+            # remove old landmark estimates.
+            remove_plot("lm_pos_est")
+            # plot new landmark estimates.
+            plots["lm_pos_est"] = sim_viz_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
 
-        ############## LANDMARK COV ###################
-        if config["plotter"]["show_landmark_ellipses"]:
-            # plot new landmark covariances.
-            for i in range(len(msg.landmarks) // 3):
-                # replace previous if it's been plotted before.
-                lm_id = msg.landmarks[i*3] 
-                remove_plot("lm_cov_est_{:}".format(lm_id))
-                # extract 2x2 cov for this landmark.
-                lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
-                # plot its ellipse.
-                plots["lm_cov_est_{:}".format(lm_id)], = sim_viz_fig.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
+            ############## LANDMARK COV ###################
+            if config["plotter"]["show_landmark_ellipses"]:
+                # plot new landmark covariances.
+                for i in range(len(msg.landmarks) // 3):
+                    # replace previous if it's been plotted before.
+                    lm_id = msg.landmarks[i*3] 
+                    remove_plot("lm_cov_est_{:}".format(lm_id))
+                    # extract 2x2 cov for this landmark.
+                    lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
+                    # plot its ellipse.
+                    plots["lm_cov_est_{:}".format(lm_id)], = sim_viz_fig.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
         
         ############## UKF SIGMA POINTS ##################
         if type == "ukf":
@@ -294,6 +301,12 @@ def get_pose_graph_result(msg):
     global msg_pose_graph_result
     msg_pose_graph_result = msg
 
+# get the state published by the naive filter.
+def get_naive_state(msg):
+    # queue msg to update the plot.
+    global msg_naive
+    msg_naive = msg
+
 def save_plot(pkg_path):
     # save plot we've been building upon exit.
     # save to a file in pkg/plots directory.
@@ -387,6 +400,7 @@ def main():
     rospy.Subscriber("/state/ukf", UKFState, get_ukf_state, queue_size=1)
     rospy.Subscriber("/state/pose_graph/initial", PoseGraphState, get_pose_graph_initial, queue_size=1)
     rospy.Subscriber("/state/pose_graph/result", PoseGraphState, get_pose_graph_result, queue_size=1)
+    rospy.Subscriber("/state/naive", NaiveState, get_naive_state, queue_size=1)
     # subscribe to ground truth.
     rospy.Subscriber("/truth/veh_pose", Vector3, get_true_pose, queue_size=1)
     rospy.Subscriber("/truth/landmarks", Float32MultiArray, get_true_landmark_map, queue_size=1)

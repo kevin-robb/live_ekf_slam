@@ -42,7 +42,6 @@ float readParams() {
         filter->type = FilterChoice::UKF_LOC; // Override default of UKF_SLAM.
     } else if (filter_choice_str == "pose_graph") {
         filter = std::make_unique<PoseGraph>();
-        ///\todo: create class for naive filter and add as option.
     } else {
         throw std::runtime_error("Invalid filter choice in params.yaml.");
     }
@@ -68,7 +67,10 @@ float readParams() {
             filter_secondary->type = FilterChoice::UKF_LOC; // Override default of UKF_SLAM.
             break;
         }
-        ///\todo: create class for naive filter and add as option.
+        case FilterChoice::NAIVE_COMMAND_PROPAGATION: {
+            filter_secondary = std::make_unique<NaiveFilter>();
+            break;
+        }
         default: {
             // Do not instantiate secondary filter. Its type will remain NOT_SET.
             if (filter->type == FilterChoice::POSE_GRAPH_SLAM) {

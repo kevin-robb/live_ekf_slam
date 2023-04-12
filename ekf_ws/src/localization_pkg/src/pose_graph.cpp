@@ -7,8 +7,6 @@
 PoseGraph::PoseGraph() {
     // set filter type.
     this->type = FilterChoice::POSE_GRAPH_SLAM;
-    ///\todo: initialization and whatnot.
-
     // initialize state distribution.
     this->x_t.resize(3);
 }

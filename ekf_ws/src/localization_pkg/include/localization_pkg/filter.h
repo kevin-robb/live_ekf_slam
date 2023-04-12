@@ -34,6 +34,7 @@
 #include "base_pkg/EKFState.h"
 #include "base_pkg/UKFState.h"
 #include "base_pkg/PoseGraphState.h"
+#include "base_pkg/NaiveState.h"
 
 #define pi 3.14159265358979323846
 
@@ -301,6 +302,54 @@ public:
         this->cur_veh_pose_estimate = gtsam::Pose2(x, y, yaw);
         // This will be added as a node in the pose graph during the update() loop.
     }
+};
+
+// Naive filter that doesn't do anything fancy. Used as "initial estimate" for PG-SLAM.
+class NaiveFilter: public Filter {
+public:
+    NaiveFilter() {
+        this->type = FilterChoice::NAIVE_COMMAND_PROPAGATION; // set filter type.
+        this->x_t.resize(3); // initialize state distribution.
+    }
+    ~NaiveFilter() {}; // Do nothing.
+    void readParams(YAML::Node config) {
+        // setup all commonly-used params.
+        Filter::readCommonParams(config);
+        // setup all filter-specific params, if any.
+    }
+    void init(float x_0, float y_0, float yaw_0) {
+        this->timestep = 0; // Ensure timesteps start at 0.
+        this->x_t << x_0, y_0, yaw_0; // set starting vehicle pose.
+        this->isInit = true; // set initialized flag.
+    }
+    void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
+        this->timestep += 1; // update timestep (i.e., iteration index).
+        // Ignore all measurements. Just propagate vehicle pose by command message.
+        this->x_t(0) = this->x_t(0) + (cmdMsg->fwd)*cos(this->x_t(2));
+        this->x_t(1) = this->x_t(1) + (cmdMsg->fwd)*sin(this->x_t(2));
+        this->x_t(2) = remainder(this->x_t(2) + cmdMsg->ang, 2*pi);
+    }
+    Eigen::Vector3d getStateVector() {
+        // Return the estimated vehicle pose as a vector (x,y,yaw).
+        return Eigen::Vector3d(this->x_t(0), this->x_t(1), this->x_t(2));
+    }
+    void setupStatePublisher(ros::NodeHandle node) {
+        // Create a publisher for the proper state message type.
+        this->statePub = node.advertise<base_pkg::NaiveState>("/state/naive", 1);
+    }
+    void publishState() {
+        // Convert the EKF state to a ROS message and publish it.
+        base_pkg::NaiveState stateMsg;
+        // timestep.
+        stateMsg.timestep = this->timestep;
+        // vehicle pose.
+        stateMsg.x_v = this->x_t(0);
+        stateMsg.y_v = this->x_t(1);
+        stateMsg.yaw_v = this->x_t(2);
+        // publish it.
+        this->statePub.publish(stateMsg);
+    }
+protected:
 };
 
 #endif // FILTER_INTERFACE_H
