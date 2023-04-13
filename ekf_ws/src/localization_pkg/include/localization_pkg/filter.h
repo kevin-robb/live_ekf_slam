@@ -26,6 +26,7 @@
 #include <gtsam/sam/BearingRangeFactor.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/GaussNewtonOptimizer.h>
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/Marginals.h>
 #include <gtsam/nonlinear/Values.h>
 #include <memory>

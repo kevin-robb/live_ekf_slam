@@ -320,7 +320,7 @@ def update_plot(event):
         if config["plotter"]["show_true_traj"] and msg.timestep <= len(true_poses):
             pose = true_poses[msg.timestep-1]
             # plot the current veh pos, & remove previous.
-            remove_plot("pg_veh_pos_true")
+            # remove_plot("pg_veh_pos_true")
             plots["pg_veh_pos_true"] = pose_graph_fig.arrow(pose.x, pose.y, config["plotter"]["arrow_len"]*cos(pose.z), config["plotter"]["arrow_len"]*sin(pose.z), color="blue", width=0.1, zorder=2)
         
         ############# VEHICLE POSE HISTORY ###################

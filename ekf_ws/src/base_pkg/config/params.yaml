@@ -40,15 +40,15 @@ process_noise:
     v_d: 0.0
     v_th: 0.0
   cov:
-    V_00: 0.01 #0.0004
-    V_11: 0.001 # 0.00007615435494667714
+    V_00: 0.1 #0.0004 # covariance on forward commands.
+    V_11: 0.01 # 0.00007615435494667714 # covariance on angular commands.
 sensing_noise:
   mean:
     w_r: 0.0
     w_b: 0.0
   cov:
-    W_00: 0.01
-    W_11: 0.00030461741978670857
+    W_00: 0.1 #0.01 # covariance on range measurements.
+    W_11: 0.01 #0.00030461741978670857 # covariance on bearing measurements.
 
 # ----- UKF-Specific Parameters -----
 ukf:
@@ -56,12 +56,13 @@ ukf:
 
 # ----- Pose-Graph-SLAM-Specific Parameters -----
 pose_graph:
-  filter_to_compare: "ekf_slam" # Other filter to run in tandem and use for initial pose-graph estimate. Options are ekf_slam, ukf_loc, ukf_slam, naive.
-  graph_size_threshold: 500 # After this many vehicle poses have been added to the pose graph (equivalently, this many iterations have passed), stop the filter & run optimization on the pose graph.
+  filter_to_compare: "naive" # Other filter to run in tandem and use for initial pose-graph estimate. Options are ekf_slam, ukf_loc, ukf_slam, naive.
+  graph_size_threshold: 999 # After this many vehicle poses have been added to the pose graph (equivalently, this many iterations have passed), stop the filter & run optimization on the pose graph.
+  verbose: False # if true, spam the console with a ton of logs.
+
   # Params for GTSAM's Gauss-Newton solver.
   iteration_error_threshold: 0.00001 # Stop iterating once the change in error between steps is less than this value.
   max_iterations: 100 # max iterations to run optimization algorithm.
-  verbose: False # if true, spam the console with a ton of logs.
 
 # ----- Map -----
 map:
@@ -85,7 +86,7 @@ path_planning:
 # ----- Precomputed Trajectory Generation -----
 # (used if precompute_trajectory option is True in roslaunch)
 trajectory_gen:
-  num_timesteps: 2000
+  num_timesteps: 1000
   landmark_noise: 0.2 # noise to use for generating map for TSP solution.
   visitation_threshold: 3.0 # how close the veh must get to a lm to mark it as visited in TSP soln.
 
@@ -108,6 +109,6 @@ plotter:
   list_clicked_points: False # utility to display coords of all clicked points, for manually creating landmark maps.
   pose_graph:
     show_normal_viz_alongside: True # if true, normal sim viz is shown on one subplot, and the pose graph is shown on a second subplot. if false, only the pose graph's plot is shown.
-    show_meas_connections: False
+    show_meas_connections: False # these are the slowest thing to plot.
     show_cmd_connections: True
     show_init_graph_progress: True # show the pose graph as it's being created. if false, only show the final results.

@@ -171,11 +171,13 @@ void PoseGraph::solvePoseGraph() {
 
     // Optimize the initial values using a Gauss-Newton nonlinear optimizer
     // The optimizer accepts an optional set of configuration parameters.
-    gtsam::GaussNewtonParams parameters;
-    parameters.relativeErrorTol = this->iteration_error_threshold;
-    parameters.maxIterations = this->max_iterations;
-    // Create the optimizer instance and run it.
-    gtsam::GaussNewtonOptimizer optimizer(this->graph, this->initial_estimate, parameters);
+    // gtsam::GaussNewtonParams parameters;
+    // parameters.relativeErrorTol = this->iteration_error_threshold;
+    // parameters.maxIterations = this->max_iterations;
+    // // Create the optimizer instance and run it.
+    // gtsam::GaussNewtonOptimizer optimizer(this->graph, this->initial_estimate, parameters);
+    // Create the optimizer instance with default params, and run it.
+    gtsam::LevenbergMarquardtOptimizer optimizer(this->graph, this->initial_estimate);
     ROS_INFO_STREAM("PGS: Defined optimizer.");
     this->result = optimizer.optimize();
     ROS_INFO_STREAM("PGS: Ran optimization.");
