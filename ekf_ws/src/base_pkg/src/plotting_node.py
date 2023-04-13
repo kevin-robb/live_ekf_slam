@@ -13,6 +13,7 @@ import numpy as np
 import atexit
 from math import cos, sin, pi, atan2, remainder, tau
 from cv_bridge import CvBridge
+bridge = CvBridge()
 
 from matplotlib.backend_bases import MouseButton
 from matplotlib import pyplot as plt
@@ -23,9 +24,7 @@ warnings.filterwarnings("ignore")
 
 ############ GLOBAL VARIABLES ###################
 # store all plots objects we want to be able to remove later.
-plots = {"lm_cov_est" : {}}
-# output filename prefix.
-fname = ""
+plots = {}
 # publish clicked point on map for planner.
 goal_pub = None
 # points clicked on the map, if using LIST_CLICKED_POINTS mode.
@@ -38,8 +37,63 @@ msg_ukf = None
 msg_pose_graph_init = None
 msg_pose_graph_result = None
 msg_naive = None
+# figure objects that may or may not be defined.
+sim_viz_fig = None
+pose_graph_fig = None
 #################################################
 
+################# STATE CALLBACKS ####################
+# get the state published by the filter, and queue it up for the plot to be updated.
+def get_ekf_state(msg):
+    global msg_ekf; msg_ekf = msg
+def get_ukf_state(msg):
+    global msg_ukf; msg_ukf = msg
+def get_pose_graph_initial(msg):
+    global msg_pose_graph_init; msg_pose_graph_init = msg
+def get_pose_graph_result(msg):
+    rospy.loginfo("PLT: plotting node got PGS result.")
+    global msg_pose_graph_result; msg_pose_graph_result = msg
+def get_naive_state(msg):
+    global msg_naive; msg_naive = msg
+
+################ OTHER CALLBACKS #######################
+def get_true_pose(msg):
+    # save the messages to a queue so they can be shown with the corresponding estimate.
+    global true_poses; true_poses.append(msg)
+
+def get_true_landmark_map(msg):
+    rospy.loginfo("PLT: Ground truth landmark map received by plotting node.")
+    lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
+    lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
+    # plot the true landmark positions to compare to estimates.
+    if sim_viz_fig is not None:
+        sim_viz_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=2)
+    if pose_graph_fig is not None:
+        pose_graph_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=1)
+
+def get_color_map(msg):
+    # get the true occupancy grid map image.
+    color_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+    # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
+    edge = config["map"]["bound"]
+    if sim_viz_fig is not None:
+        sim_viz_fig.imshow(color_map, zorder=0, extent=[-edge, edge, -edge, edge])
+    if pose_graph_fig is not None:
+        pose_graph_fig.imshow(color_map, zorder=0, extent=[-edge, edge, -edge, edge])
+
+def get_planned_path(msg):
+    global plots
+    # get the set of points that A* determined to get to the clicked goal.
+    # remove and update the path if we've drawn it previously.
+    remove_plot("planned_path")
+    remove_plot("goal_pt")
+    # only draw if the path is non-empty.
+    if len(msg.data) > 1:
+        plots["planned_path"] = sim_viz_fig.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
+        # show the goal point (end of path).
+        plots["goal_pt"] = sim_viz_fig.scatter(msg.data[-2], msg.data[-1], color="yellow", edgecolors="black", s=40, zorder=2)
+
+############ HELPER FUNCTIONS ######################
 def remove_plot(name):
     """
     Remove the plot if it already exists. Otherwise do nothing.
@@ -55,10 +109,32 @@ def remove_plot(name):
         # remove the key.
         del plots[name]
 
+def save_plot(base_pkg_path):
+    # save plot we've been building upon exit.
+    # save to a file in base_pkg/plots directory.
+    if config["plotter"]["save_final_map"]:
+        fpath = base_pkg_path+"/plots/"+config["filter"]+"_demo.png"
+        rospy.logwarn("PLT: Saving plot to " + fpath)
+        plt.savefig(fpath, format='png')
+
+def on_click(event):
+    # global clicked_points
+    if event.button is MouseButton.RIGHT:
+        # kill the node.
+        rospy.logwarn("PLT: Killing plotting_node on right click.")
+        exit()
+    elif event.button is MouseButton.LEFT:
+        if config["plotter"]["list_clicked_points"]:
+            clicked_points.append((event.xdata, event.ydata))
+            print(clicked_points)
+        # publish new goal pt for the planner.
+        goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
+        # show this point so it appears even when not using A* planning.
+        get_planned_path(Float32MultiArray(data=[event.xdata, event.ydata]))
+
 def cov_to_ellipse(P_v):
     """
-    Given the state covariance matrix,
-    compute points to plot representative ellipse.
+    Given the state covariance matrix, compute points to plot representative ellipse.
     """
     # need to take only first 2x2 for veh position cov.
     cov = P_v[0:2,0:2]
@@ -82,6 +158,7 @@ def cov_to_ellipse(P_v):
         ell_rot[:,i] = np.dot(R_ell,ell[:,i])
     return ell_rot
 
+############### MAIN UPDATE LOOP ######################
 def update_plot(event):
     """
     Update viz with any new messages that have arrived since the last iteration.
@@ -92,25 +169,26 @@ def update_plot(event):
     # (a) the msg being changed while we're in the middle of plotting it, and 
     # (b) so we don't "update" the plot if a new message has not arrived since we last plotted it.
     
-    # Run each update function one at a time.
+    # Only run one update function for each figure.
     msg = None
     type = None
-    if msg_naive is not None:
-        msg = msg_naive
-        msg_naive = None
-        type = "naive"
-    if msg_ekf is not None:
-        msg = msg_ekf
-        msg_ekf = None
-        type = "ekf"
-    if msg_ukf is not None:
-        msg = msg_ukf
-        msg_ukf = None
-        type = "ukf"
+    if sim_viz_fig is not None:
+        if msg_naive is not None:
+            msg = msg_naive
+            msg_naive = None
+            type = "naive"
+        if msg_ekf is not None:
+            msg = msg_ekf
+            msg_ekf = None
+            type = "ekf"
+        if msg_ukf is not None:
+            msg = msg_ukf
+            msg_ukf = None
+            type = "ukf"
 
     if msg is not None:
         """
-        Perform necessary plot updates for a new state message from the ekf or ukf (combined as they are very similar).
+        Perform necessary plot updates for a new state message for the main sim viz figure.
         @param msg - EKFState, UKFState, or NaiveState message.
         @param type - either "ekf", "ukf", or "naive", specifying the message/filter type.
         """
@@ -118,7 +196,7 @@ def update_plot(event):
             rospy.logerr("PLT: update_kf_plot called with invalid type {:}.".format(type))
             return
 
-        sim_viz_fig.title.set_text(type.upper()+"-Estimate")
+        sim_viz_fig.title.set_text(type.upper()+" Estimate")
         #################### TIMESTEP ######################
         remove_plot("timestep")
         plots["timestep"] = sim_viz_fig.text(-config["map"]["bound"], config["map"]["bound"], 't = '+str(msg.timestep), horizontalalignment='left', verticalalignment='bottom', zorder=2)
@@ -209,14 +287,16 @@ def update_plot(event):
                 
     msg = None
     type = None
-    if msg_pose_graph_init is not None:
-        msg = msg_pose_graph_init
-        msg_pose_graph_init = None
-        type = "init"
-    if msg_pose_graph_result is not None:
-        msg = msg_pose_graph_result
-        msg_pose_graph_result = None
-        type = "result"
+    if pose_graph_fig is not None:
+        if config["plotter"]["pose_graph"]["show_init_graph_progress"]:
+            if msg_pose_graph_init is not None:
+                msg = msg_pose_graph_init
+                msg_pose_graph_init = None
+                type = "init"
+        if msg_pose_graph_result is not None:
+            msg = msg_pose_graph_result
+            msg_pose_graph_result = None
+            type = "result"
 
     if msg is not None:
         """
@@ -227,22 +307,27 @@ def update_plot(event):
         if type not in ["init", "result"]:
             rospy.logerr("PLT: update_pose_graph_plot called with invalid type {:}.".format(type))
             return
+        
+        # Some plot params will be different depending on the data type.
+        pgs_title = {"init" : "Pose-Graph Before Optimization", "result" : "Pose-Graph After Optimization"}
+        pgs_veh_color = {"init" : "green", "result" : "purple"}
+        # TODO may want to plot result graph on top of init graph, so parametrize zorders by type.
 
         # set title.
-        if type == "init":
-            pose_graph_fig.title.set_text("Before Optimization")
-        else:
-            pose_graph_fig.title.set_text("After Optimization")
-        
-        # TODO want to plot result graph on top of init graph, so increase all zorders.
-        # layer_offset = 0 if type == "init" else 10
-        # TODO want to change colors for init vs result graph.
+        pose_graph_fig.title.set_text(pgs_title[type])
+
+        #################### TRUE POSE #########################
+        if config["plotter"]["show_true_traj"] and msg.timestep <= len(true_poses):
+            pose = true_poses[msg.timestep-1]
+            # plot the current veh pos, & remove previous.
+            remove_plot("pg_veh_pos_true")
+            plots["pg_veh_pos_true"] = pose_graph_fig.arrow(pose.x, pose.y, config["plotter"]["arrow_len"]*cos(pose.z), config["plotter"]["arrow_len"]*sin(pose.z), color="blue", width=0.1, zorder=2)
         
         ############# VEHICLE POSE HISTORY ###################
         remove_plot(type+"_pg_veh_pose_history")
         arrow_x_components = [config["plotter"]["arrow_len"]*cos(msg.yaw_v[i]) for i in range(msg.timestep)]
         arrow_y_components = [config["plotter"]["arrow_len"]*sin(msg.yaw_v[i]) for i in range(msg.timestep)]
-        plots[type+"_pg_veh_pose_history"] = pose_graph_fig.quiver(msg.x_v, msg.y_v, arrow_x_components, arrow_y_components, color="blue", width=0.1, zorder=1, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
+        plots[type+"_pg_veh_pose_history"] = pose_graph_fig.quiver(msg.x_v, msg.y_v, arrow_x_components, arrow_y_components, color=pgs_veh_color[type], width=0.1, zorder=1, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
 
         ############### LANDMARK POSITIONS ###################
         remove_plot(type+"_pg_landmarks")
@@ -252,17 +337,19 @@ def update_plot(event):
             plots[type+"_pg_landmarks"] = pose_graph_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=2)
 
         ############### ADJACENT POSE CONNECTIONS ###############
-        # we know a connection exists between every vehicle pose and the pose on the immediate previous/next iterations.
-        remove_plot(type+"_pg_cmd_connections")
-        plots[type+"_pg_cmd_connections"] = pose_graph_fig.plot(msg.x_v, msg.y_v, color="blue", zorder=0)
+        if config["plotter"]["pose_graph"]["show_cmd_connections"]:
+            # we know a connection exists between every vehicle pose and the pose on the immediate previous/next iterations.
+            remove_plot(type+"_pg_cmd_connections")
+            plots[type+"_pg_cmd_connections"] = pose_graph_fig.plot(msg.x_v, msg.y_v, color="blue", zorder=0)
 
         ############## MEASUREMENT CONNECTIONS ####################
-        for j in range(len(msg.meas_connections) // 2):
-            i_veh = msg.meas_connections[2*j] - 1 # vehicle index is one lower than its iteration number.
-            i_lm = msg.meas_connections[2*j+1] # landmark index.
-            # plot a line between the specified vehicle pose and landmark.
-            remove_plot(type+"_pg_meas_connection_{:}".format(j))
-            plots[type+"_pg_meas_connection_{:}".format(j)] = pose_graph_fig.plot([msg.x_v[i_veh], lm_x[i_lm]], [msg.y_v[i_veh], lm_y[i_lm]], color="red", zorder=0)
+        if config["plotter"]["pose_graph"]["show_meas_connections"]:
+            for j in range(len(msg.meas_connections) // 2):
+                i_veh = msg.meas_connections[2*j] - 1 # vehicle index is one lower than its iteration number.
+                i_lm = msg.meas_connections[2*j+1] # landmark index.
+                # plot a line between the specified vehicle pose and landmark.
+                remove_plot(type+"_pg_meas_connection_{:}".format(j))
+                plots[type+"_pg_meas_connection_{:}".format(j)] = pose_graph_fig.plot([msg.x_v[i_veh], lm_x[i_lm]], [msg.y_v[i_veh], lm_y[i_lm]], color="red", zorder=0)
     
     # force desired window region (prevents axes expanding when vehicle comes close to an edge of the plot).
     plt.xlim(display_region)
@@ -271,102 +358,6 @@ def update_plot(event):
     plt.draw()
     plt.pause(0.00000000001)
 
-# get the state published by the EKF.
-def get_ekf_state(msg):
-    global fname
-    # set filename for EKF.
-    fname = "ekf"
-    # queue msg to update the plot.
-    global msg_ekf
-    msg_ekf = msg
-
-# get the state published by the UKF.
-def get_ukf_state(msg):
-    global fname
-    # set filename for UKF.
-    fname = "ukf"
-    # queue msg to update the plot.
-    global msg_ukf
-    msg_ukf = msg
-
-# get the factor graphs published by Pose Graph SLAM filter.
-def get_pose_graph_initial(msg):
-    # queue msg to update the plot.
-    global msg_pose_graph_init
-    msg_pose_graph_init = msg
-
-def get_pose_graph_result(msg):
-    rospy.loginfo("PLT: plotting node got PGS result.")
-    # queue msg to update the plot.
-    global msg_pose_graph_result
-    msg_pose_graph_result = msg
-
-# get the state published by the naive filter.
-def get_naive_state(msg):
-    # queue msg to update the plot.
-    global msg_naive
-    msg_naive = msg
-
-def save_plot(pkg_path):
-    # save plot we've been building upon exit.
-    # save to a file in pkg/plots directory.
-    if fname != "" and config["plotter"]["save_final_map"]:
-        plt.savefig(pkg_path+"/plots/"+fname+"_demo.png", format='png')
-
-def get_true_pose(msg):
-    if not config["plotter"]["show_true_traj"]: return
-    # save the messages to a queue so they can be shown with the corresponding estimate.
-    global true_poses
-    true_poses.append(msg)
-
-def get_true_landmark_map(msg):
-    if not config["plotter"]["show_true_landmark_map"]:
-        return
-    rospy.loginfo("Ground truth map received by plotting node.")
-    lm_x = [msg.data[i] for i in range(1,len(msg.data),3)]
-    lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
-    # plot the true landmark positions to compare to estimates.
-    sim_viz_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=2)
-    if config["filter"].lower() == "pose_graph":
-        pose_graph_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=1)
-
-def on_click(event):
-    # global clicked_points
-    if event.button is MouseButton.RIGHT:
-        # kill the node.
-        rospy.logwarn("Killing plotting_node on right click.")
-        exit()
-    elif event.button is MouseButton.LEFT:
-        if config["plotter"]["list_clicked_points"]:
-            clicked_points.append((event.xdata, event.ydata))
-            print(clicked_points)
-        # publish new goal pt for the planner.
-        goal_pub.publish(Vector3(x=event.xdata, y=event.ydata))
-        # show this point so it appears even when not using A* planning.
-        get_planned_path(Float32MultiArray(data=[event.xdata, event.ydata]))
-
-def get_color_map(msg):
-    if not config["plotter"]["show_occ_map"]:
-        return
-    # get the true occupancy grid map image.
-    bridge = CvBridge()
-    color_map = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-    # add the true map image to the plot. extent=(L,R,B,T) gives display bounds.
-    edge = config["map"]["bound"]
-    sim_viz_fig.imshow(color_map, zorder=0, extent=[-edge, edge, -edge, edge])
-
-
-def get_planned_path(msg):
-    global plots
-    # get the set of points that A* determined to get to the clicked goal.
-    # remove and update the path if we've drawn it previously.
-    remove_plot("planned_path")
-    remove_plot("goal_pt")
-    # only draw if the path is non-empty.
-    if len(msg.data) > 1:
-        plots["planned_path"] = sim_viz_fig.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
-        # show the goal point (end of path).
-        plots["goal_pt"] = sim_viz_fig.scatter(msg.data[-2], msg.data[-1], color="yellow", edgecolors="black", s=40, zorder=2)
 
 def main():
     global goal_pub
@@ -395,17 +386,23 @@ def main():
     # when the node exits, make the plot.
     atexit.register(save_plot, base_pkg_path)
 
-    # subscribe to the current state.
+    # subscribe to the current state for all filters.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)
     rospy.Subscriber("/state/ukf", UKFState, get_ukf_state, queue_size=1)
     rospy.Subscriber("/state/pose_graph/initial", PoseGraphState, get_pose_graph_initial, queue_size=1)
     rospy.Subscriber("/state/pose_graph/result", PoseGraphState, get_pose_graph_result, queue_size=1)
     rospy.Subscriber("/state/naive", NaiveState, get_naive_state, queue_size=1)
+
+    # Only setup som subscribers if config params request it.
     # subscribe to ground truth.
-    rospy.Subscriber("/truth/veh_pose", Vector3, get_true_pose, queue_size=1)
-    rospy.Subscriber("/truth/landmarks", Float32MultiArray, get_true_landmark_map, queue_size=1)
+    if config["plotter"]["show_true_traj"]:
+        rospy.Subscriber("/truth/veh_pose", Vector3, get_true_pose, queue_size=1)
+    if config["plotter"]["show_true_landmark_map"]:
+        rospy.Subscriber("/truth/landmarks", Float32MultiArray, get_true_landmark_map, queue_size=1)
+
     # subscribe to the color map.
-    rospy.Subscriber("/truth/color_map", Image, get_color_map, queue_size=1)
+    if config["plotter"]["show_occ_map"]:
+        rospy.Subscriber("/truth/color_map", Image, get_color_map, queue_size=1)
 
     # publish the chosen goal point for the planner.
     goal_pub = rospy.Publisher("/plan/goal", Vector3, queue_size=1)
@@ -413,30 +410,30 @@ def main():
     rospy.Subscriber("/plan/path", Float32MultiArray, get_planned_path, queue_size=1)
 
     # startup the plot.
+    plt.figure()
     global sim_viz_fig, pose_graph_fig
     if config["filter"].lower() == "pose_graph":
-        global fig
-        fig = plt.figure() 
-        # create 1 row of 2 plots, with a 1:1 size ratio for them.
-        # gs = gridspec.GridSpec(1, 2, width_ratios=[1, 1]) 
-        # sim_viz_fig = plt.subplot(gs[0])
-        sim_viz_fig = plt.subplot(1, 2, 1)
-        plt.title("Ground truth and online filter progress")
-        # force desired window region.
-        plt.xlim(display_region)
-        plt.ylim(display_region)
-        pose_graph_fig = plt.subplot(1, 2, 2)
-        # pose_graph_fig = plt.subplot(gs[1])
-        plt.title("Pose graph progress")
-        # force desired window region.
-        plt.xlim(display_region)
-        plt.ylim(display_region)
-
-        sim_viz_fig.set_aspect('equal')
-        pose_graph_fig.set_aspect('equal')
+        if config["plotter"]["pose_graph"]["show_normal_viz_alongside"]:
+            sim_viz_fig = plt.subplot(1, 2, 1)
+            plt.title("Ground truth and online filter progress")
+            # force desired window region.
+            plt.xlim(display_region)
+            plt.ylim(display_region)
+            pose_graph_fig = plt.subplot(1, 2, 2)
+            plt.title("Pose graph progress")
+            # force desired window region.
+            plt.xlim(display_region)
+            plt.ylim(display_region)
+            sim_viz_fig.set_aspect('equal')
+            pose_graph_fig.set_aspect('equal')
+        else: # only show pose graph.
+            pose_graph_fig = plt.subplot(1, 1, 1)
+            plt.axis("equal")
+            plt.xlabel("x (m)")
+            plt.ylabel("y (m)")
+            
     else:
         # Will not be plotting a pose graph, so only open one plot window.
-        plt.figure()
         sim_viz_fig = plt.subplot(1, 1, 1)
         plt.axis("equal")
         plt.xlabel("x (m)")
