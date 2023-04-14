@@ -318,16 +318,22 @@ def update_plot(event):
 
         #################### TRUE POSE #########################
         if config["plotter"]["show_true_traj"] and msg.timestep <= len(true_poses):
-            pose = true_poses[msg.timestep-1]
-            # plot the current veh pos, & remove previous.
-            # remove_plot("pg_veh_pos_true")
-            plots["pg_veh_pos_true"] = pose_graph_fig.arrow(pose.x, pose.y, config["plotter"]["arrow_len"]*cos(pose.z), config["plotter"]["arrow_len"]*sin(pose.z), color="blue", width=0.1, zorder=2)
+            # Clear last set of poses. (Could simply append a new pose each time but then the number of plots scales with number of iterations rather than remaining constant.)
+            remove_plot("pg_veh_pos_true")
+            # Compute components of set of true poses up to now.
+            true_x = [pose.x for pose in true_poses[:msg.timestep]]
+            true_y = [pose.y for pose in true_poses[:msg.timestep]]
+            true_yaw = [pose.z for pose in true_poses[:msg.timestep]]
+            arrow_x_components = [config["plotter"]["arrow_len"]*cos(true_yaw[i]) for i in range(msg.timestep)]
+            arrow_y_components = [config["plotter"]["arrow_len"]*sin(true_yaw[i]) for i in range(msg.timestep)]
+            # plot all true veh poses up to now.
+            plots["pg_veh_pos_true"] = pose_graph_fig.quiver(true_x, true_y, arrow_x_components, arrow_y_components, color="blue", width=0.1, zorder=1, pivot="mid", minlength=0.0001)
         
         ############# VEHICLE POSE HISTORY ###################
         remove_plot(type+"_pg_veh_pose_history")
         arrow_x_components = [config["plotter"]["arrow_len"]*cos(msg.yaw_v[i]) for i in range(msg.timestep)]
         arrow_y_components = [config["plotter"]["arrow_len"]*sin(msg.yaw_v[i]) for i in range(msg.timestep)]
-        plots[type+"_pg_veh_pose_history"] = pose_graph_fig.quiver(msg.x_v, msg.y_v, arrow_x_components, arrow_y_components, color=pgs_veh_color[type], width=0.1, zorder=1, edgecolor="black", pivot="mid", linewidth=1, minlength=0.0001)
+        plots[type+"_pg_veh_pose_history"] = pose_graph_fig.quiver(msg.x_v, msg.y_v, arrow_x_components, arrow_y_components, color=pgs_veh_color[type], width=0.1, zorder=1, edgecolor="black", pivot="mid", minlength=0.0001) # add argument linewidth=1 to show border around each pose.
 
         ############### LANDMARK POSITIONS ###################
         remove_plot(type+"_pg_landmarks")

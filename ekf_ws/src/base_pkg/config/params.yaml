@@ -60,10 +60,6 @@ pose_graph:
   graph_size_threshold: 999 # After this many vehicle poses have been added to the pose graph (equivalently, this many iterations have passed), stop the filter & run optimization on the pose graph.
   verbose: False # if true, spam the console with a ton of logs.
 
-  # Params for GTSAM's Gauss-Newton solver.
-  iteration_error_threshold: 0.00001 # Stop iterating once the change in error between steps is less than this value.
-  max_iterations: 100 # max iterations to run optimization algorithm.
-
 # ----- Map -----
 map:
   bound: 10.0 # display area is +-bound in both x/y.

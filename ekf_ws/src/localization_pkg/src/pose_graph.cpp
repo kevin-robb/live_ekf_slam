@@ -28,8 +28,6 @@ void PoseGraph::readParams(YAML::Node config) {
         throw std::runtime_error("Invalid choice of pose_graph.filter_to_compare in params.yaml.");
     }
     this->graph_size_threshold = config["pose_graph"]["graph_size_threshold"].as<int>();
-    this->iteration_error_threshold = config["pose_graph"]["iteration_error_threshold"].as<float>();
-    this->max_iterations = config["pose_graph"]["max_iterations"].as<int>();
     this->verbose = config["pose_graph"]["verbose"].as<bool>();
 
     // define noise models for both types of connections.
@@ -169,13 +167,6 @@ void PoseGraph::solvePoseGraph() {
         this->initial_estimate.print("\nInitial Estimate:\n");
     }
 
-    // Optimize the initial values using a Gauss-Newton nonlinear optimizer
-    // The optimizer accepts an optional set of configuration parameters.
-    // gtsam::GaussNewtonParams parameters;
-    // parameters.relativeErrorTol = this->iteration_error_threshold;
-    // parameters.maxIterations = this->max_iterations;
-    // // Create the optimizer instance and run it.
-    // gtsam::GaussNewtonOptimizer optimizer(this->graph, this->initial_estimate, parameters);
     // Create the optimizer instance with default params, and run it.
     gtsam::LevenbergMarquardtOptimizer optimizer(this->graph, this->initial_estimate);
     ROS_INFO_STREAM("PGS: Defined optimizer.");

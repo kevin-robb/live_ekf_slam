@@ -25,7 +25,6 @@
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/sam/BearingRangeFactor.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
-#include <gtsam/nonlinear/GaussNewtonOptimizer.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/Marginals.h>
 #include <gtsam/nonlinear/Values.h>
@@ -221,7 +220,7 @@ protected:
     Eigen::MatrixXd p_temp; // temp matrix used for P update.
 };
 
-// Pose-Graph optimization for SLAM.
+// Pose-Graph optimization for SLAM using GTSAM.
 class PoseGraph: public Filter {
 public:
     PoseGraph();
@@ -251,10 +250,6 @@ protected:
     // Stopping criteria.
     int graph_size_threshold;
     bool solved_pose_graph = false; // Don't publish pose graph until it's been solved.
-
-    // Params for optimization algorithm.
-    float iteration_error_threshold;
-    int max_iterations;
 
     // Desired logging behavior.
     bool verbose = false;
