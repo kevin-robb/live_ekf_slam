@@ -111,7 +111,7 @@ def generate_full_trajectory():
         # mark it as visited.
         unvisited.remove(cur_node)
     # now traverse our graph to get an actual trajectory.
-    for t in range(config["trajectory_gen"]["num_timesteps"]):
+    for t in range(config["num_iterations"]):
         # first entry in lm_path always the current goal.
         # we will move it to the end once approx achieved.
         # thus, robot will loop around until time runs out.
@@ -140,9 +140,9 @@ def generate_full_trajectory():
     ############### SEND DATA ################
     # Send control commands one timestep at a time to the ekf.
     t = 0
-    r = rospy.Rate(1/config["dt"]) # freq in Hz
+    r = rospy.Rate(1/dt) # freq in Hz
     while not rospy.is_shutdown():
-        if t == config["trajectory_gen"]["num_timesteps"]: return
+        if t == config["num_iterations"]: return
         # send odom command and true pose for plotting.
         cmd_pub.publish(Command(fwd=odom_fwd[t], ang=odom_ang[t]))
         # cmd_pub.publish(Command(fwd=0.1, ang=0.1))
@@ -316,17 +316,8 @@ def read_occ_map(occ_map_img:str):
 
 
 def main():
-    global lm_pub, true_map_pub, true_pose_pub, cmd_pub, occ_map_pub, color_map_pub, x_v
+    global lm_pub, true_map_pub, true_pose_pub, cmd_pub, occ_map_pub, color_map_pub, x_v, dt
     rospy.init_node('sim_node')
-
-    # read command line args.
-    if len(sys.argv) < 4:
-        rospy.logerr("Required params (occ_map_img, landmark_map, precompute_trajectory) not provided to sim_node.")
-        exit()
-    else:
-        occ_map_img = sys.argv[1]
-        landmark_map = sys.argv[2]
-        precompute_trajectory = sys.argv[3].lower() == "true"
 
     # read configs.
     # find the filepath to the params file.
@@ -344,6 +335,21 @@ def main():
     config_scale = config["map"]["bound"] / config_shift
     # size of region plotter will display.
     display_region = [config["map"]["bound"] * config["plotter"]["display_region_mult"] * sign for sign in (-1, 1)]
+
+    # read command line args.
+    if len(sys.argv) < 5:
+        rospy.logerr("Required params (occ_map_img, landmark_map, precompute_trajectory, timer_period) not provided to sim_node.")
+        exit()
+    else:
+        occ_map_img = sys.argv[1]
+        landmark_map = sys.argv[2]
+        precompute_trajectory = sys.argv[3].lower() == "true"
+        if sys.argv[4].lower() == "default":
+            # Read dt from config file.
+            dt = config["dt"]
+        else:
+            # Use the provided value.
+            dt = float(sys.argv[4])
 
     # change the starting position if using a special map.
     if occ_map_img == "igvc1.png":

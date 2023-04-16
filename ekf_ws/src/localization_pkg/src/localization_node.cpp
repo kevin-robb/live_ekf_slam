@@ -28,8 +28,6 @@ std::unique_ptr<Filter> filter_secondary; // Second filter to run, if filter->fi
 float readParams() {
     std::string pkg_path = ros::package::getPath("base_pkg");
     YAML::Node config = YAML::LoadFile(pkg_path+"/config/params.yaml");
-    // Get desired timer period.
-    float DT = config["dt"].as<float>();
 
     // Setup filter as the chosen derived class type.
     std::string filter_choice_str = config["filter"].as<std::string>();
@@ -84,7 +82,9 @@ float readParams() {
         filter_secondary->readParams(config);
     }
 
-    return DT;
+    // Get default timer period.
+    float dt_default = config["dt"].as<float>();
+    return dt_default;
 }
 
 void initCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
@@ -160,6 +160,10 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "localization_node");
     ros::NodeHandle node("~");
 
+    if (argc < 2) {
+        throw std::runtime_error("Must provide command line argument for the timer period.");
+    }
+
     // Init subscribers as soon as possible to avoid missing data.
     // subscribe to filter inputs.
     ros::Subscriber cmdSub = node.subscribe("/command", 100, cmdCallback);
@@ -170,7 +174,15 @@ int main(int argc, char **argv) {
     ros::Subscriber trueMapSub = node.subscribe("/truth/landmarks", 1, trueMapCallback);
 
     // read config parameters and setup the specific filter instance.
-    float DT = readParams();
+    float dt_default = readParams();
+    float dt;
+    // Use command line argument to choose a timer period.
+    std::cout << argv[1] << std::endl;
+    if (strcmp(argv[1], "default") == 0) {
+        dt = dt_default;
+    } else {
+        dt = std::stof(argv[1]);
+    }
 
     // publish localization state.
     filter->setupStatePublisher(node);
@@ -181,7 +193,7 @@ int main(int argc, char **argv) {
     }
 
     // timer to update filter at set frequency.
-    ros::Timer iterationTimer = node.createTimer(ros::Duration(DT), &iterate, false);
+    ros::Timer iterationTimer = node.createTimer(ros::Duration(dt), &iterate, false);
 
     ros::spin();
     return 0;

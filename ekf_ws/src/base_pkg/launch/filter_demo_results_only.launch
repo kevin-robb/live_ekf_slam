@@ -1,0 +1,21 @@
+<launch>
+    <arg name="occ_map_img" default="blank.jpg"/>
+    <arg name="landmark_map" default="random"/> <!-- options: "random", "grid", ... -->
+    <arg name="precompute_trajectory" default="true"/>
+    <arg name="tight_control" default="false"/>
+    <arg name="timer_period" default="0.005"/> <!-- Use a very small dt since we don't have to worry about plot update rates. -->
+    <arg name="plot_result_only" default="true"/> <!-- Don't show a live viz at all, but rather just the final results. -->
+
+    <!-- Filter node, which will use filter specified in params.yaml -->
+    <node pkg="localization_pkg" type="localization_node" name="localization_node" args="$(arg timer_period)" output="screen" />
+
+    <!-- Call main sim driver script. -->
+    <include file="$(find base_pkg)/launch/sim_base.launch" >
+        <arg name="occ_map_img" value="$(arg occ_map_img)"/>
+        <arg name="landmark_map" value="$(arg landmark_map)"/>
+        <arg name="precompute_trajectory" value="$(arg precompute_trajectory)"/>
+        <arg name="tight_control" value="$(arg tight_control)"/>
+        <arg name="timer_period" value="$(arg timer_period)"/>
+        <arg name="plot_result_only" value="$(arg plot_result_only)"/>
+    </include>
+</launch>

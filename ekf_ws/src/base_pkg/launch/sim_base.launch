@@ -1,15 +1,17 @@
 <launch>
     <!-- Launch the basic necessities for all demos. -->
     <arg name="occ_map_img" default="blank.jpg"/>
-    <arg name="landmark_map" default="random"/>
+    <arg name="landmark_map" default="random"/> <!-- options: "random", "grid", ... -->
     <arg name="precompute_trajectory" default="false"/>
     <arg name="use_local_planner" default="false"/>
     <arg name="tight_control" default="false"/>
+    <arg name="timer_period" default="default"/> <!-- By default, uses dt from params.yaml. -->
+    <arg name="plot_result_only" default="false"/> <!-- if true, don't show a live viz at all, but rather just the final results. -->
 
     <!-- main simulator -->
-    <node pkg="base_pkg" type="sim_node.py" name="sim_node"  args="$(arg occ_map_img) $(arg landmark_map) $(arg precompute_trajectory)" output="screen" />
+    <node pkg="base_pkg" type="sim_node.py" name="sim_node"  args="$(arg occ_map_img) $(arg landmark_map) $(arg precompute_trajectory) $(arg timer_period)" output="screen" />
     <!-- plotting node -->
-    <node pkg="base_pkg" type="plotting_node.py" name="plotting_node" output="screen" />
+    <node pkg="base_pkg" type="plotting_node.py" name="plotting_node" args="$(arg timer_period) $(arg plot_result_only)" output="screen" />
     <!-- path planning/nav -->
-    <node pkg="planning_pkg" type="goal_pursuit_node.py" name="goal_pursuit_node" args="$(arg use_local_planner) $(arg precompute_trajectory) $(arg tight_control) $(arg occ_map_img)" output="screen" />
+    <node pkg="planning_pkg" type="goal_pursuit_node.py" name="goal_pursuit_node" args="$(arg use_local_planner) $(arg precompute_trajectory) $(arg tight_control) $(arg occ_map_img) $(arg timer_period)" output="screen" />
 </launch>

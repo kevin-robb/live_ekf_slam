@@ -27,7 +27,7 @@ void PoseGraph::readParams(YAML::Node config) {
     } else {
         throw std::runtime_error("Invalid choice of pose_graph.filter_to_compare in params.yaml.");
     }
-    this->graph_size_threshold = config["pose_graph"]["graph_size_threshold"].as<int>();
+    this->num_iterations_total = config["num_iterations"].as<int>();
     this->verbose = config["pose_graph"]["verbose"].as<bool>();
 
     // define noise models for both types of connections.
@@ -47,9 +47,9 @@ void PoseGraph::init(float x_0, float y_0, float yaw_0) {
     this->initial_estimate.insert(timestep_to_veh_pose_key(this->timestep), this->cur_veh_pose_estimate);
 
     // We must assign some noise model for the prior.
-    // auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.3, 0.3, 0.1));
+    auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.3, 0.3, 0.1));
     ///\note: Since we are certain the initial pose is correct (since it is directly used as the origin for everything in the project), there is no noise assigned to it. This ensures that during optimization, the initial pose cannot be changed.
-    auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.0, 0.0, 0.0));
+    // auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.0, 0.0, 0.0));
 
     // Set this pose as the prior for our factor graph.
     ROS_INFO_STREAM("PGS: Adding prior for initial veh pose.");
@@ -119,8 +119,8 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
         return;
     }
 
-    ///\todo: maybe should have a better way to initiate all this besides a preset increment amount.
-    if (this->timestep >= this->graph_size_threshold) {
+    // offset timestep (starts at 0) to compare to total iterations.
+    if (this->timestep+1 >= this->num_iterations_total) {
         // run optimization algorithm and then exit.
         solvePoseGraph();
         // Publish the pose graph before and after optimization so the plotting_node can visualize the difference.

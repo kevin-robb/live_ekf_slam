@@ -248,8 +248,8 @@ protected:
     gtsam::Values result;
 
     // Stopping criteria.
-    int graph_size_threshold;
-    bool solved_pose_graph = false; // Don't publish pose graph until it's been solved.
+    int num_iterations_total; // When we hit this many iterations, solve the pose graph and publish the result. Also stop any future update calls from doing anything.
+    bool solved_pose_graph = false; // Keep track of whether we've solved the pose graph yet.
 
     // Desired logging behavior.
     bool verbose = false;

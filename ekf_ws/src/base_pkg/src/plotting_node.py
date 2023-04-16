@@ -4,7 +4,7 @@
 Create a live plot of the true and estimated states.
 """
 
-import rospy, rospkg, yaml
+import rospy, rospkg, yaml, sys
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 from sensor_msgs.msg import Image
@@ -17,7 +17,6 @@ bridge = CvBridge()
 
 from matplotlib.backend_bases import MouseButton
 from matplotlib import pyplot as plt
-from matplotlib import gridspec
 # Suppress constant matplotlib warnings about thread safety.
 import warnings
 warnings.filterwarnings("ignore")
@@ -165,6 +164,11 @@ def update_plot(event):
     """
     global plots
     global msg_ekf, msg_ukf, msg_pose_graph_init, msg_pose_graph_result, msg_naive
+
+    # If we're only supposed to plot the final result, don't do anything until we actually have the final pose graph.
+    if plot_result_only and config["filter"] == "pose_graph" and msg_pose_graph_result is None:
+        return
+
     # NOTE we make a local copy of each and clear its global counterpart to avoid:
     # (a) the msg being changed while we're in the middle of plotting it, and 
     # (b) so we don't "update" the plot if a new message has not arrived since we last plotted it.
@@ -186,6 +190,10 @@ def update_plot(event):
             msg_ukf = None
             type = "ukf"
 
+    # If we're only supposed to plot the final result, don't do anything until we actually have a final result.
+    if plot_result_only and msg is not None and msg.timestep + 1 < config["num_iterations"]:
+        return
+    
     if msg is not None:
         """
         Perform necessary plot updates for a new state message for the main sim viz figure.
@@ -288,15 +296,18 @@ def update_plot(event):
     msg = None
     type = None
     if pose_graph_fig is not None:
-        if config["plotter"]["pose_graph"]["show_init_graph_progress"]:
-            if msg_pose_graph_init is not None:
-                msg = msg_pose_graph_init
-                msg_pose_graph_init = None
-                type = "init"
+        if msg_pose_graph_init is not None:
+            msg = msg_pose_graph_init
+            msg_pose_graph_init = None
+            type = "init"
         if msg_pose_graph_result is not None:
             msg = msg_pose_graph_result
             msg_pose_graph_result = None
             type = "result"
+
+    # If we're only supposed to plot the final result, don't do anything until we actually have a final result.
+    if plot_result_only and msg is not None and msg.timestep + 1 < config["num_iterations"]:
+        return
 
     if msg is not None:
         """
@@ -311,6 +322,7 @@ def update_plot(event):
         # Some plot params will be different depending on the data type.
         pgs_title = {"init" : "Pose-Graph Before Optimization", "result" : "Pose-Graph After Optimization"}
         pgs_veh_color = {"init" : "green", "result" : "purple"}
+        pgs_lm_color = {"init" : "red", "result" : "darkred"}
         # TODO may want to plot result graph on top of init graph, so parametrize zorders by type.
 
         # set title.
@@ -340,7 +352,7 @@ def update_plot(event):
         if msg.M > 0: # verify there is at least one landmark.
             lm_x = [msg.landmarks[i] for i in range(0,2*msg.M,2)]
             lm_y = [msg.landmarks[i] for i in range(1,2*msg.M,2)]
-            plots[type+"_pg_landmarks"] = pose_graph_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=2)
+            plots[type+"_pg_landmarks"] = pose_graph_fig.scatter(lm_x, lm_y, s=30, color=pgs_lm_color[type], edgecolors="black", zorder=2)
 
         ############### ADJACENT POSE CONNECTIONS ###############
         if config["plotter"]["pose_graph"]["show_cmd_connections"]:
@@ -355,7 +367,7 @@ def update_plot(event):
                 i_lm = msg.meas_connections[2*j+1] # landmark index.
                 # plot a line between the specified vehicle pose and landmark.
                 remove_plot(type+"_pg_meas_connection_{:}".format(j))
-                plots[type+"_pg_meas_connection_{:}".format(j)] = pose_graph_fig.plot([msg.x_v[i_veh], lm_x[i_lm]], [msg.y_v[i_veh], lm_y[i_lm]], color="red", zorder=0)
+                plots[type+"_pg_meas_connection_{:}".format(j)] = pose_graph_fig.plot([msg.x_v[i_veh], lm_x[i_lm]], [msg.y_v[i_veh], lm_y[i_lm]], color="lightcoral", zorder=0)
     
     # force desired window region (prevents axes expanding when vehicle comes close to an edge of the plot).
     plt.xlim(display_region)
@@ -385,6 +397,20 @@ def main():
     config_scale = config["map"]["bound"] / config_shift
     # size of region plotter will display.
     display_region = [config["map"]["bound"] * config["plotter"]["display_region_mult"] * sign for sign in (-1, 1)]
+
+    # read command line args.
+    global dt, plot_result_only
+    if len(sys.argv) < 3:
+        rospy.logerr("Required params (timer_period, plot_result_only) not provided to plotting_node.")
+        exit()
+    else:
+        if sys.argv[1].lower() == "default":
+            # Read dt from config file.
+            dt = config["dt"]
+        else:
+            # Use the provided value.
+            dt = float(sys.argv[1])
+        plot_result_only = sys.argv[2].lower() == "true"
 
     # make live plot bigger.
     plt.rcParams["figure.figsize"] = (9,9)
@@ -449,7 +475,7 @@ def main():
     plt.connect('button_press_event', on_click)
 
     # Setup a timer for the plot update loop.
-    rospy.Timer(rospy.Duration(config["dt"]), update_plot)
+    rospy.Timer(rospy.Duration(dt), update_plot)
 
     # Start the plot display.
     plt.show()
