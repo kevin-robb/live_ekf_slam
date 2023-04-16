@@ -15,8 +15,11 @@ from math import cos, sin, pi, atan2, remainder, tau
 from cv_bridge import CvBridge
 bridge = CvBridge()
 
-from matplotlib.backend_bases import MouseButton
 from matplotlib import pyplot as plt
+from matplotlib.backend_bases import MouseButton
+from matplotlib.legend_handler import HandlerPatch
+import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
 # Suppress constant matplotlib warnings about thread safety.
 import warnings
 warnings.filterwarnings("ignore")
@@ -66,9 +69,9 @@ def get_true_landmark_map(msg):
     lm_y = [msg.data[i] for i in range(2,len(msg.data),3)]
     # plot the true landmark positions to compare to estimates.
     if sim_viz_fig is not None:
-        sim_viz_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=2)
+        sim_viz_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=2, label="True Landmark Position")
     if pose_graph_fig is not None:
-        pose_graph_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=1)
+        pose_graph_fig.scatter(lm_x, lm_y, s=30, color="white", edgecolors="black", zorder=1, label="True Landmark Position")
 
 def get_color_map(msg):
     # get the true occupancy grid map image.
@@ -88,9 +91,9 @@ def get_planned_path(msg):
     remove_plot("goal_pt")
     # only draw if the path is non-empty.
     if len(msg.data) > 1:
-        plots["planned_path"] = sim_viz_fig.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1)
+        plots["planned_path"] = sim_viz_fig.scatter([msg.data[i] for i in range(0,len(msg.data),2)], [msg.data[i] for i in range(1,len(msg.data),2)], s=12, color="purple", zorder=1, label="Planned Path")
         # show the goal point (end of path).
-        plots["goal_pt"] = sim_viz_fig.scatter(msg.data[-2], msg.data[-1], color="yellow", edgecolors="black", s=40, zorder=2)
+        plots["goal_pt"] = sim_viz_fig.scatter(msg.data[-2], msg.data[-1], color="yellow", edgecolors="black", s=40, zorder=2, label="Goal Point")
 
 ############ HELPER FUNCTIONS ######################
 def remove_plot(name):
@@ -156,6 +159,30 @@ def cov_to_ellipse(P_v):
     for i in range(ell.shape[1]):
         ell_rot[:,i] = np.dot(R_ell,ell[:,i])
     return ell_rot
+
+# https://matplotlib.org/stable/tutorials/intermediate/legend_guide.html
+class HandlerEllipse(HandlerPatch):
+    def create_artists(self, legend, orig_handle,
+                       xdescent, ydescent, width, height, fontsize, trans):
+        center = 0.5 * width - 0.5 * xdescent, 0.5 * height - 0.5 * ydescent
+        p = mpatches.Ellipse(xy=center, width=width + xdescent,
+                             height=height + ydescent)
+        self.update_prop(p, orig_handle, legend)
+        p.set_transform(trans)
+        return [p]
+
+def get_legend_symbol(shape:str, color:str):
+    """
+    Get a legend handle for the requested shape and color.
+    """
+    if shape == "ellipse":
+        return mpatches.Circle((0.5, 0.5), 0.25, facecolor="white", edgecolor=color, linewidth=3)
+    elif shape == "arrow":
+        return Line2D([], [], color=color, marker=">", markersize=12, linestyle="none")
+    else:
+        rospy.logerr("PLT: Requested legend symbol with invalid shape, {:}.".format(shape))
+        exit()
+
 
 ############### MAIN UPDATE LOOP ######################
 def update_plot(event):
@@ -243,19 +270,19 @@ def update_plot(event):
             # remove old landmark estimates.
             remove_plot("lm_pos_est")
             # plot new landmark estimates.
-            plots["lm_pos_est"] = sim_viz_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3)
+            plots["lm_pos_est"] = sim_viz_fig.scatter(lm_x, lm_y, s=30, color="red", edgecolors="black", zorder=3, label="Estimated Landmark Position")
 
             ############## LANDMARK COV ###################
             if config["plotter"]["show_landmark_ellipses"]:
                 # plot new landmark covariances.
                 for i in range(len(msg.landmarks) // 3):
                     # replace previous if it's been plotted before.
-                    lm_id = msg.landmarks[i*3] 
-                    remove_plot("lm_cov_est_{:}".format(lm_id))
+                    lm_id = msg.landmarks[i*3]
+                    remove_plot("lm_cov_est_{:}".format(i))
                     # extract 2x2 cov for this landmark.
                     lm_ell = cov_to_ellipse(np.array([[msg.P[3+2*i],msg.P[4+2*i]],[msg.P[n+3+2*i],msg.P[n+4+2*i]]]))
                     # plot its ellipse.
-                    plots["lm_cov_est_{:}".format(lm_id)], = sim_viz_fig.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
+                    plots["lm_cov_est_{:}".format(i)], = sim_viz_fig.plot(lm_x[i]+lm_ell[0,:], lm_y[i]+lm_ell[1,:], 'orange', zorder=1)
         
         ############## UKF SIGMA POINTS ##################
         if type == "ukf":
@@ -267,6 +294,7 @@ def update_plot(event):
             ############## VEH POSE SIGMA POINTS #################
             # only show sigma points' veh pose, not landmark info.
             if config["plotter"]["plot_ukf_arrows"]:
+                # TODO change this to use quiver, and add symbol to legend handles.
                 # plot as arrows (slow).
                 # draw a pt with arrow for all sigma pts.
                 for i in range(0, 2*n_sig+1):
@@ -291,7 +319,7 @@ def update_plot(event):
                 # remove old points.
                 remove_plot("lm_sigma_pts")
                 # plot sigma points.
-                plots["lm_sigma_pts"] = sim_viz_fig.scatter(X_lm_x, X_lm_y, s=30, color="tab:cyan", zorder=1)
+                plots["lm_sigma_pts"] = sim_viz_fig.scatter(X_lm_x, X_lm_y, s=30, color="tab:cyan", zorder=1, label="UKF Landmark Sigma Points")
                 
     msg = None
     type = None
@@ -323,6 +351,7 @@ def update_plot(event):
         pgs_title = {"init" : "Pose-Graph Before Optimization", "result" : "Pose-Graph After Optimization"}
         pgs_veh_color = {"init" : "green", "result" : "purple"}
         pgs_lm_color = {"init" : "red", "result" : "darkred"}
+        pgs_lm_label = {"init" : "Estimated Landmark Position", "result" : "Pose-Graph SLAM Result (Landmarks)"}
         # TODO may want to plot result graph on top of init graph, so parametrize zorders by type.
 
         # set title.
@@ -352,13 +381,13 @@ def update_plot(event):
         if msg.M > 0: # verify there is at least one landmark.
             lm_x = [msg.landmarks[i] for i in range(0,2*msg.M,2)]
             lm_y = [msg.landmarks[i] for i in range(1,2*msg.M,2)]
-            plots[type+"_pg_landmarks"] = pose_graph_fig.scatter(lm_x, lm_y, s=30, color=pgs_lm_color[type], edgecolors="black", zorder=2)
+            plots[type+"_pg_landmarks"] = pose_graph_fig.scatter(lm_x, lm_y, s=30, color=pgs_lm_color[type], edgecolors="black", zorder=2, label=pgs_lm_label[type])
 
         ############### ADJACENT POSE CONNECTIONS ###############
         if config["plotter"]["pose_graph"]["show_cmd_connections"]:
             # we know a connection exists between every vehicle pose and the pose on the immediate previous/next iterations.
             remove_plot(type+"_pg_cmd_connections")
-            plots[type+"_pg_cmd_connections"] = pose_graph_fig.plot(msg.x_v, msg.y_v, color="blue", zorder=0)
+            plots[type+"_pg_cmd_connections"] = pose_graph_fig.plot(msg.x_v, msg.y_v, color="blue", zorder=0, label="Pose-Graph Command Connection")
 
         ############## MEASUREMENT CONNECTIONS ####################
         if config["plotter"]["pose_graph"]["show_meas_connections"]:
@@ -367,11 +396,38 @@ def update_plot(event):
                 i_lm = msg.meas_connections[2*j+1] # landmark index.
                 # plot a line between the specified vehicle pose and landmark.
                 remove_plot(type+"_pg_meas_connection_{:}".format(j))
-                plots[type+"_pg_meas_connection_{:}".format(j)] = pose_graph_fig.plot([msg.x_v[i_veh], lm_x[i_lm]], [msg.y_v[i_veh], lm_y[i_lm]], color="lightcoral", zorder=0)
+                plots[type+"_pg_meas_connection_{:}".format(j)] = pose_graph_fig.plot([msg.x_v[i_veh], lm_x[i_lm]], [msg.y_v[i_veh], lm_y[i_lm]], color="lightcoral", zorder=0, label="Pose-Graph Measurement Connection")
     
     # force desired window region (prevents axes expanding when vehicle comes close to an edge of the plot).
     plt.xlim(display_region)
     plt.ylim(display_region)
+
+    # Make a legend for the overall plot.
+    remove_plot("leg")
+    # Collect legend handles for all subplots.
+    handles, labels = plt.gca().get_legend_handles_labels()
+    # Manually add legend entries for stuff like arrows and ellipses that don't show up right.
+    if "veh_pos_true" in plots.keys():
+        handles.extend([get_legend_symbol("arrow", "blue")])
+        labels.extend(["True Vehicle Pose"])
+    if "veh_pos_est" in plots.keys():
+        handles.extend([get_legend_symbol("arrow", "green")])
+        labels.extend(["Estimated Vehicle Pose"])
+    if "veh_cov_est" in plots.keys():
+        handles.extend([get_legend_symbol("ellipse", "lightgrey")])
+        labels.extend(["Vehicle Estimate Covariance"])
+    if "lm_cov_est_0" in plots.keys():
+        # There is at least one landmark whose covariance has been plotted.
+        handles.extend([get_legend_symbol("ellipse", "orange")])
+        labels.extend(["Landmark Estimate Covariance"])
+    if "result_pg_veh_pose_history" in plots.keys():
+        handles.extend([get_legend_symbol("arrow", "purple")])
+        labels.extend(["PGS Result (Vehicle Poses)"])
+    # Run through a dictionary to remove duplicates.
+    by_label = dict(zip(labels, handles))
+    # Create the legend itself.
+    plots["leg"] = fig.legend(by_label.values(), by_label.keys(), loc="lower center", ncol=3, handler_map={mpatches.Circle: HandlerEllipse()})
+
     # Update the viz with our changes.
     plt.draw()
     plt.pause(0.00000000001)
@@ -442,7 +498,8 @@ def main():
     rospy.Subscriber("/plan/path", Float32MultiArray, get_planned_path, queue_size=1)
 
     # startup the plot.
-    plt.figure()
+    global fig
+    fig = plt.figure()
     global sim_viz_fig, pose_graph_fig
     if config["filter"].lower() == "pose_graph":
         if config["plotter"]["pose_graph"]["show_normal_viz_alongside"]:

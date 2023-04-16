@@ -57,7 +57,7 @@ ukf:
 
 # ----- Pose-Graph-SLAM-Specific Parameters -----
 pose_graph:
-  filter_to_compare: "naive" # Other filter to run in tandem and use for initial pose-graph estimate. Options are ekf_slam, ukf_loc, ukf_slam, naive.
+  filter_to_compare: "ekf_slam" # Other filter to run in tandem and use for initial pose-graph estimate. Options are ekf_slam, ukf_loc, ukf_slam, naive.
   verbose: False # if true, spam the console with a ton of logs.
 
 # ----- Map -----
@@ -105,4 +105,4 @@ plotter:
   pose_graph:
     show_normal_viz_alongside: True # if true, normal sim viz is shown on one subplot, and the pose graph is shown on a second subplot. if false, only the pose graph's plot is shown.
     show_meas_connections: False # these are the slowest thing to plot.
-    show_cmd_connections: True
+    show_cmd_connections: False # these are fast to plot but aren't even visible so it's just a waste of runtime.
