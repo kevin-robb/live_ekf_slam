@@ -124,8 +124,7 @@ void iterate(const ros::TimerEvent& event) {
     if (filter->filter_to_compare != FilterChoice::NOT_SET) {
         filter_secondary->update(cmdMsg, lmMeasMsg);
         // inform the primary filter of this result.
-        Eigen::Vector3d cur_veh_pose_est = filter_secondary->getStateVector();
-        filter->updateNaiveVehPoseEstimate(cur_veh_pose_est(0), cur_veh_pose_est(1), cur_veh_pose_est(2));
+        filter->updateNaiveVehPoseEstimate(filter_secondary->getStateVector(), filter_secondary->lm_IDs);
     }
 
     // call the filter's update function.

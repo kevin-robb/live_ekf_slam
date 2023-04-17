@@ -63,14 +63,14 @@ public:
     virtual void publishState() = 0;
 
     bool isInit = false;
-    // true set of landmark positions for localization-only filters/modes.
-    std::vector<float> map;
+    std::vector<float> map; // true set of landmark positions for localization-only filters/modes.
+    std::vector<int> lm_IDs; // IDs of landmarks being tracked. length should be M.
 
     // Some filters may want a second filter to run in tandem for comparison. Must define here to avoid errors in localization_node.
     FilterChoice filter_to_compare = FilterChoice::NOT_SET; // Filter to run simultaneously as naive estimate.
-    virtual void updateNaiveVehPoseEstimate(float x, float y, float yaw) { throw std::runtime_error("updateNaiveVehPoseEstimate is not defined for this filter."); };
+    virtual void updateNaiveVehPoseEstimate(Eigen::VectorXd state_vector, std::vector<int> landmark_ids) { throw std::runtime_error("updateNaiveVehPoseEstimate is not defined for this filter."); };
     // Similarly, some filters may not be able to be run as a secondary filter, since they don't run online.
-    virtual Eigen::Vector3d getStateVector() { throw std::runtime_error("getStateVector is not defined for this filter."); };
+    virtual Eigen::VectorXd getStateVector() { throw std::runtime_error("getStateVector is not defined for this filter."); };
 
 
 protected:
@@ -90,7 +90,6 @@ protected:
     // State tracking.
     int timestep = 0; // current timestep (i.e., iteration index).
     int M = 0; // number of landmarks being tracked (so far).
-    std::vector<int> lm_IDs; // IDs of landmarks being tracked. length should be M.
     // state distribution.
     Eigen::VectorXd x_t;
     Eigen::MatrixXd P_t;
@@ -151,7 +150,7 @@ public:
     void init(float x_0, float y_0, float yaw_0);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
 
-    Eigen::Vector3d getStateVector();
+    Eigen::VectorXd getStateVector();
     void setupStatePublisher(ros::NodeHandle node);
     void publishState();
 
@@ -187,7 +186,7 @@ public:
     void landmarkUpdate(int lm_i, int id, float r, float b);
     void landmarkInsertion(int id, float r, float b);
 
-    Eigen::Vector3d getStateVector();
+    Eigen::VectorXd getStateVector();
     void setupStatePublisher(ros::NodeHandle node);
     void publishState();
 
@@ -253,6 +252,8 @@ protected:
 
     // Desired logging behavior.
     bool verbose = false;
+    // PGS settings.
+    bool update_landmarks_after_adding = false;
 
     // Current estimated vehicle pose from the naive filter.
     // This is used for determining landmark measurements.
@@ -290,13 +291,25 @@ public:
     }
 
     // The localization_node will handle running a second filter and letting us know its estimates.
-    void updateNaiveVehPoseEstimate(float x, float y, float yaw) {
+    void updateNaiveVehPoseEstimate(Eigen::VectorXd state_vector, std::vector<int> landmark_ids) {
+        // This estimate may come from another filter such as the EKF, or could be a basic propagation with no filtering.
+        ///\note: This state vector is assumed to follow the EKF format of (x, y, yaw, landmark_x_1, landmark_y_1, ..., landmark_x_M, landmark_y_M).
+        // (There might be no landmarks.)
+
         // Update our current naive belief of the vehicle pose.
-        ///\note: This estimate may come from another filter such as the EKF, or could be a basic propagation with no filtering.
+        this->x_t = state_vector;
+        // this->x_t << state_vector(0), state_vector(1), state_vector(2);
         // Save this estimate directly as a pose matrix.
-        this->x_t << x, y, yaw;
-        this->cur_veh_pose_estimate = gtsam::Pose2(x, y, yaw);
-        // This will be added as a node in the pose graph during the update() loop.
+        this->cur_veh_pose_estimate = gtsam::Pose2(state_vector(0), state_vector(1), state_vector(2));
+        ///\note: This vehicle pose estimate will be added as a node in the pose graph during the update() loop.
+
+        if (this->update_landmarks_after_adding) {
+            // Update any nodes we've already added to the pose graph for landmark position estimates.
+            for (int i = 0; i < this->M; ++i) {
+                int id = landmark_ids[i];
+                this->initial_estimate.update(landmark_id_to_key(id), gtsam::Vector2(state_vector(3 + 2*i), state_vector(4 + 2*i)));
+            }
+        }
     }
 };
 
@@ -325,9 +338,9 @@ public:
         this->x_t(1) = this->x_t(1) + (cmdMsg->fwd)*sin(this->x_t(2));
         this->x_t(2) = remainder(this->x_t(2) + cmdMsg->ang, 2*pi);
     }
-    Eigen::Vector3d getStateVector() {
+    Eigen::VectorXd getStateVector() {
         // Return the estimated vehicle pose as a vector (x,y,yaw).
-        return Eigen::Vector3d(this->x_t(0), this->x_t(1), this->x_t(2));
+        return this->x_t;
     }
     void setupStatePublisher(ros::NodeHandle node) {
         // Create a publisher for the proper state message type.

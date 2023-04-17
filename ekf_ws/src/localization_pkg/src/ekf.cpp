@@ -179,12 +179,9 @@ void EKF::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray
 }
 
 
-Eigen::Vector3d EKF::getStateVector() {
-    // Return the estimated vehicle pose as a vector (x,y,yaw).
-    Eigen::Vector3d cur_veh_pose;
-    cur_veh_pose.setZero(3);
-    cur_veh_pose << this->x_t(0), this->x_t(1), this->x_t(2);
-    return cur_veh_pose;
+Eigen::VectorXd EKF::getStateVector() {
+    // Return the estimated vehicle pose and landmarks as a vector.
+    return this->x_t;
 }
 
 void EKF::setupStatePublisher(ros::NodeHandle node) {

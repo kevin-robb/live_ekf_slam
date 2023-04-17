@@ -59,6 +59,7 @@ ukf:
 pose_graph:
   filter_to_compare: "ekf_slam" # Other filter to run in tandem and use for initial pose-graph estimate. Options are ekf_slam, ukf_loc, ukf_slam, naive.
   verbose: False # if true, spam the console with a ton of logs.
+  update_landmarks_after_adding: True # if true, allow landmark position estimates from the secondary filter to be used to update the landmark positions stored in the initial pose graph estimate.
 
 # ----- Map -----
 map:

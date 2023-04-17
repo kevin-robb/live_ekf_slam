@@ -44,11 +44,11 @@ void UKF::init(float x_0, float y_0, float yaw_0) {
     this->isInit = true;
 }
 
-Eigen::Vector3d UKF::getStateVector() {
-    // Return the estimated vehicle pose as a vector (x,y,yaw).
+Eigen::VectorXd UKF::getStateVector() {
     Eigen::Vector3d cur_veh_pose;
-    cur_veh_pose.setZero(3);
-    cur_veh_pose << this->x_t(0), this->x_t(1), remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi);
+    cur_veh_pose.setZero(3 + 2*this->M);
+    // Form the estimated vehicle pose as a vector (x,y,yaw), and add landmark estimates.
+    cur_veh_pose << this->x_t(0), this->x_t(1), remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi), this->x_t.segment(3, 2*this->M);
     return cur_veh_pose;
 }
 

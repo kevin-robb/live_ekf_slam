@@ -29,6 +29,7 @@ void PoseGraph::readParams(YAML::Node config) {
     }
     this->num_iterations_total = config["num_iterations"].as<int>();
     this->verbose = config["pose_graph"]["verbose"].as<bool>();
+    this->update_landmarks_after_adding = config["pose_graph"]["update_landmarks_after_adding"].as<bool>();
 
     // define noise models for both types of connections.
     this->process_noise_model = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(this->V(0,0), this->V(0,0), this->V(1,1)));
