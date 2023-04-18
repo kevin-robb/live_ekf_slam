@@ -30,8 +30,8 @@
 #include <gtsam/nonlinear/Marginals.h>
 #include <gtsam/nonlinear/Values.h>
 // SE-Sync.
-// #include "SESync/SESync.h"
-// #include "SESync/SESync_utils.h"
+#include "SESync/SESync.h"
+#include "SESync/SESync_utils.h"
 // Custom message type imports.
 #include "base_pkg/Command.h"
 #include "base_pkg/EKFState.h"

@@ -251,6 +251,7 @@ def update_plot(event):
         plots["veh_pos_est"] = sim_viz_fig.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
         if config["pose_graph"]["solve_graph_every_iteration"] and pose_graph_fig is not None:
             # draw the secondary filter's pose estimate under the pose graphs for comparison. don't remove old estimates so we can see differing paths of full veh pose history.
+            # TODO change to updating quiver to prevent massive plot slowdown.
             plots["pg_veh_pos_est"] = pose_graph_fig.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
             
 

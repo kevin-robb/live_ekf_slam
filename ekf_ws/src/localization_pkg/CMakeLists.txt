@@ -18,6 +18,7 @@ include_directories("/usr/include/yaml-cpp")
 include_directories("/usr/local/include/sophus")
 
 find_package(GTSAM REQUIRED)
+find_package(SESync REQUIRED)
 
 catkin_package(
   INCLUDE_DIRS include
@@ -29,6 +30,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
   ${GTSAM_INCLUDE_DIRECTORIES}
+  ${SESync_INCLUDE_DIRECTORIES}
 )
 
 find_package(yaml-cpp REQUIRED)
@@ -36,15 +38,9 @@ include_directories(HEADERS_EXECUTABLE
     ${YAML_INCLUDE_DIRS}
 )
 
-# # Set up path for SE-Sync files.
-# include_directories("/home/kevin-robb/dev/SESync/C++/SE-Sync/include/SESync")
-# set(SESync_SOURCES /home/kevin-robb/dev/SESync/C++/SE-Sync/src/SESync.h)
-
 # Build C++ files
-set(SOURCES src/ekf.cpp src/ukf.cpp src/pose_graph.cpp src/localization_node.cpp
-# /home/kevin-robb/dev/SESync/C++/SE-Sync/src
-)
+set(SOURCES src/ekf.cpp src/ukf.cpp src/pose_graph.cpp src/localization_node.cpp)
 add_executable(localization_node ${SOURCES})
-target_link_libraries(localization_node ${catkin_LIBRARIES} yaml-cpp gtsam)
+target_link_libraries(localization_node ${catkin_LIBRARIES} yaml-cpp gtsam SESync)
 
 add_dependencies(localization_node base_pkg_generate_messages_cpp)

@@ -183,9 +183,7 @@ void PoseGraph::solvePoseGraph() {
 
     // Create the optimizer instance with default params, and run it.
     gtsam::LevenbergMarquardtOptimizer optimizer(this->graph, this->initial_estimate);
-    ROS_INFO_STREAM("PGS: Defined optimizer.");
     this->result = optimizer.optimize();
-    ROS_INFO_STREAM("PGS: Ran optimization.");
 
     if (this->verbose) {
         this->result.print("Final Result:\n");
