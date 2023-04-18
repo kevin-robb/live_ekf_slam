@@ -249,8 +249,11 @@ def update_plot(event):
             remove_plot("veh_pos_est")
         # draw a single pt with arrow to represent current veh pose.
         plots["veh_pos_est"] = sim_viz_fig.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
+        if config["pose_graph"]["solve_graph_every_iteration"] and pose_graph_fig is not None:
+            # draw the secondary filter's pose estimate under the pose graphs for comparison. don't remove old estimates so we can see differing paths of full veh pose history.
+            plots["pg_veh_pos_est"] = pose_graph_fig.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
+            
 
-        ################ COVARIANCES ##################
         if type in ["ekf", "ukf"]:
             # compute length of state to use throughout. n = 3+2M
             n = int(len(msg.P)**(1/2))
@@ -422,7 +425,7 @@ def update_plot(event):
         labels.extend(["Landmark Estimate Covariance"])
     if "result_pg_veh_pose_history" in plots.keys():
         handles.extend([get_legend_symbol("arrow", "purple")])
-        labels.extend(["PGS Result (Vehicle Poses)"])
+        labels.extend(["Pose-Graph SLAM Result (Vehicle Poses)"])
     # Run through a dictionary to remove duplicates.
     by_label = dict(zip(labels, handles))
     # Create the legend itself.
@@ -477,7 +480,9 @@ def main():
     # subscribe to the current state for all filters.
     rospy.Subscriber("/state/ekf", EKFState, get_ekf_state, queue_size=1)
     rospy.Subscriber("/state/ukf", UKFState, get_ukf_state, queue_size=1)
-    rospy.Subscriber("/state/pose_graph/initial", PoseGraphState, get_pose_graph_initial, queue_size=1)
+    if not config["pose_graph"]["solve_graph_every_iteration"]:
+        # Don't bother updating two pose graphs since they'll be identical, and we'll be getting the "result" graph in our callback every iteration.
+        rospy.Subscriber("/state/pose_graph/initial", PoseGraphState, get_pose_graph_initial, queue_size=1)
     rospy.Subscriber("/state/pose_graph/result", PoseGraphState, get_pose_graph_result, queue_size=1)
     rospy.Subscriber("/state/naive", NaiveState, get_naive_state, queue_size=1)
 

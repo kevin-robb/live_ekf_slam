@@ -30,6 +30,11 @@ void PoseGraph::readParams(YAML::Node config) {
     this->num_iterations_total = config["num_iterations"].as<int>();
     this->verbose = config["pose_graph"]["verbose"].as<bool>();
     this->update_landmarks_after_adding = config["pose_graph"]["update_landmarks_after_adding"].as<bool>();
+    this->solve_graph_every_iteration = config["pose_graph"]["solve_graph_every_iteration"].as<bool>();
+    if (this->solve_graph_every_iteration) {
+        // Don't let two different sources modify nodes in the initial_estimate values after adding them.
+        this->update_landmarks_after_adding = false;
+    }
 
     // define noise models for both types of connections.
     this->process_noise_model = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(this->V(0,0), this->V(0,0), this->V(1,1)));
@@ -48,7 +53,8 @@ void PoseGraph::init(float x_0, float y_0, float yaw_0) {
     this->initial_estimate.insert(timestep_to_veh_pose_key(this->timestep), this->cur_veh_pose_estimate);
 
     // We must assign some noise model for the prior.
-    auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.3, 0.3, 0.1));
+    // auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.3, 0.3, 0.1));
+    auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(1.3, 1.3, 1.2));
     ///\note: Since we are certain the initial pose is correct (since it is directly used as the origin for everything in the project), there is no noise assigned to it. This ensures that during optimization, the initial pose cannot be changed.
     // auto priorNoise = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.0, 0.0, 0.0));
 
@@ -114,7 +120,7 @@ void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
 // Update the graph with the new information for this iteration.
 void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg) {
     // check stopping criteria.
-    if (this->solved_pose_graph) {
+    if (this->solved_pose_graph && !this->solve_graph_every_iteration) {
         // we already ran optimization, so just exit.
         // ROS_WARN_STREAM("PGS: Already solved pose graph, so just exiting immediately.");
         return;
@@ -154,6 +160,13 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
         float r = lm_meas[l*3+1];
         float b = lm_meas[l*3+2];
         onLandmarkMeasurement(id, r, b);
+    }
+
+    if (this->solve_graph_every_iteration) {
+        // Solve the pose graph.
+        solvePoseGraph();
+        // Use this iterative solution to update the "initial" belief of the graph.
+        this->initial_estimate = this->result;
     }
 
     // Publish the progress building the pose graph so far.

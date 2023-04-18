@@ -36,10 +36,15 @@ include_directories(HEADERS_EXECUTABLE
     ${YAML_INCLUDE_DIRS}
 )
 
+# # Set up path for SE-Sync files.
+# include_directories("/home/kevin-robb/dev/SESync/C++/SE-Sync/include/SESync")
+# set(SESync_SOURCES /home/kevin-robb/dev/SESync/C++/SE-Sync/src/SESync.h)
+
 # Build C++ files
-set(SOURCES src/ekf.cpp src/ukf.cpp src/pose_graph.cpp src/localization_node.cpp)
+set(SOURCES src/ekf.cpp src/ukf.cpp src/pose_graph.cpp src/localization_node.cpp
+# /home/kevin-robb/dev/SESync/C++/SE-Sync/src
+)
 add_executable(localization_node ${SOURCES})
 target_link_libraries(localization_node ${catkin_LIBRARIES} yaml-cpp gtsam)
-# target_link_libraries(localization_node ${catkin_LIBRARIES} yaml-cpp ${GTSAM_LIBRARIES})
 
 add_dependencies(localization_node base_pkg_generate_messages_cpp)

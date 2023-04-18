@@ -14,6 +14,7 @@
 #include <typeinfo>
 #include <yaml-cpp/yaml.h>
 #include <unordered_map>
+#include <memory>
 // Eigen.
 #include <eigen3/Eigen/Dense>
 #include <unsupported/Eigen/MatrixFunctions>
@@ -28,7 +29,9 @@
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/Marginals.h>
 #include <gtsam/nonlinear/Values.h>
-#include <memory>
+// SE-Sync.
+// #include "SESync/SESync.h"
+// #include "SESync/SESync_utils.h"
 // Custom message type imports.
 #include "base_pkg/Command.h"
 #include "base_pkg/EKFState.h"
@@ -254,6 +257,7 @@ protected:
     bool verbose = false;
     // PGS settings.
     bool update_landmarks_after_adding = false;
+    bool solve_graph_every_iteration = false;
 
     // Current estimated vehicle pose from the naive filter.
     // This is used for determining landmark measurements.

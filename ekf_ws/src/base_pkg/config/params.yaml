@@ -27,12 +27,12 @@ constraints:
     d_max: 0.1 # max forward motion in one timestep. min is 0.
     th_max: 0.0546 # max angular motion magnitude in one timestep. min is -th_max.
   vision:
-    range_max: 4.0
-    fov_min: -3.141592653589793
-    fov_max: 3.141592653589793
+    range_max: 3.0
+    fov_min: -1.57 #-3.141592653589793
+    fov_max: 1.57 #3.141592653589793
   measurements:
     # limitations on measurements:
-    landmark_id_is_known: True # if true, filter will use the known landmark IDs. if false, filter will perform data association.
+    landmark_id_is_known: true # if true, filter will use the known landmark IDs. if false, filter will perform data association.
     min_landmark_separation: 0.1 # in data association, landmarks detected closer together than this are assumed to be the same.
 
 # ----- Noise Profiles -----
@@ -41,15 +41,15 @@ process_noise:
     v_d: 0.0
     v_th: 0.0
   cov:
-    V_00: 0.1 #0.0004 # covariance on forward commands.
-    V_11: 0.01 # 0.00007615435494667714 # covariance on angular commands.
+    V_00: 0.001 #0.0004 # covariance on forward commands.
+    V_11: 0.001 # 0.00007615435494667714 # covariance on angular commands.
 sensing_noise:
   mean:
     w_r: 0.0
     w_b: 0.0
   cov:
-    W_00: 0.1 #0.01 # covariance on range measurements.
-    W_11: 0.001 #0.00030461741978670857 # covariance on bearing measurements.
+    W_00: 0.01 #0.01 # covariance on range measurements.
+    W_11: 0.01 #0.00030461741978670857 # covariance on bearing measurements.
 
 # ----- UKF-Specific Parameters -----
 ukf:
@@ -57,9 +57,10 @@ ukf:
 
 # ----- Pose-Graph-SLAM-Specific Parameters -----
 pose_graph:
-  filter_to_compare: "ekf_slam" # Other filter to run in tandem and use for initial pose-graph estimate. Options are ekf_slam, ukf_loc, ukf_slam, naive.
-  verbose: False # if true, spam the console with a ton of logs.
-  update_landmarks_after_adding: True # if true, allow landmark position estimates from the secondary filter to be used to update the landmark positions stored in the initial pose graph estimate.
+  filter_to_compare: "naive" # Other filter to run in tandem and use for initial pose-graph estimate. Options are ekf_slam, ukf_loc, ukf_slam, naive.
+  verbose: false # if true, spam the console with a ton of logs.
+  update_landmarks_after_adding: false # if true, allow landmark position estimates from the secondary filter to be used to update the landmark positions stored in the initial pose graph estimate.
+  solve_graph_every_iteration: true # if false, only run optimization once, after the entire graph has been constructed.
 
 # ----- Map -----
 map:
@@ -78,32 +79,32 @@ path_planning:
   # pure pursuit params.
   lookahead_dist_init: 0.2 # meters
   lookahead_dist_max: 2 # meters
-  astar_incl_diagonals: True # A* search diagonals or only orthogonally adjacent cells?
+  astar_incl_diagonals: true # A* search diagonals or only orthogonally adjacent cells?
 
 # ----- Precomputed Trajectory Generation -----
-# (used if precompute_trajectory option is True in roslaunch)
+# (used if precompute_trajectory option is true in roslaunch)
 trajectory_gen:
   landmark_noise: 0.2 # noise to use for generating map for TSP solution.
   visitation_threshold: 3.0 # how close the veh must get to a lm to mark it as visited in TSP soln.
 
 # ----- Plotter -----
 plotter:
-  save_final_map: False # save map to file in base_pkg/plots upon node exit.
+  save_final_map: false # save map to file in base_pkg/plots upon node exit.
   # flags to display certain things
-  show_occ_map: True
-  show_entire_traj: False
-  show_true_traj: True
-  show_true_landmark_map: True
-  show_landmark_ellipses: True
-  show_veh_ellipse: True
+  show_occ_map: true
+  show_entire_traj: false
+  show_true_traj: true
+  show_true_landmark_map: true
+  show_landmark_ellipses: true
+  show_veh_ellipse: true
   # display params
   arrow_len: 0.1 # length of pose arrow.
   cov_std_dev: 1 # number of std dev to include in cov ellipses.
-  plot_ukf_arrows: True # show individual heading for all UKF sigma points
-  show_landmark_sigma_pts: True # for UKF, show sigma points for landmarks as well as vehicle.
+  plot_ukf_arrows: true # show individual heading for all UKF sigma points
+  show_landmark_sigma_pts: true # for UKF, show sigma points for landmarks as well as vehicle.
   display_region_mult: 1.0 # amount to multiply map.bound by to get the display region.
-  list_clicked_points: False # utility to display coords of all clicked points, for manually creating landmark maps.
+  list_clicked_points: false # utility to display coords of all clicked points, for manually creating landmark maps.
   pose_graph:
-    show_normal_viz_alongside: True # if true, normal sim viz is shown on one subplot, and the pose graph is shown on a second subplot. if false, only the pose graph's plot is shown.
-    show_meas_connections: False # these are the slowest thing to plot.
-    show_cmd_connections: False # these are fast to plot but aren't even visible so it's just a waste of runtime.
+    show_normal_viz_alongside: true # if true, normal sim viz is shown on one subplot, and the pose graph is shown on a second subplot. if false, only the pose graph's plot is shown.
+    show_meas_connections: false # these are the slowest thing to plot.
+    show_cmd_connections: false # these are fast to plot but aren't even visible so it's just a waste of runtime.
