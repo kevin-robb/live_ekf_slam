@@ -222,21 +222,30 @@ protected:
     Eigen::MatrixXd p_temp; // temp matrix used for P update.
 };
 
-// Pose-Graph optimization for SLAM using GTSAM.
+enum class PoseGraphSlamImplementation {
+    GTSAM = 0,
+    SESYNC,
+    CUSTOM ///\todo: NOT YET IMPLEMENTED.
+};
+
+// Pose-Graph optimization for SLAM using GTSAM or SE-Sync.
 class PoseGraph: public Filter {
 public:
     PoseGraph();
     ~PoseGraph() {}; // Do nothing.
     void readParams(YAML::Node config);
     void init(float x_0, float y_0, float yaw_0);
+    // The localization_node will handle running a second filter and letting us know its estimates.
+    void updateNaiveVehPoseEstimate(Eigen::VectorXd state_vector, std::vector<int> landmark_ids);
     void update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray::ConstPtr lmMeasMsg);
-    // PG-SLAM-specific functions.
+    int getLandmarkIndexFromID(int id); // Given a landmark ID, get its index. If this is the first time seeing this landmark, add it to lm_IDs.
     void onLandmarkMeasurement(int id, float range, float bearing); // Process a single landmark measurement.
     void solvePoseGraph();
-
     void publishState();
 
 protected:
+    PoseGraphSlamImplementation impl_to_use;
+    /////////////////// GTSAM Parameters /////////////////////
     // The pose graph that will be optimized to solve for full vehicle history.
     gtsam::NonlinearFactorGraph graph;
     // Noise models for connections.
@@ -249,21 +258,24 @@ protected:
     // Estimated full pose history & landmarks after running PG optimization.
     gtsam::Values result;
 
+    // Current estimated vehicle pose from the naive filter.
+    // This is used for determining landmark measurements.
+    ///\note: we also update this->x_t with current pose (x,y,yaw).
+    gtsam::Pose2 cur_veh_pose_estimate;
+
+    //////////////////// SE-Sync Parameters /////////////////////////
+    SESync::measurements_t measurements; // Vector of all graph edges so far.
+    SESync::SESyncResult results;
+
+    //////////////// Other Parameters /////////////////
     // Stopping criteria.
     int num_iterations_total; // When we hit this many iterations, solve the pose graph and publish the result. Also stop any future update calls from doing anything.
     bool solved_pose_graph = false; // Keep track of whether we've solved the pose graph yet.
-
-    // Desired logging behavior.
-    bool verbose = false;
     // PGS settings.
     bool update_landmarks_after_adding = false;
     bool solve_graph_every_iteration = false;
+    bool verbose = false; // Desired logging behavior.
 
-    // Current estimated vehicle pose from the naive filter.
-    // This is used for determining landmark measurements.
-    gtsam::Pose2 cur_veh_pose_estimate;
-
-    // Stuff to help with pgs-specific message publishing.
     // We want to publish both the initial pose graph from the naive filter's estimates as well as the optimized graph, so we need two publishers.
     ros::Publisher statePubSecondary;
     // Encoded graph connections between vehicle poses and landmarks. This is just used for drawing lines in the visualization.
@@ -292,28 +304,6 @@ public:
         // Create a publisher for the proper state message type.
         this->statePubSecondary = node.advertise<base_pkg::PoseGraphState>("/state/pose_graph/initial", 1);
         this->statePub = node.advertise<base_pkg::PoseGraphState>("/state/pose_graph/result", 1);
-    }
-
-    // The localization_node will handle running a second filter and letting us know its estimates.
-    void updateNaiveVehPoseEstimate(Eigen::VectorXd state_vector, std::vector<int> landmark_ids) {
-        // This estimate may come from another filter such as the EKF, or could be a basic propagation with no filtering.
-        ///\note: This state vector is assumed to follow the EKF format of (x, y, yaw, landmark_x_1, landmark_y_1, ..., landmark_x_M, landmark_y_M).
-        // (There might be no landmarks.)
-
-        // Update our current naive belief of the vehicle pose.
-        this->x_t = state_vector;
-        // this->x_t << state_vector(0), state_vector(1), state_vector(2);
-        // Save this estimate directly as a pose matrix.
-        this->cur_veh_pose_estimate = gtsam::Pose2(state_vector(0), state_vector(1), state_vector(2));
-        ///\note: This vehicle pose estimate will be added as a node in the pose graph during the update() loop.
-
-        if (this->update_landmarks_after_adding) {
-            // Update any nodes we've already added to the pose graph for landmark position estimates.
-            for (int i = 0; i < this->M; ++i) {
-                int id = landmark_ids[i];
-                this->initial_estimate.update(landmark_id_to_key(id), gtsam::Vector2(state_vector(3 + 2*i), state_vector(4 + 2*i)));
-            }
-        }
     }
 };
 
