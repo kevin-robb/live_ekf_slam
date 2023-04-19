@@ -176,7 +176,7 @@ int main(int argc, char **argv) {
     float dt_default = readParams();
     float dt;
     // Use command line argument to choose a timer period.
-    std::cout << argv[1] << std::endl;
+    // std::cout << argv[1] << std::endl;
     if (strcmp(argv[1], "default") == 0) {
         dt = dt_default;
     } else {

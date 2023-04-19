@@ -51,6 +51,15 @@ void PoseGraph::readParams(YAML::Node config) {
         this->process_noise_model = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(this->V(0,0), this->V(0,0), this->V(1,1)));
         ///\note: BearingRangeFactor has bearing first and range second, so we swap the usual order for this project.
         this->sensing_noise_model = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(this->W(1,1), this->W(0,0)));
+    } else if (this->impl_to_use == PoseGraphSlamImplementation::SESYNC) {
+        this->sesync_options.verbose = this->verbose;
+        // Options snagged from SE-Sync's main.cpp example.
+        // Initialization method. Options are:  Chordal, Random.
+        this->sesync_options.initialization = SESync::Initialization::Chordal;
+        // Specific form of the synchronization problem to solve. Options are: Simplified, Explicit, SOSync.
+        this->sesync_options.formulation = SESync::Formulation::Simplified;
+        this->sesync_options.num_threads = 4;
+        
     }
 }
 
@@ -164,6 +173,22 @@ void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
         // Record this connection so we don't have to re-interpret the factor graph every iteration to generate state messages.
         this->msg_measurement_connections.push_back(this->timestep);
         this->msg_measurement_connections.push_back(lm_index);
+    } else if (this->impl_to_use == PoseGraphSlamImplementation::SESYNC) {
+        // SE-Sync doesn't care about the "nodes", only the connections.
+        // Create a measurement to add to our list of relative poses.
+        SESync::RelativePoseMeasurement measurement;
+        // Pose ids.
+        measurement.i = timestep_to_veh_pose_key(this->timestep);
+        measurement.j = landmark_id_to_key(id);
+        // Raw "measurements" (commanded motion).
+        measurement.t = Eigen::Matrix<SESync::Scalar, 2, 1>(range, 0.0);
+        measurement.R = Eigen::Rotation2D<SESync::Scalar>(bearing).toRotationMatrix();
+        // Set desired precisions of each component, using our known noise model.
+        measurement.tau = this->V(0,0); // translational.
+        ///\note: Since landmarks are only positions (w/ no discernable orientation), we set the rotational component's weight to zero. It will still be estimated, but it won't affect anything else and we can simply ignore landmark orientations in the final result.
+        measurement.kappa = 0.0; // rotational.
+        // Add the measurement to our list.
+        this->sesync_measurements.push_back(measurement);
     }
 }
 
@@ -190,7 +215,22 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
         ROS_INFO_STREAM("PGS: Adding command connection.");
     }
     if (this->impl_to_use == PoseGraphSlamImplementation::GTSAM) {
+        // Create a connection in the pose graph.
         this->graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose2> >(timestep_to_veh_pose_key(this->timestep), timestep_to_veh_pose_key(this->timestep+1), gtsam::Pose2(cmdMsg->fwd, 0, cmdMsg->ang), this->process_noise_model);
+    } else if (this->impl_to_use == PoseGraphSlamImplementation::SESYNC) {
+        // Create a measurement to add to our list of relative poses.
+        SESync::RelativePoseMeasurement measurement;
+        // Pose ids.
+        measurement.i = timestep_to_veh_pose_key(this->timestep);
+        measurement.j = timestep_to_veh_pose_key(this->timestep + 1);
+        // Raw "measurements" (commanded motion).
+        measurement.t = Eigen::Matrix<SESync::Scalar, 2, 1>(cmdMsg->fwd, 0.0);
+        measurement.R = Eigen::Rotation2D<SESync::Scalar>(cmdMsg->ang).toRotationMatrix();
+        // Set desired precisions of each component, using our known noise model.
+        measurement.tau = this->V(0,0); // translational.
+        measurement.kappa = this->V(1,1); // rotational.
+        // Add the measurement to our list.
+        this->sesync_measurements.push_back(measurement);
     }
 
     // update timestep (i.e., iteration index).
@@ -250,6 +290,9 @@ void PoseGraph::solvePoseGraph() {
                 std::cout << "covariance of vehicle pose " << i << ":\n" << marginals.marginalCovariance(i) << std::endl;
             }
         }
+    } else if (this->impl_to_use == PoseGraphSlamImplementation::SESYNC) {
+        ROS_INFO_STREAM("PGS: Attempting to solve the pose graph using SE-Sync.");
+        this->sesync_result = SESync::SESync(this->sesync_measurements, this->sesync_options);
     }
     
     ROS_INFO_STREAM("PGS: Finished solving pose graph.");
@@ -265,63 +308,72 @@ void PoseGraph::publishState() {
     ///\todo: encode measurement connections.
     stateMsg.meas_connections = this->msg_measurement_connections;
 
-    // Set params specific to pose graph BEFORE optimization.
-    // vehicle pose history before pose-graph optimization was run.
-    std::vector<float> x_vec_initial;
-    std::vector<float> y_vec_initial;
-    std::vector<float> yaw_vec_initial;
+    // Select a list of values to publish.
+    gtsam::Values nodes_to_send = this->initial_estimate;
+    if (this->solved_pose_graph) {
+        nodes_to_send = this->result;
+    }
+
+    // vehicle pose history estimate.
+    std::vector<float> x_vec;
+    std::vector<float> y_vec;
+    std::vector<float> yaw_vec;
+    gtsam::Pose2 veh_pose_i;
+    gtsam::Rot2 veh_rot;
+    gtsam::Point2 veh_pos;
     for (int i=0; i<this->timestep; ++i) {
         // get pose corresponding to iteration i.
-        gtsam::Pose2 veh_pose_i = this->initial_estimate.at<gtsam::Pose2>(timestep_to_veh_pose_key(i));
-        x_vec_initial.push_back(veh_pose_i.x());
-        y_vec_initial.push_back(veh_pose_i.y());
-        yaw_vec_initial.push_back(veh_pose_i.theta());
+        if (this->impl_to_use == PoseGraphSlamImplementation::GTSAM) {
+            // directly access by key.
+            veh_pose_i = nodes_to_send.at<gtsam::Pose2>(timestep_to_veh_pose_key(i));
+        } else if (this->impl_to_use == PoseGraphSlamImplementation::SESYNC) {
+            // extract this pose from the overall combined state matrix.
+            // format is [t_v1 t_v2 ... t_vn t_l1 ... t_lM | R_v1 ... R_vn R_l1 ... R_lM]
+            // where each translation vector t_i is 2x1 and each rotation matrix R_i is 2x2.
+            // note that all vehicle poses so far will precede the M landmarks.
+            float x = this->sesync_result.xhat(0, i);
+            float y = this->sesync_result.xhat(1, i);
+            veh_pos = gtsam::Point2(x, y);
+            // note that a rotation matrix is in the form [c, -s; s, c], so we can just
+            // read the c and s values to initialize a gtsam rotation.
+            float cos_theta = this->sesync_result.xhat(0, this->timestep + this->M + i);
+            float sin_theta = this->sesync_result.xhat(1, this->timestep + this->M + i);
+            veh_rot = gtsam::Rot2::fromCosSin(cos_theta, sin_theta);
+            veh_pose_i = gtsam::Pose2(veh_rot, veh_pos);
+        }
+        
+        x_vec.push_back(veh_pose_i.x());
+        y_vec.push_back(veh_pose_i.y());
+        yaw_vec.push_back(veh_pose_i.theta());
     }
-    stateMsg.x_v = x_vec_initial;
-    stateMsg.y_v = y_vec_initial;
-    stateMsg.yaw_v = yaw_vec_initial;
+    stateMsg.x_v = x_vec;
+    stateMsg.y_v = y_vec;
+    stateMsg.yaw_v = yaw_vec;
 
-    // all landmark positions before pose-graph optimization was run.
-    std::vector<float> lm_initial;
+    // landmark position estimates.
+    std::vector<float> lm_vec;
+    gtsam::Vector2 lm_pos_j;
     for (int i=0; i<this->M; ++i) {
-        int j = this->lm_IDs[i]; // Convert from landmark index to ID.
-        gtsam::Vector2 lm_pos_j = this->initial_estimate.at<gtsam::Vector2>(landmark_id_to_key(j));
-        lm_initial.push_back(lm_pos_j(0));
-        lm_initial.push_back(lm_pos_j(1));
-    }
-    stateMsg.landmarks = lm_initial;
-
-    // publish this as the initial pose graph.
-    this->statePubSecondary.publish(stateMsg);
-
-    // if we've solved the pose graph, publish the result too.
-    if (this->solved_pose_graph) {
-        // replace the vehicle pose history with the solution to the pose graph optimization.
-        std::vector<float> x_vec_result;
-        std::vector<float> y_vec_result;
-        std::vector<float> yaw_vec_result;
-        for (int i=0; i<this->timestep; ++i) {
-            // get pose corresponding to iteration i.
-            gtsam::Pose2 veh_pose_i = this->result.at<gtsam::Pose2>(timestep_to_veh_pose_key(i));
-            x_vec_result.push_back(veh_pose_i.x());
-            y_vec_result.push_back(veh_pose_i.y());
-            yaw_vec_result.push_back(veh_pose_i.theta());
-        }
-        stateMsg.x_v = x_vec_result;
-        stateMsg.y_v = y_vec_result;
-        stateMsg.yaw_v = yaw_vec_result;
-
-        // all landmark positions after pose-graph optimization was run.
-        std::vector<float> lm_result;
-        for (int i=0; i<this->M; ++i) {
+        if (this->impl_to_use == PoseGraphSlamImplementation::GTSAM) {
             int j = this->lm_IDs[i]; // Convert from landmark index to ID.
-            gtsam::Vector2 lm_pos_j = this->initial_estimate.at<gtsam::Vector2>(landmark_id_to_key(j));
-            lm_result.push_back(lm_pos_j(0));
-            lm_result.push_back(lm_pos_j(1));
+            // directly access by key.
+            lm_pos_j = nodes_to_send.at<gtsam::Vector2>(landmark_id_to_key(j));
+        } else if (this->impl_to_use == PoseGraphSlamImplementation::SESYNC) {
+            // extract this position from the overall combined state matrix.
+            // format is described above where vehicle poses are read.
+            float x = this->sesync_result.xhat(0, this->timestep + i);
+            float y = this->sesync_result.xhat(1, this->timestep + i);
+            lm_pos_j = gtsam::Vector2(x, y);
         }
-        stateMsg.landmarks = lm_result;
+        lm_vec.push_back(lm_pos_j(0));
+        lm_vec.push_back(lm_pos_j(1));
+    }
+    stateMsg.landmarks = lm_vec;
 
-        // publish it.
+    // publish it for plotter.
+    if (this->solved_pose_graph) {
         this->statePub.publish(stateMsg);
+    } else {
+        this->statePubSecondary.publish(stateMsg);
     }
 }

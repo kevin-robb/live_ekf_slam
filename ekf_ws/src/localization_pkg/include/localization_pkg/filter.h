@@ -264,8 +264,9 @@ protected:
     gtsam::Pose2 cur_veh_pose_estimate;
 
     //////////////////// SE-Sync Parameters /////////////////////////
-    SESync::measurements_t measurements; // Vector of all graph edges so far.
-    SESync::SESyncResult results;
+    SESync::measurements_t sesync_measurements; // Vector of all graph edges so far.
+    SESync::SESyncOpts sesync_options; // Options for SE-Sync optimization.
+    SESync::SESyncResult sesync_result;
 
     //////////////// Other Parameters /////////////////
     // Stopping criteria.
@@ -288,7 +289,13 @@ protected:
             throw std::runtime_error("Called timestep_to_veh_pose_key() with invalid timestep.");
         }
         // Create a key that does not conflict with landmark keys.
-        return (uint64_t)timestep * 2;
+        if (this->impl_to_use == PoseGraphSlamImplementation::GTSAM) {
+            return (uint64_t)timestep * 2;
+        } else if (this->impl_to_use == PoseGraphSlamImplementation::SESYNC) {
+            return (uint64_t)timestep;
+        } else {
+            throw std::runtime_error("Called timestep_to_veh_pose_key() with non-handled implementation.");
+        }
     }
 
     uint64_t landmark_id_to_key(int landmark_id) {
@@ -296,7 +303,14 @@ protected:
             throw std::runtime_error("Called landmark_id_to_key() with invalid landmark_id.");
         }
         // Create a key for the landmark that does not conflict with any vehicle poses.
-        return (uint64_t)landmark_id * 2 + 1;
+        if (this->impl_to_use == PoseGraphSlamImplementation::GTSAM) {
+            return (uint64_t)landmark_id * 2 + 1;
+        } else if (this->impl_to_use == PoseGraphSlamImplementation::SESYNC) {
+            // Assume the landmark_id argument is actually the landmark index, so we can make them consecutive.
+            return (uint64_t)this->num_iterations_total + landmark_id;
+        } else {
+            throw std::runtime_error("Called landmark_id_to_key() with non-handled implementation.");
+        }
     }
 
 public:
