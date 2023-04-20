@@ -33,6 +33,8 @@ goal_pub = None
 clicked_points = []
 # queue of true poses so we only show the one corresponding to the current estimate.
 true_poses = []
+# full history of filter estimates for veh pose so far. used to show estimate history compared to pose graph.
+veh_pose_est_hist = { "x": [], "y": [], "dx": [], "dy": []}
 ###### Messages that have arrived and need to be added to the plot.
 msg_ekf = None
 msg_ukf = None
@@ -248,12 +250,18 @@ def update_plot(event):
         if not config["plotter"]["show_entire_traj"]:
             remove_plot("veh_pos_est")
         # draw a single pt with arrow to represent current veh pose.
-        plots["veh_pos_est"] = sim_viz_fig.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
+        dx = config["plotter"]["arrow_len"]*cos(msg.yaw_v)
+        dy = config["plotter"]["arrow_len"]*sin(msg.yaw_v)
+        plots["veh_pos_est"] = sim_viz_fig.arrow(msg.x_v, msg.y_v, dx, dy, facecolor="green", width=0.1, zorder=4, edgecolor="black")
         if config["pose_graph"]["solve_graph_every_iteration"] and pose_graph_fig is not None:
-            # draw the secondary filter's pose estimate under the pose graphs for comparison. don't remove old estimates so we can see differing paths of full veh pose history.
-            # TODO change to updating quiver to prevent massive plot slowdown.
-            plots["pg_veh_pos_est"] = pose_graph_fig.arrow(msg.x_v, msg.y_v, config["plotter"]["arrow_len"]*cos(msg.yaw_v), config["plotter"]["arrow_len"]*sin(msg.yaw_v), facecolor="green", width=0.1, zorder=4, edgecolor="black")
-            
+            global veh_pose_est_hist
+            veh_pose_est_hist["x"].append(msg.x_v)
+            veh_pose_est_hist["y"].append(msg.y_v)
+            veh_pose_est_hist["dx"].append(dx)
+            veh_pose_est_hist["dy"].append(dy)
+            # draw the secondary filter's pose estimate history under the pose graphs for comparison.
+            remove_plot("pg_veh_pos_est")
+            plots["pg_veh_pos_est"] = pose_graph_fig.quiver(veh_pose_est_hist["x"], veh_pose_est_hist["y"], veh_pose_est_hist["dx"], veh_pose_est_hist["dy"], color="green", width=0.1, zorder=4, pivot="mid", minlength=0.0001)
 
         if type in ["ekf", "ukf"]:
             # compute length of state to use throughout. n = 3+2M
@@ -378,7 +386,7 @@ def update_plot(event):
         remove_plot(type+"_pg_veh_pose_history")
         arrow_x_components = [config["plotter"]["arrow_len"]*cos(msg.yaw_v[i]) for i in range(msg.timestep)]
         arrow_y_components = [config["plotter"]["arrow_len"]*sin(msg.yaw_v[i]) for i in range(msg.timestep)]
-        plots[type+"_pg_veh_pose_history"] = pose_graph_fig.quiver(msg.x_v, msg.y_v, arrow_x_components, arrow_y_components, color=pgs_veh_color[type], width=0.1, zorder=1, edgecolor="black", pivot="mid", minlength=0.0001) # add argument linewidth=1 to show border around each pose.
+        plots[type+"_pg_veh_pose_history"] = pose_graph_fig.quiver(msg.x_v, msg.y_v, arrow_x_components, arrow_y_components, color=pgs_veh_color[type], width=0.1, zorder=5, edgecolor="black", pivot="mid", minlength=0.0001) # add argument linewidth=1 to show border around each pose.
 
         ############### LANDMARK POSITIONS ###################
         remove_plot(type+"_pg_landmarks")

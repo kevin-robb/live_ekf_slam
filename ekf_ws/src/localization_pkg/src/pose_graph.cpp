@@ -187,6 +187,7 @@ void PoseGraph::onLandmarkMeasurement(int id, float range, float bearing) {
         measurement.tau = this->V(0,0); // translational.
         ///\note: Since landmarks are only positions (w/ no discernable orientation), we set the rotational component's weight to zero. It will still be estimated, but it won't affect anything else and we can simply ignore landmark orientations in the final result.
         measurement.kappa = 0.0; // rotational.
+        // measurement.kappa = 10000000.0; // rotational.
         // Add the measurement to our list.
         this->sesync_measurements.push_back(measurement);
     }
