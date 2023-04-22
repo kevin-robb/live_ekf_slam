@@ -57,7 +57,8 @@ void PoseGraph::readParams(YAML::Node config) {
         // Initialization method. Options are:  Chordal, Random.
         this->sesync_options.initialization = SESync::Initialization::Chordal;
         // Specific form of the synchronization problem to solve. Options are: Simplified, Explicit, SOSync.
-        this->sesync_options.formulation = SESync::Formulation::Simplified;
+        ///\note: Since we're hacking it to let landmarks be represented as SE(2) poses with a rotation weight of 0, we must use the translation-excplicit formulation of SE-Sync to avoid some 
+        this->sesync_options.formulation = SESync::Formulation::Explicit;
         this->sesync_options.num_threads = 4;
         
     }
@@ -313,6 +314,10 @@ void PoseGraph::publishState() {
     gtsam::Values nodes_to_send = this->initial_estimate;
     if (this->solved_pose_graph) {
         nodes_to_send = this->result;
+    }
+    if (this->impl_to_use == PoseGraphSlamImplementation::SESYNC && !this->solved_pose_graph) {
+        ///\todo: Make a different thing that checks SE-Sync measurements rather than results.
+        return;
     }
 
     // vehicle pose history estimate.
