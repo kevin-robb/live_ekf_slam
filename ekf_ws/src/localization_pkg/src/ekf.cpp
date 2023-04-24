@@ -22,7 +22,7 @@ EKF::EKF() {
 
 void EKF::readParams(YAML::Node config) {
     // setup all commonly-used params.
-    Filter::readParams(config);
+    Filter::readCommonParams(config);
     // setup all filter-specific params, if any.
 }
 
@@ -178,8 +178,19 @@ void EKF::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32MultiArray
     /////////////// END OF EKF ITERATION ///////////////////
 }
 
-// return the state as a message.
-base_pkg::EKFState EKF::getEKFState() {
+
+Eigen::VectorXd EKF::getStateVector() {
+    // Return the estimated vehicle pose and landmarks as a vector.
+    return this->x_t;
+}
+
+void EKF::setupStatePublisher(ros::NodeHandle node) {
+    // Create a publisher for the proper state message type.
+    this->statePub = node.advertise<base_pkg::EKFState>("/state/ekf", 1);
+}
+
+void EKF::publishState() {
+    // Convert the EKF state to a ROS message and publish it.
     base_pkg::EKFState stateMsg;
     // timestep.
     stateMsg.timestep = this->timestep;
@@ -204,5 +215,6 @@ base_pkg::EKFState EKF::getEKFState() {
         }
     }
     stateMsg.P = p;
-    return stateMsg;
+    // publish it.
+    this->statePub.publish(stateMsg);
 }

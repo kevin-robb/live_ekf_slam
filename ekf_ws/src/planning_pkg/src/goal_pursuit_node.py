@@ -125,16 +125,9 @@ def main():
     with open(base_pkg_path+'/config/params.yaml', 'r') as file:
         config = yaml.safe_load(file)
 
-    PurePursuit.config = config
-    Astar.config = config
-    # set rel neighbors list for A* search.
-    Astar.nbrs = [(0, -1), (0, 1), (-1, 0), (1, 0)] + ([(-1, -1), (-1, 1), (1, -1), (1, 1)] if config["path_planning"]["astar_incl_diagonals"] else [])
-    # occ map <-> lm coords transform params.
-    Astar.config_shift = config["map"]["occ_map_size"] / 2
-    Astar.config_scale = config["map"]["bound"] / Astar.config_shift
 
     # read command line args.
-    if len(sys.argv) < 5:
+    if len(sys.argv) < 6:
         rospy.logerr("Required param (use_local_planner) and optional params (precompute_trajectory, tight_control, occ_map_img) not provided to goal_pursuit_node.")
         exit()
     else:
@@ -143,10 +136,21 @@ def main():
         precompute_trajectory = sys.argv[2].lower() == "true"
         use_tight_control = sys.argv[3].lower() == "true"
         occ_map_img = sys.argv[4]
+        if sys.argv[5].lower() != "default":
+            config["dt"] = float(sys.argv[5])
     # if traj was precomputed, this node is unnecessary.
     if precompute_trajectory:
         rospy.loginfo("goal_pursuit_node unneeded if trajectory was precomputed. Exiting.")
         exit()
+
+    PurePursuit.config = config
+    Astar.config = config
+    # set rel neighbors list for A* search.
+    Astar.nbrs = [(0, -1), (0, 1), (-1, 0), (1, 0)] + ([(-1, -1), (-1, 1), (1, -1), (1, 1)] if config["path_planning"]["astar_incl_diagonals"] else [])
+    # occ map <-> lm coords transform params.
+    Astar.config_shift = config["map"]["occ_map_size"] / 2
+    Astar.config_scale = config["map"]["bound"] / Astar.config_shift
+
     # if we're using the blank occ map, we don't need to do any A* planning.
     global using_blank_map
     using_blank_map = occ_map_img == "blank.jpg"

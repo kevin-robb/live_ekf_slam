@@ -3,9 +3,11 @@
     <arg name="landmark_map" default="random"/> <!-- options: "random", "grid", ... -->
     <arg name="precompute_trajectory" default="true"/>
     <arg name="tight_control" default="false"/>
+    <arg name="timer_period" default="default"/> <!-- By default, uses dt from params.yaml. -->
+    <arg name="plot_result_only" default="false"/> <!-- Show a live visualization of filter progress. -->
 
     <!-- Filter node, which will use filter specified in params.yaml -->
-    <node pkg="localization_pkg" type="localization_node" name="localization_node" output="screen" />
+    <node pkg="localization_pkg" type="localization_node" name="localization_node" args="$(arg timer_period)" output="screen" />
 
     <!-- Call main sim driver script. -->
     <include file="$(find base_pkg)/launch/sim_base.launch" >
@@ -13,5 +15,7 @@
         <arg name="landmark_map" value="$(arg landmark_map)"/>
         <arg name="precompute_trajectory" value="$(arg precompute_trajectory)"/>
         <arg name="tight_control" value="$(arg tight_control)"/>
+        <arg name="timer_period" value="$(arg timer_period)"/>
+        <arg name="plot_result_only" value="$(arg plot_result_only)"/>
     </include>
 </launch>

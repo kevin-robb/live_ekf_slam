@@ -24,7 +24,7 @@ UKF::UKF() {
 
 void UKF::readParams(YAML::Node config) {
     // setup all commonly-used params.
-    Filter::readParams(config);
+    Filter::readCommonParams(config);
     // setup all filter-specific params, if any.
 }
 
@@ -44,7 +44,21 @@ void UKF::init(float x_0, float y_0, float yaw_0) {
     this->isInit = true;
 }
 
-base_pkg::UKFState UKF::getUKFState() {
+Eigen::VectorXd UKF::getStateVector() {
+    Eigen::Vector3d cur_veh_pose;
+    cur_veh_pose.setZero(3 + 2*this->M);
+    // Form the estimated vehicle pose as a vector (x,y,yaw), and add landmark estimates.
+    cur_veh_pose << this->x_t(0), this->x_t(1), remainder(atan2(this->x_t(3), this->x_t(2)), 2*pi), this->x_t.segment(3, 2*this->M);
+    return cur_veh_pose;
+}
+
+void UKF::setupStatePublisher(ros::NodeHandle node) {
+    // Create a publisher for the proper state message type.
+    this->statePub = node.advertise<base_pkg::UKFState>("/state/ukf", 1);
+}
+
+void UKF::publishState() {
+    // Convert the UKF state to a ROS message and publish it.
     // state length for convenience.
     int n = 2 * this->M + 4;
     // return the state as a message.
@@ -85,7 +99,8 @@ base_pkg::UKFState UKF::getUKFState() {
     stateMsg.X = sigma_pts;
     // stateMsg.X_pred = sigma_pts_propagated;
 
-    return stateMsg;
+    // publish it.
+    this->statePub.publish(stateMsg);
 }
 
 Eigen::MatrixXd UKF::nearestSPD() {

@@ -15,7 +15,8 @@ add_message_files(
   Command.msg
   EKFState.msg
   UKFState.msg
-  PFState.msg
+  PoseGraphState.msg
+  NaiveState.msg
 )
 
 generate_messages(
