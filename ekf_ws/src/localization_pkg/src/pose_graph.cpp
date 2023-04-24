@@ -30,6 +30,7 @@ void PoseGraph::readParams(YAML::Node config) {
         this->impl_to_use = PoseGraphSlamImplementation::GTSAM;
     } else if (implementation_str == "sesync") {
         this->impl_to_use = PoseGraphSlamImplementation::SESYNC;
+        throw std::runtime_error("SE-Sync pose graph SLAM implementation is incomplete. Choose another option in params.yaml.");
     } else if (implementation_str == "custom") {
         this->impl_to_use = PoseGraphSlamImplementation::CUSTOM;
         throw std::runtime_error("Custom pose graph SLAM implementation is incomplete. Choose another option in params.yaml.");
