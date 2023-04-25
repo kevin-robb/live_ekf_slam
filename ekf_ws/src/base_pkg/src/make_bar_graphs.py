@@ -23,7 +23,7 @@ def create_bar_plot(pgs, ekf, naive, run_name:str):
     One of ekf, naive will be None.
     @param run_name - subdir name of data, also desired filename of saved plot.
     """
-    filter_type = "EKF-SLAM" if naive is None else "naive"
+    filter_type = "EKF-SLAM" if naive is None else "Naive"
     filter_errs = ekf if filter_type == "EKF-SLAM" else naive
 
     barWidth = 0.25
@@ -38,14 +38,14 @@ def create_bar_plot(pgs, ekf, naive, run_name:str):
     plt.bar(br2, filter_errs, color="green", width=barWidth, edgecolor='grey', label=filter_type)
     # Adding Xticks
     plt.xlabel('Run number', fontsize = 15) #fontweight='bold'
-    plt.ylabel('Average position error (m/s)', fontsize = 15)
+    plt.ylabel('Average position error (m)', fontsize = 15)
     plt.xticks([r + barWidth for r in range(len(pgs))],
                [i+1 for i in range(len(pgs))])
     plt.legend(loc="upper left")
     # build plot title.
     title = "High" if "high" in run_name else "Low"
     title += " Noise, " + filter_type + " vs "
-    title += "One-time-" if "one" in run_name else "Iterative-"
+    title += "One-Time-" if "one" in run_name else "Iterative-"
     title += "PGS"
     plt.title(title)
     # plt.show()
