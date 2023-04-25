@@ -11,7 +11,7 @@ from sensor_msgs.msg import Image
 from base_pkg.msg import EKFState, UKFState, PoseGraphState, NaiveState
 import numpy as np
 import atexit
-from math import cos, sin, pi, atan2, remainder, tau
+from math import cos, sin, pi, atan2, remainder, tau, sqrt
 from cv_bridge import CvBridge
 bridge = CvBridge()
 
@@ -34,7 +34,9 @@ clicked_points = []
 # queue of true poses so we only show the one corresponding to the current estimate.
 true_poses = []
 # full history of filter estimates for veh pose so far. used to show estimate history compared to pose graph.
-veh_pose_est_hist = { "x": [], "y": [], "dx": [], "dy": []}
+veh_pose_est_hist = { "x": [], "y": [], "dx": [], "dy": [], "time": []}
+# average error from truth for full vehicle history of all filters running.
+avg_errs = {}
 ###### Messages that have arrived and need to be added to the plot.
 msg_ekf = None
 msg_ukf = None
@@ -55,7 +57,6 @@ def get_ukf_state(msg):
 def get_pose_graph_initial(msg):
     global msg_pose_graph_init; msg_pose_graph_init = msg
 def get_pose_graph_result(msg):
-    rospy.loginfo("PLT: plotting node got PGS result.")
     global msg_pose_graph_result; msg_pose_graph_result = msg
 def get_naive_state(msg):
     global msg_naive; msg_naive = msg
@@ -121,6 +122,12 @@ def save_plot(base_pkg_path):
         rospy.logwarn("PLT: Saving plot to " + fpath)
         plt.savefig(fpath, format='png')
 
+    # save avg err of filters to respective files in base_pkg/data directory.
+    if config["pose_graph"]["save_average_error_at_end"] and len(avg_errs.keys()) > 0:
+        for type in avg_errs.keys():
+            with open(base_pkg_path+'/data/{:}.csv'.format(type), 'a') as file:
+                file.write("{:}\n".format(avg_errs[type]))
+
 def on_click(event):
     # global clicked_points
     if event.button is MouseButton.RIGHT:
@@ -184,6 +191,31 @@ def get_legend_symbol(shape:str, color:str):
     else:
         rospy.logerr("PLT: Requested legend symbol with invalid shape, {:}.".format(shape))
         exit()
+
+def compute_average_error(type:str, x_est, y_est, timestamps=None):
+    """
+    Compute average error of the filter vs ground truth for the full vehicle history.
+    @param type - identifier of what filter this data is from.
+    @param x_est - list of estimated x position in meters for each timestep.
+    @param y_est - list of estimated y position in meters for each timestep.
+    @param timestamps (optional) - list of timestep numbers corresponding to the entries in x_est and y_est.
+    """
+    num_iters = len(x_est)
+    # Extract true poses for comparison.
+    if timestamps is None:
+        true_x = [pose.x for pose in true_poses[:num_iters]]
+        true_y = [pose.y for pose in true_poses[:num_iters]]
+    else:
+        true_x = [true_poses[i-1].x for i in timestamps]
+        true_y = [true_poses[i-1].y for i in timestamps]
+    # Compute position error for all timesteps.
+    errors = [sqrt((x_est[i]-true_x[i])**2 + (y_est[i]-true_y[i])**2) for i in range(num_iters)]
+    # Get average error.
+    avg_err = sum(errors) / num_iters
+    rospy.loginfo("PLT: Average error in {:} from true vehicle pose history = {:}.".format(type, avg_err))
+
+    global avg_errs
+    avg_errs[type] = avg_err
 
 
 ############### MAIN UPDATE LOOP ######################
@@ -253,15 +285,21 @@ def update_plot(event):
         dx = config["plotter"]["arrow_len"]*cos(msg.yaw_v)
         dy = config["plotter"]["arrow_len"]*sin(msg.yaw_v)
         plots["veh_pos_est"] = sim_viz_fig.arrow(msg.x_v, msg.y_v, dx, dy, facecolor="green", width=0.1, zorder=4, edgecolor="black")
+        # keep track of full vehicle pose history.
+        global veh_pose_est_hist
+        veh_pose_est_hist["time"].append(msg.timestep)
+        veh_pose_est_hist["x"].append(msg.x_v)
+        veh_pose_est_hist["y"].append(msg.y_v)
+        veh_pose_est_hist["dx"].append(dx)
+        veh_pose_est_hist["dy"].append(dy)
+        # only plot it if the pose graph is being continuously solved so it doesn't have the initial estimate.
         if config["pose_graph"]["solve_graph_every_iteration"] and pose_graph_fig is not None:
-            global veh_pose_est_hist
-            veh_pose_est_hist["x"].append(msg.x_v)
-            veh_pose_est_hist["y"].append(msg.y_v)
-            veh_pose_est_hist["dx"].append(dx)
-            veh_pose_est_hist["dy"].append(dy)
             # draw the secondary filter's pose estimate history under the pose graphs for comparison.
             remove_plot("pg_veh_pos_est")
             plots["pg_veh_pos_est"] = pose_graph_fig.quiver(veh_pose_est_hist["x"], veh_pose_est_hist["y"], veh_pose_est_hist["dx"], veh_pose_est_hist["dy"], color="green", width=0.1, zorder=4, pivot="mid", minlength=0.0001)
+        # compute error from ground truth.
+        if msg.timestep >= config["num_iterations"]:
+            compute_average_error(type, veh_pose_est_hist["x"], veh_pose_est_hist["y"], veh_pose_est_hist["time"])
 
         if type in ["ekf", "ukf"]:
             # compute length of state to use throughout. n = 3+2M
@@ -340,6 +378,9 @@ def update_plot(event):
             msg = msg_pose_graph_init
             msg_pose_graph_init = None
             type = "init"
+            # # Compute error from ground truth for initial vehicle estimate.
+            # if not config["pose_graph"]["solve_graph_every_iteration"] and msg.timestep + 1 >= config["num_iterations"]:
+            #     compute_average_error("pose_graph_{:}".format(type), msg.x_v, msg.y_v)
         if msg_pose_graph_result is not None:
             msg = msg_pose_graph_result
             msg_pose_graph_result = None
@@ -387,6 +428,10 @@ def update_plot(event):
         arrow_x_components = [config["plotter"]["arrow_len"]*cos(msg.yaw_v[i]) for i in range(msg.timestep)]
         arrow_y_components = [config["plotter"]["arrow_len"]*sin(msg.yaw_v[i]) for i in range(msg.timestep)]
         plots[type+"_pg_veh_pose_history"] = pose_graph_fig.quiver(msg.x_v, msg.y_v, arrow_x_components, arrow_y_components, color=pgs_veh_color[type], width=0.1, zorder=5, edgecolor="black", pivot="mid", minlength=0.0001) # add argument linewidth=1 to show border around each pose.
+
+        # Compute error from ground truth.
+        if msg.timestep + 1 >= config["num_iterations"]:
+            compute_average_error("pose_graph_{:}".format(type), msg.x_v, msg.y_v)
 
         ############### LANDMARK POSITIONS ###################
         remove_plot(type+"_pg_landmarks")

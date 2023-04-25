@@ -63,6 +63,7 @@ pose_graph:
   update_landmarks_after_adding: false # if true, allow landmark position estimates from the secondary filter to be used to update the landmark positions stored in the initial pose graph estimate.
   solve_graph_every_iteration: true # if false, only run optimization once, after the entire graph has been constructed.
   # TODO look into using iSAM, which is designed to work iteratively.
+  save_average_error_at_end: true # after all iterations have completed, compute average error from true vehicle trajectory for both filters and save to file.
 
 # ----- Map -----
 map:

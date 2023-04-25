@@ -272,8 +272,8 @@ void PoseGraph::update(base_pkg::Command::ConstPtr cmdMsg, std_msgs::Float32Mult
 
 void PoseGraph::solvePoseGraph() {
     if (this->impl_to_use == PoseGraphSlamImplementation::GTSAM) {
-        ROS_INFO_STREAM("PGS: Attempting to solve the pose graph using GTSAM.");
         if (this->verbose) {
+            ROS_INFO_STREAM("PGS: Attempting to solve the pose graph using GTSAM.");
             // print the pose graph and our initial estimate of all vehicle poses.
             this->graph.print("\nFactor Graph:\n");
             this->initial_estimate.print("\nInitial Estimate:\n");
@@ -298,7 +298,9 @@ void PoseGraph::solvePoseGraph() {
         this->sesync_result = SESync::SESync(this->sesync_measurements, this->sesync_options);
     }
     
-    ROS_INFO_STREAM("PGS: Finished solving pose graph.");
+    if (this->verbose) {
+        ROS_INFO_STREAM("PGS: Finished solving pose graph.");
+    }
     this->solved_pose_graph = true;
 }
 
