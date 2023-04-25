@@ -42,9 +42,9 @@ To run any of these demos, first run the following commands after cloning this r
 Set the filter to use in `params.yaml` at the very top with the `filter` parameter. If using `pose_graph`, set the secondary filter lower down in the `pose_graph:` section.
 Then run one of the launch files in the `base_pkg/launch` directory. The `sim_base.launch` is run automatically by all others to get the simulation working. Some that give good results are:
 
-    roslaunch base_pkg filter_demo.launch
+    roslaunch base_pkg filter_demo_live.launch
     roslaunch base_pkg igvc1.launch
-    roslaunch base_pkg filter_demo.launch landmark_map:=grid
+    roslaunch base_pkg filter_demo_live.launch landmark_map:=grid
 
 Note: The `dt` parameter in `data_pkg/config/params.yaml` sets the time between iterations for the entire simulation. Lowering this value makes everything run faster, but if you set this lower than your machine can handle, it will be very choppy and potentially fail. This value can also be overridden by a launch file with the argument `timer_period`.
 
